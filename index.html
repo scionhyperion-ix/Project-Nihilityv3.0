@@ -2,127 +2,186 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#101119">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0f1020">
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https:; img-src 'self' data: blob: https:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <title>Project Nihility</title>
-  <meta name="description" content="A private, storage-backed plural system workspace.">
-  <link rel="stylesheet" href="assets/css/app.css?v=1">
+  <meta name="description" content="A private system workspace with optional PluralKit front sharing.">
+  <link rel="stylesheet" href="assets/css/app.css?v=4">
 </head>
 <body>
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
 
-  <main id="setupView" class="center-shell" hidden>
-    <section class="card auth-card">
-      <p class="eyebrow">Project Nihility</p>
-      <h1>Setup required</h1>
-      <p class="muted">Add your Supabase project URL and public publishable key in <code>assets/js/config.js</code>.</p>
+  <main id="setupView" class="login-shell" hidden>
+    <section class="login-card">
+      <div class="brand-lockup"><div class="brand-mark">N</div><div><p class="eyebrow">Project Nihility</p><h1>Setup required</h1></div></div>
+      <p class="login-intro">Add the Supabase project URL and publishable key in <code>assets/js/config.js</code>.</p>
     </section>
   </main>
 
-  <main id="loginView" class="center-shell" hidden>
-    <section class="card auth-card">
-      <p class="eyebrow">Project Nihility</p>
-      <h1>Your private system cloud</h1>
-      <p class="muted">Structured data and optional direct uploads live in Supabase. Existing image links can stay external.</p>
-      <form id="loginForm" class="stack">
-        <label>Email
-          <input id="emailInput" type="email" autocomplete="email" required placeholder="you@example.com">
-        </label>
-        <button class="primary-button" type="submit">Send magic link</button>
-        <p id="loginMessage" class="muted small"></p>
+  <main id="loginView" class="login-shell" hidden>
+    <section class="login-card">
+      <div class="brand-lockup brand-lockup-login"><div class="brand-mark">N</div><div><p class="eyebrow">Private system workspace</p><h1>Nihility</h1></div></div>
+      <p class="login-intro">Nihility owns its own member and fronting data. External integrations are optional.</p>
+      <form id="loginForm" class="login-form">
+        <label>Email<input id="emailInput" type="email" autocomplete="email" required placeholder="you@example.com"></label>
+        <button class="primary-button full-button" type="submit">Send magic link</button>
+        <p id="loginMessage" class="form-message"></p>
       </form>
+      <div class="security-note"><strong>Invite-only</strong><p>The first account becomes the owner. Additional accounts need an invite from the owner profile page.</p></div>
+    </section>
+  </main>
+
+  <main id="deniedView" class="login-shell" hidden>
+    <section class="login-card">
+      <div class="brand-lockup"><div class="brand-mark">N</div><div><p class="eyebrow">Project Nihility</p><h1>Invite required</h1></div></div>
+      <p class="login-intro">This account is authenticated, but it has not been invited to this Nihility instance.</p>
+      <button id="deniedSignOut" class="secondary-button">Sign out</button>
     </section>
   </main>
 
   <div id="appView" class="app-shell" hidden>
     <aside class="sidebar">
-      <div class="brand">
-        <div class="brand-mark">N</div>
-        <div><strong>Nihility</strong><small>personal cloud</small></div>
-      </div>
+      <div class="brand-lockup sidebar-brand"><div class="brand-mark compact">N</div><div><strong>Nihility</strong><small>private cloud</small></div></div>
       <nav class="nav-list">
-        <button class="nav-item active" data-route="members">Members</button>
-        <button class="nav-item" data-route="settings">Settings</button>
+        <button class="nav-item active" data-route="home"><span>⌂</span>Home</button>
+        <button class="nav-item" data-route="members"><span>𐀪</span>Members</button>
+        <button class="nav-item" data-route="history"><span>↻</span>Front history</button>
+        <button class="nav-item" data-route="settings"><span>⚙</span>Settings</button>
+        <button class="nav-item" data-route="profile"><span>◎</span>Profile</button>
       </nav>
-      <button id="signOutButton" class="secondary-button">Sign out</button>
+      <button id="sidebarProfileButton" class="sidebar-account" type="button">
+        <div id="sidebarAvatar" class="system-avatar fallback-avatar">N</div>
+        <div class="sidebar-account-copy"><strong id="sidebarName">Account</strong><small id="sidebarRole">member</small></div>
+      </button>
     </aside>
 
-    <main class="main-column">
+    <div class="main-column">
       <header class="topbar">
-        <div><p class="eyebrow">Private workspace</p><h2 id="pageTitle">Members</h2></div>
-        <button id="newMemberButton" class="primary-button">New member</button>
+        <div><p id="pageEyebrow" class="eyebrow">Overview</p><h2 id="pageTitle">Home</h2></div>
+        <div class="topbar-actions"><button id="refreshButton" class="secondary-button">Refresh</button><button id="openFrontManager" class="primary-button">Manage front</button></div>
       </header>
 
-      <section id="membersRoute" class="route-view">
-        <div class="toolbar">
-          <input id="memberSearch" type="search" placeholder="Search members">
-          <span id="memberCount" class="pill">0 members</span>
+      <section id="homeRoute" class="route-view">
+        <div class="hero-grid">
+          <article class="panel current-front-panel">
+            <div class="panel-heading"><div><p class="eyebrow">Current front</p><h3 id="currentFrontHeading">Nobody is fronting</h3></div><span id="frontDuration" class="soft-pill">--</span></div>
+            <div id="currentFrontMembers" class="current-front-members"></div>
+            <div class="panel-actions"><button id="addCoFronterButton" class="secondary-button">Add co-fronter</button><button id="switchOutButton" class="text-button danger-text">Switch out</button></div>
+          </article>
+
+          <article class="panel system-summary-panel">
+            <div class="system-banner"></div>
+            <div class="system-summary-content">
+              <div id="homeProfileAvatar" class="system-avatar large fallback-avatar">N</div>
+              <div><p class="eyebrow">Nihility workspace</p><h3 id="homeProfileName">Account</h3><p id="homeIntegrationState" class="muted">Independent storage</p></div>
+            </div>
+            <div class="stats-row"><div><strong id="homeMemberCount">0</strong><span>Members</span></div><div><strong id="homeFrontCount">0</strong><span>Fronts</span></div><div><strong id="homeShareState">Off</strong><span>PK sharing</span></div></div>
+          </article>
         </div>
-        <div id="memberGrid" class="member-grid"></div>
-        <div id="memberEmpty" class="empty-state" hidden>No members yet.</div>
+
+        <article class="panel section-panel">
+          <div class="panel-heading split-heading"><div><p class="eyebrow">Quick front</p><h3>Frequent members</h3></div><button id="chooseAnyMemberButton" class="text-button">Choose member</button></div>
+          <p class="muted section-copy">Nihility records the front locally first. PluralKit is updated only when front sharing is enabled.</p>
+          <div id="frequentMembers" class="member-chip-grid"></div>
+        </article>
+
+        <article class="panel section-panel">
+          <div class="panel-heading split-heading"><div><p class="eyebrow">Recent activity</p><h3>Latest fronts</h3></div><button class="text-button" data-route-link="history">View history</button></div>
+          <div id="recentFronts" class="timeline"></div>
+        </article>
+      </section>
+
+      <section id="membersRoute" class="route-view" hidden>
+        <div class="toolbar-row"><label class="search-field"><span>⌕</span><input id="memberSearch" type="search" placeholder="Search members"></label><button id="createMemberButton" class="primary-button">New member</button></div>
+        <div id="memberGrid" class="member-card-grid"></div>
+        <div id="membersEmpty" class="empty-state" hidden><h3>No members found</h3><p>Create a member or import a copy from PluralKit.</p></div>
+      </section>
+
+      <section id="historyRoute" class="route-view" hidden>
+        <article class="panel section-panel">
+          <div class="panel-heading split-heading"><div><p class="eyebrow">Nihility log</p><h3>Front history</h3></div><button id="newFrontButton" class="primary-button">Log front</button></div>
+          <div id="historyList" class="history-list"></div>
+        </article>
       </section>
 
       <section id="settingsRoute" class="route-view" hidden>
         <div class="settings-grid">
-          <article class="card"><p class="eyebrow">Database</p><h3>Supabase</h3><p class="muted">Members, groups, notes, links, sync IDs, settings, and front history live here.</p></article>
-          <article class="card"><p class="eyebrow">Media</p><h3>Supabase Storage</h3><p class="muted">Direct uploads use Supabase Storage. External image URLs remain external and are not duplicated.</p><dl class="detail-list"><div><dt>Avatar limit</dt><dd>2 MB</dd></div><div><dt>Banner limit</dt><dd>5 MB</dd></div></dl></article>
-          <article class="card"><p class="eyebrow">Account</p><h3 id="settingsEmail">Signed in</h3><p class="muted">Supabase Row Level Security keeps each account's rows isolated.</p></article>
+          <article class="panel section-panel">
+            <p class="eyebrow">Integrations</p><h3>PluralKit</h3>
+            <p class="muted">Optional. Nihility keeps its own data after import.</p>
+            <div id="pkDisconnected">
+              <label>PluralKit token<input id="pkTokenInput" type="password" autocomplete="off" placeholder="Paste token from pk;token"></label>
+              <label class="check-row"><input id="rememberPkToken" type="checkbox" checked><span><strong>Keep this connection on this device</strong><small>The token stays in this browser and is not stored in Nihility's database.</small></span></label>
+              <button id="connectPkButton" class="secondary-button">Connect PluralKit</button>
+            </div>
+            <div id="pkConnected" hidden>
+              <dl class="detail-list"><div><dt>System</dt><dd id="pkSystemName">Connected</dd></div><div><dt>System ID</dt><dd id="pkSystemId">...</dd></div></dl>
+              <label class="toggle-row"><span><strong>Share fronting updates</strong><small>New Nihility fronts are mirrored to PluralKit when every selected member has a PK link.</small></span><input id="shareFrontingToggle" type="checkbox" checked></label>
+              <div class="button-row"><button id="importPkButton" class="secondary-button">Import members from PK</button><button id="disconnectPkButton" class="text-button danger-text">Disconnect on this device</button></div>
+            </div>
+            <p id="pkMessage" class="form-message"></p>
+          </article>
+
+          <article class="panel section-panel"><p class="eyebrow">Data ownership</p><h3>Nihility is primary</h3><div class="prose-stack"><p>Imported members become independent Nihility records.</p><p>Editing a Nihility member does not rewrite PluralKit or Tupperbox.</p><p>Front sharing is the only automatic external update currently supported.</p></div></article>
+          <article class="panel section-panel"><p class="eyebrow">Storage</p><h3>Supabase</h3><dl class="detail-list"><div><dt>Avatar upload</dt><dd>2 MB max</dd></div><div><dt>Banner upload</dt><dd>5 MB max</dd></div><div><dt>External links</dt><dd>Stored as URLs</dd></div></dl></article>
         </div>
       </section>
-    </main>
+
+      <section id="profileRoute" class="route-view" hidden>
+        <div class="profile-layout">
+          <article class="panel profile-card">
+            <div class="profile-banner"></div>
+            <div class="profile-main"><div id="profileAvatarPreview" class="system-avatar profile-avatar fallback-avatar">N</div><div><p class="eyebrow">Account profile</p><h3 id="profileHeading">Account</h3><p id="profileEmail" class="muted"></p></div></div>
+            <form id="profileForm" class="profile-form">
+              <label>Display name<input id="profileDisplayName" maxlength="100"></label>
+              <label>Avatar URL<input id="profileAvatarUrl" type="url" placeholder="https://..."></label>
+              <label>Or upload avatar<input id="profileAvatarFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label>
+              <button class="primary-button" type="submit">Save profile</button><p id="profileMessage" class="form-message"></p>
+            </form>
+          </article>
+
+          <article id="invitePanel" class="panel section-panel" hidden>
+            <p class="eyebrow">Owner controls</p><h3>Invite another account</h3>
+            <p class="muted">Use this for your partner or another trusted account. Their Nihility data remains isolated from yours.</p>
+            <form id="inviteForm" class="stack"><label>Email<input id="inviteEmail" type="email" required placeholder="partner@example.com"></label><button class="secondary-button" type="submit">Create invite</button><p id="inviteMessage" class="form-message"></p></form>
+          </article>
+
+          <article class="panel section-panel"><p class="eyebrow">Session</p><h3 id="profileRole">Member</h3><button id="signOutButton" class="secondary-button danger-button">Sign out</button></article>
+        </div>
+      </section>
+    </div>
+
+    <nav class="mobile-nav">
+      <button class="mobile-nav-item active" data-route="home"><span>⌂</span>Home</button><button class="mobile-nav-item" data-route="members"><span>𐀪</span>Members</button><button class="mobile-nav-item" data-route="history"><span>↻</span>History</button><button class="mobile-nav-item" data-route="settings"><span>⚙</span>Settings</button><button class="mobile-nav-item" data-route="profile"><span>◎</span>Profile</button>
+    </nav>
   </div>
 
-  <dialog id="memberDialog">
-    <form id="memberForm" class="dialog-card">
-      <div class="dialog-heading">
-        <div><p class="eyebrow">Member</p><h3 id="memberDialogTitle">New member</h3></div>
-        <button id="closeMemberDialog" class="icon-button" type="button" aria-label="Close">×</button>
-      </div>
+  <dialog id="memberDialog" class="modal-dialog">
+    <form id="memberForm" class="modal-card">
+      <div class="modal-heading"><div><p class="eyebrow">Member</p><h3 id="memberDialogTitle">New member</h3></div><button id="closeMemberDialog" class="icon-button" type="button">×</button></div>
       <input id="memberId" type="hidden">
+      <div class="form-grid two-col"><label>Name<input id="memberName" maxlength="100" required></label><label>Display name<input id="memberDisplayName" maxlength="100"></label><label>Pronouns<input id="memberPronouns" maxlength="100"></label><label>Color<div class="color-row"><input id="memberColorPicker" type="color" value="#8b7cf6"><input id="memberColor" maxlength="7" placeholder="#8B7CF6"></div></label></div>
+      <label>Description<textarea id="memberDescription" maxlength="4000" rows="5"></textarea></label>
+      <div class="media-section"><div><p class="eyebrow">Profile picture</p><label>External URL<input id="memberAvatarUrl" type="url"></label><label>Or upload<input id="memberAvatarFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label><small>Maximum 2 MB.</small></div><div><p class="eyebrow">Banner</p><label>External URL<input id="memberBannerUrl" type="url"></label><label>Or upload<input id="memberBannerFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label><small>Maximum 5 MB.</small></div></div>
+      <p id="memberError" class="form-error" hidden></p>
+      <div class="modal-footer modal-footer-split"><button id="deleteMemberButton" class="text-button danger-text" type="button" hidden>Delete</button><div><button id="cancelMemberButton" class="secondary-button" type="button">Cancel</button><button class="primary-button" type="submit">Save member</button></div></div>
+    </form>
+  </dialog>
 
-      <div class="form-grid">
-        <label>Name<input id="memberName" maxlength="100" required></label>
-        <label>Display name<input id="memberDisplayName" maxlength="100"></label>
-        <label>Pronouns<input id="memberPronouns" maxlength="100"></label>
-        <label>Color
-          <div class="color-row">
-            <input id="memberColorPicker" type="color" value="#8b7cf6" aria-label="Choose member color">
-            <input id="memberColor" maxlength="7" placeholder="#8B7CF6" pattern="#?[0-9A-Fa-f]{6}">
-          </div>
-        </label>
-      </div>
-
-      <label>Description<textarea id="memberDescription" rows="4" maxlength="4000"></textarea></label>
-
-      <section class="media-section">
-        <div>
-          <p class="eyebrow">Profile picture</p>
-          <label>External URL<input id="memberAvatarUrl" type="url" placeholder="https://..."></label>
-          <label class="upload-row">Or upload to Supabase<input id="memberAvatarFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label>
-          <small>Maximum 2 MB.</small>
-        </div>
-        <div>
-          <p class="eyebrow">Banner</p>
-          <label>External URL<input id="memberBannerUrl" type="url" placeholder="https://..."></label>
-          <label class="upload-row">Or upload to Supabase<input id="memberBannerFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label>
-          <small>Maximum 5 MB.</small>
-        </div>
-      </section>
-
-      <p id="memberError" class="error-text" hidden></p>
-      <div class="dialog-footer">
-        <button id="deleteMemberButton" class="danger-button" type="button" hidden>Delete</button>
-        <span></span>
-        <button id="cancelMemberButton" class="secondary-button" type="button">Cancel</button>
-        <button class="primary-button" type="submit">Save member</button>
-      </div>
+  <dialog id="frontDialog" class="modal-dialog">
+    <form id="frontForm" class="modal-card">
+      <div class="modal-heading"><div><p class="eyebrow">Nihility front</p><h3>Manage front</h3></div><button id="closeFrontDialog" class="icon-button" type="button">×</button></div>
+      <fieldset class="front-mode-fieldset"><legend>Action</legend><label class="radio-card"><input type="radio" name="frontMode" value="replace" checked><span><strong>New front</strong><small>Replace the current front.</small></span></label><label class="radio-card"><input type="radio" name="frontMode" value="add"><span><strong>Add co-fronter</strong><small>Keep current fronters and add more.</small></span></label></fieldset>
+      <label>Find members<input id="frontMemberSearch" type="search" placeholder="Search members"></label><div id="frontMemberPicker" class="front-member-picker"></div>
+      <label class="check-row"><input id="customFrontTimeEnabled" type="checkbox"><span><strong>Set a custom start time</strong><small>Otherwise it starts now.</small></span></label><label id="customFrontTimeRow" hidden>Start time<input id="customFrontTime" type="datetime-local"></label>
+      <p id="frontError" class="form-error" hidden></p><div class="modal-footer"><button id="cancelFrontButton" class="secondary-button" type="button">Cancel</button><button class="primary-button" type="submit">Log front</button></div>
     </form>
   </dialog>
 
   <script src="assets/js/config.js?v=2" defer></script>
-  <script src="assets/js/api.js?v=2" defer></script>
-  <script src="assets/js/app.js?v=2" defer></script>
+  <script src="assets/js/api.js?v=4" defer></script>
+  <script src="assets/js/app.js?v=4" defer></script>
 </body>
 </html>
