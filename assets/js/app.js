@@ -31,9 +31,9 @@ function activeFront(){return state.fronts.find(f=>!f.ended_at)||null}
 function frontMembers(frontId){return state.frontMembers.filter(x=>x.front_id===frontId).map(x=>state.members.find(m=>m.id===x.member_id)).filter(Boolean)}
 
 async function bootstrapProfile(){
-  try{state.profile=await nihilityApi.rpc('bootstrap_or_accept_profile')}
-  catch(error){if(/invite-only/i.test(error.message))return false;throw error}
-  return true;
+  const rows=await nihilityApi.rest('profiles',{query:'select=*&user_id=eq.'+state.user.id+'&limit=1'});
+  state.profile=rows?.[0]||null;
+  return Boolean(state.profile);
 }
 async function loadData(){
   const data=await Promise.all([
@@ -192,7 +192,7 @@ async function saveProfile(e){
     state.profile={...state.profile,...body};msg.textContent='Profile saved.';renderProfile();
   }catch(error){if(upload?.path)await safeDelete('profile',upload.path);msg.textContent=error.message}
 }
-async function invite(e){e.preventDefault();const msg=$('#inviteMessage');msg.textContent='Creating invite...';try{await nihilityApi.rpc('invite_account',{p_email:$('#inviteEmail').value.trim()});msg.textContent='Invite created. They can now sign in with that email.';$('#inviteForm').reset()}catch(error){msg.textContent=error.message}}
+async function invite(e){e.preventDefault();const msg=$('#inviteMessage');msg.textContent='Creating invite...';try{await nihilityApi.rest('account_invites',{method:'POST',body:{email:$('#inviteEmail').value.trim().toLowerCase(),invited_by:state.user.id},prefer:'return=minimal'});msg.textContent='Invite created. They can now sign in with that email.';$('#inviteForm').reset()}catch(error){msg.textContent=error.message}}
 
 async function boot(){
   if(!nihilityApi.configured()){setView('setup');return}
