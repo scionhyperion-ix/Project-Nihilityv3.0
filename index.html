@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101119">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https:; img-src 'self' data: blob: https:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <title>Project Nihility</title>
+  <meta name="description" content="A private, storage-backed plural system workspace.">
+  <link rel="stylesheet" href="assets/css/app.css?v=1">
+</head>
+<body>
+  <div id="toastRegion" class="toast-region" aria-live="polite"></div>
+
+  <main id="setupView" class="center-shell" hidden>
+    <section class="card auth-card">
+      <p class="eyebrow">Project Nihility</p>
+      <h1>Setup required</h1>
+      <p class="muted">Add your Supabase project URL and public anon key in <code>assets/js/config.js</code>. R2 can stay blank until direct uploads are enabled.</p>
+    </section>
+  </main>
+
+  <main id="loginView" class="center-shell" hidden>
+    <section class="card auth-card">
+      <p class="eyebrow">Project Nihility</p>
+      <h1>Your private system cloud</h1>
+      <p class="muted">Structured data lives in Supabase. Existing image links stay as links. Only images you upload directly are stored in R2.</p>
+      <form id="loginForm" class="stack">
+        <label>Email
+          <input id="emailInput" type="email" autocomplete="email" required placeholder="you@example.com">
+        </label>
+        <button class="primary-button" type="submit">Send magic link</button>
+        <p id="loginMessage" class="muted small"></p>
+      </form>
+    </section>
+  </main>
+
+  <div id="appView" class="app-shell" hidden>
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">N</div>
+        <div><strong>Nihility</strong><small>personal cloud</small></div>
+      </div>
+      <nav class="nav-list">
+        <button class="nav-item active" data-route="members">Members</button>
+        <button class="nav-item" data-route="settings">Settings</button>
+      </nav>
+      <button id="signOutButton" class="secondary-button">Sign out</button>
+    </aside>
+
+    <main class="main-column">
+      <header class="topbar">
+        <div><p class="eyebrow">Private workspace</p><h2 id="pageTitle">Members</h2></div>
+        <button id="newMemberButton" class="primary-button">New member</button>
+      </header>
+
+      <section id="membersRoute" class="route-view">
+        <div class="toolbar">
+          <input id="memberSearch" type="search" placeholder="Search members">
+          <span id="memberCount" class="pill">0 members</span>
+        </div>
+        <div id="memberGrid" class="member-grid"></div>
+        <div id="memberEmpty" class="empty-state" hidden>No members yet.</div>
+      </section>
+
+      <section id="settingsRoute" class="route-view" hidden>
+        <div class="settings-grid">
+          <article class="card"><p class="eyebrow">Database</p><h3>Supabase</h3><p class="muted">Members, groups, notes, links, sync IDs, settings, and front history live here.</p></article>
+          <article class="card"><p class="eyebrow">Media</p><h3>Cloudflare R2</h3><p class="muted">Only direct uploads use R2. External image URLs remain external.</p><dl class="detail-list"><div><dt>Avatar limit</dt><dd>2 MB</dd></div><div><dt>Banner limit</dt><dd>5 MB</dd></div></dl></article>
+          <article class="card"><p class="eyebrow">Account</p><h3 id="settingsEmail">Signed in</h3><p class="muted">Supabase Row Level Security keeps each account's rows isolated.</p></article>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="memberDialog">
+    <form id="memberForm" class="dialog-card">
+      <div class="dialog-heading">
+        <div><p class="eyebrow">Member</p><h3 id="memberDialogTitle">New member</h3></div>
+        <button id="closeMemberDialog" class="icon-button" type="button" aria-label="Close">×</button>
+      </div>
+      <input id="memberId" type="hidden">
+
+      <div class="form-grid">
+        <label>Name<input id="memberName" maxlength="100" required></label>
+        <label>Display name<input id="memberDisplayName" maxlength="100"></label>
+        <label>Pronouns<input id="memberPronouns" maxlength="100"></label>
+        <label>Color
+          <div class="color-row">
+            <input id="memberColorPicker" type="color" value="#8b7cf6" aria-label="Choose member color">
+            <input id="memberColor" maxlength="7" placeholder="#8B7CF6" pattern="#?[0-9A-Fa-f]{6}">
+          </div>
+        </label>
+      </div>
+
+      <label>Description<textarea id="memberDescription" rows="4" maxlength="4000"></textarea></label>
+
+      <section class="media-section">
+        <div>
+          <p class="eyebrow">Profile picture</p>
+          <label>External URL<input id="memberAvatarUrl" type="url" placeholder="https://..."></label>
+          <label class="upload-row">Or upload to R2<input id="memberAvatarFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label>
+          <small>Maximum 2 MB.</small>
+        </div>
+        <div>
+          <p class="eyebrow">Banner</p>
+          <label>External URL<input id="memberBannerUrl" type="url" placeholder="https://..."></label>
+          <label class="upload-row">Or upload to R2<input id="memberBannerFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label>
+          <small>Maximum 5 MB.</small>
+        </div>
+      </section>
+
+      <p id="memberError" class="error-text" hidden></p>
+      <div class="dialog-footer">
+        <button id="deleteMemberButton" class="danger-button" type="button" hidden>Delete</button>
+        <span></span>
+        <button id="cancelMemberButton" class="secondary-button" type="button">Cancel</button>
+        <button class="primary-button" type="submit">Save member</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="assets/js/config.js?v=1" defer></script>
+  <script src="assets/js/api.js?v=1" defer></script>
+  <script src="assets/js/app.js?v=1" defer></script>
+</body>
+</html>
