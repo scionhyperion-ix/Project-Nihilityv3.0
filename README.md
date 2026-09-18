@@ -1,68 +1,53 @@
 # Project Nihility v3.0
 
-Private, storage-backed system workspace.
+Nihility is an independent, storage-backed system workspace.
 
-## Storage model
+## Core rule
 
-Project Nihility currently uses Supabase for authentication, structured data, and optional direct media uploads.
+PluralKit and Tupperbox are optional integrations, not the source of truth.
 
-### Database
-Stores:
-- members
-- groups
-- front history
-- notes and metadata
-- PluralKit and Tupperbox IDs
-- external avatar and banner URLs
-- media storage paths
-- settings and import history
+When data is imported into Nihility, the copied member belongs to Nihility. Later edits stay in Nihility unless an explicit sync feature says otherwise.
 
-### Images
+The only automatic outbound sync currently implemented is Share fronting updates for PluralKit.
 
-Nihility remains link-first. If an external image URL is used, Supabase stores only the URL in the member record.
+## Front sharing
 
-If an image is uploaded directly, it is stored in Supabase Storage.
+The PluralKit setting defaults to enabled when a connection is first created.
 
-Two public-read buckets are used because they have different server-side file limits:
-- `nihility-avatars`: 2 MB maximum
-- `nihility-banners`: 5 MB maximum
+When a front changes:
 
-Allowed upload types: PNG, JPEG, WebP, and GIF.
+1. Nihility records the front in its own database.
+2. If PluralKit is connected on that device and Share fronting updates is enabled, Nihility mirrors the front to PK.
+3. If a selected member has no PluralKit ID, the local front still succeeds and PK sharing is skipped instead of silently sending a partial front.
 
-Uploads and deletions require an authenticated Supabase user. Storage policies restrict writes to objects owned by that user. Public-read URLs are used so integrations such as PluralKit or Tupperbox can fetch the images.
+The PluralKit token stays in the browser. It is not stored in the Nihility database.
 
-## Security
+## Accounts
 
-The frontend uses a browser-safe Supabase publishable key in `assets/js/config.js`.
+The first authenticated account to open the configured Nihility instance becomes the owner.
 
-Never put a Supabase secret key or service-role key in frontend code.
+Later accounts require an email invite created from the Profile page.
 
-Database rows are protected by Row Level Security. Storage writes are protected by authenticated ownership policies.
+Each account currently has isolated members, groups, fronts, media, and integration settings.
+
+## Storage
+
+Supabase stores structured data and optional uploaded media.
+
+- avatars: 2 MB maximum
+- banners: 5 MB maximum
+- profile avatars: 2 MB maximum
+- PNG, JPEG, WebP, GIF
+
+External image links remain supported and consume no Supabase object storage.
+
+## UI
+
+The main application intentionally follows the Rainbow layout and interaction style. The main new surface is the account Profile page, which contains identity, account role, avatar, invites, and sign-out controls.
 
 ## Migrations
 
-- `supabase/migrations/001_initial.sql`: initial database schema
-- `supabase/migrations/002_supabase_media_storage.sql`: Supabase Storage buckets, media paths, and policies
-
-## Current milestone
-
-Included:
-- Supabase magic-link login
-- member create/edit/delete
-- color picker with synced hex value
-- external avatar/banner URLs
-- optional Supabase Storage uploads
-- browser and server-side media size enforcement
-- automatic cleanup when stored images are replaced or their member is deleted
-- responsive desktop/mobile shell
-- schema for groups, fronts, settings, and imports
-- GitHub Pages workflow
-
-Next layers:
-- multi-user workspace model
-- invitations and partner access
-- Tupperbox import
-- PluralKit import and sync
-- group management UI
-- front tracking
-- backups and restore
+- 001_initial.sql: base data model
+- 002_supabase_media_storage.sql: media storage
+- 003_optimize_rls_and_foreign_keys.sql: indexes and RLS performance
+- 004_accounts_integrations_and_fronts.sql: profiles, invites, integration settings, and local front logging
