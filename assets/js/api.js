@@ -2,24 +2,33 @@
 (function(){
   const cfg=window.NIHILITY_CONFIG||{};
   const KEY='nihility_supabase_session';
+  const BUCKETS={avatar:'nihility-avatars',banner:'nihility-banners'};
+
   const configured=()=>Boolean(cfg.SUPABASE_URL&&cfg.SUPABASE_ANON_KEY);
   const getSession=()=>{try{return JSON.parse(localStorage.getItem(KEY)||'null')}catch{return null}};
   const saveSession=s=>s?localStorage.setItem(KEY,JSON.stringify(s)):localStorage.removeItem(KEY);
+
   async function raw(path,options={}){
     const session=getSession();
     const headers={apikey:cfg.SUPABASE_ANON_KEY,...(options.headers||{})};
     if(session?.access_token)headers.Authorization='Bearer '+session.access_token;
     if(options.body&&typeof options.body!=='string'&&!(options.body instanceof Blob))headers['Content-Type']='application/json';
-    const response=await fetch(cfg.SUPABASE_URL+path,{...options,headers,body:options.body&&typeof options.body!=='string'&&!(options.body instanceof Blob)?JSON.stringify(options.body):options.body});
+    const response=await fetch(cfg.SUPABASE_URL+path,{
+      ...options,
+      headers,
+      body:options.body&&typeof options.body!=='string'&&!(options.body instanceof Blob)?JSON.stringify(options.body):options.body
+    });
     const text=await response.text();
     let data=null;try{data=text?JSON.parse(text):null}catch{data=text}
     if(!response.ok)throw new Error(data?.msg||data?.message||data?.error_description||data?.error||response.statusText);
     return data;
   }
+
   async function sendMagicLink(email){
     const redirect=location.origin+location.pathname;
     return raw('/auth/v1/otp?redirect_to='+encodeURIComponent(redirect),{method:'POST',body:{email,create_user:true}});
   }
+
   function readSessionFromUrl(){
     const p=new URLSearchParams(location.hash.replace(/^#/,''));
     const access_token=p.get('access_token');
@@ -27,24 +36,93 @@
     const s={access_token,refresh_token:p.get('refresh_token'),expires_at:Date.now()+Number(p.get('expires_in')||3600)*1000};
     saveSession(s);history.replaceState(null,'',location.pathname+location.search);return s;
   }
+
   async function refresh(){
     let s=getSession();if(!s)return null;
     if(!s.expires_at||s.expires_at-Date.now()>60000)return s;
     if(!s.refresh_token)return s;
-    const r=await fetch(cfg.SUPABASE_URL+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{apikey:cfg.SUPABASE_ANON_KEY,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:s.refresh_token})});
+    const r=await fetch(cfg.SUPABASE_URL+'/auth/v1/token?grant_type=refresh_token',{
+      method:'POST',
+      headers:{apikey:cfg.SUPABASE_ANON_KEY,'Content-Type':'application/json'},
+      body:JSON.stringify({refresh_token:s.refresh_token})
+    });
     if(!r.ok){saveSession(null);return null}
-    const d=await r.json();s={access_token:d.access_token,refresh_token:d.refresh_token||s.refresh_token,expires_at:Date.now()+Number(d.expires_in||3600)*1000};saveSession(s);return s;
+    const d=await r.json();
+    s={access_token:d.access_token,refresh_token:d.refresh_token||s.refresh_token,expires_at:Date.now()+Number(d.expires_in||3600)*1000};
+    saveSession(s);return s;
   }
-  async function user(){const s=await refresh();if(!s)return null;try{return await raw('/auth/v1/user')}catch{saveSession(null);return null}}
+
+  async function user(){
+    const s=await refresh();if(!s)return null;
+    try{return await raw('/auth/v1/user')}catch{saveSession(null);return null}
+  }
+
   async function rest(table,{method='GET',query='',body=null,prefer=''}={}){
     const headers={};if(prefer)headers.Prefer=prefer;
     return raw('/rest/v1/'+table+(query?'?'+query:''),{method,headers,body});
   }
-  async function upload(kind,file){
-    if(!cfg.R2_WORKER_URL)throw new Error('R2 upload worker is not configured.');
-    const s=await refresh();if(!s?.access_token)throw new Error('You are signed out.');
-    const r=await fetch(cfg.R2_WORKER_URL.replace(/\/$/,'')+'/media/'+kind,{method:'PUT',headers:{Authorization:'Bearer '+s.access_token,'Content-Type':file.type,'X-File-Name':file.name},body:file});
-    const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'Upload failed.');return d;
+
+  function extFor(file){
+    return ({'image/png':'png','image/jpeg':'jpg','image/webp':'webp','image/gif':'gif'})[file.type]||'bin';
   }
-  window.nihilityApi={configured,getSession,saveSession,sendMagicLink,readSessionFromUrl,refresh,user,rest,upload};
+
+  function encodeStoragePath(path){
+    return String(path).split('/').map(encodeURIComponent).join('/');
+  }
+
+  async function upload(kind,file){
+    const bucket=BUCKETS[kind];
+    if(!bucket)throw new Error('Unknown media type.');
+    const s=await refresh();if(!s?.access_token)throw new Error('You are signed out.');
+    const u=await user();if(!u?.id)throw new Error('Unable to resolve your account.');
+
+    const path=u.id+'/'+crypto.randomUUID()+'.'+extFor(file);
+    const response=await fetch(
+      cfg.SUPABASE_URL+'/storage/v1/object/'+encodeURIComponent(bucket)+'/'+encodeStoragePath(path),
+      {
+        method:'POST',
+        headers:{
+          apikey:cfg.SUPABASE_ANON_KEY,
+          Authorization:'Bearer '+s.access_token,
+          'Content-Type':file.type,
+          'cache-control':'3600',
+          'x-upsert':'false'
+        },
+        body:file
+      }
+    );
+
+    const data=await response.json().catch(()=>({}));
+    if(!response.ok)throw new Error(data?.message||data?.error||'Upload failed.');
+
+    return {
+      path,
+      bucket,
+      source:'supabase',
+      url:cfg.SUPABASE_URL+'/storage/v1/object/public/'+encodeURIComponent(bucket)+'/'+encodeStoragePath(path)
+    };
+  }
+
+  async function deleteMedia(kind,path){
+    if(!path)return;
+    const bucket=BUCKETS[kind];
+    if(!bucket)throw new Error('Unknown media type.');
+    const s=await refresh();if(!s?.access_token)throw new Error('You are signed out.');
+
+    const response=await fetch(
+      cfg.SUPABASE_URL+'/storage/v1/object/'+encodeURIComponent(bucket)+'/'+encodeStoragePath(path),
+      {
+        method:'DELETE',
+        headers:{apikey:cfg.SUPABASE_ANON_KEY,Authorization:'Bearer '+s.access_token}
+      }
+    );
+
+    if(response.status===404)return;
+    if(!response.ok){
+      const data=await response.json().catch(()=>({}));
+      throw new Error(data?.message||data?.error||'Unable to delete stored media.');
+    }
+  }
+
+  window.nihilityApi={configured,getSession,saveSession,sendMagicLink,readSessionFromUrl,refresh,user,rest,upload,deleteMedia};
 })();
