@@ -1,64 +1,68 @@
 # Project Nihility v3.0
 
-Private, storage-backed personal system workspace.
+Private, storage-backed system workspace.
 
 ## Storage model
 
-### Supabase
-Stores authentication and structured data:
+Project Nihility currently uses Supabase for authentication, structured data, and optional direct media uploads.
+
+### Database
+Stores:
 - members
 - groups
 - front history
 - notes and metadata
 - PluralKit and Tupperbox IDs
 - external avatar and banner URLs
+- media storage paths
 - settings and import history
 
-Supabase Storage is not required.
+### Images
 
-### Cloudflare R2
-Used only for files uploaded directly through Nihility.
+Nihility remains link-first. If an external image URL is used, Supabase stores only the URL in the member record.
 
-Current limits:
-- avatar: 2 MB
-- banner: 5 MB
-- PNG, JPEG, WebP, GIF
+If an image is uploaded directly, it is stored in Supabase Storage.
 
-If an external image URL is used, Nihility stores only the URL in Supabase.
+Two public-read buckets are used because they have different server-side file limits:
+- `nihility-avatars`: 2 MB maximum
+- `nihility-banners`: 5 MB maximum
 
-## Setup
+Allowed upload types: PNG, JPEG, WebP, and GIF.
 
-1. Create a Supabase project.
-2. Run `supabase/migrations/001_initial.sql` in the Supabase SQL editor.
-3. Put the project URL and public anon key in `assets/js/config.js`.
-4. Enable email authentication and add the GitHub Pages URL as an allowed redirect URL.
-5. Optional: create an R2 bucket, deploy the worker in `worker/`, and set `R2_WORKER_URL`.
-
-Never place a Supabase service-role key or Cloudflare R2 secret in browser JavaScript.
+Uploads and deletions require an authenticated Supabase user. Storage policies restrict writes to objects owned by that user. Public-read URLs are used so integrations such as PluralKit or Tupperbox can fetch the images.
 
 ## Security
 
-Every data table has a `user_id`. Row Level Security requires `auth.uid() = user_id`.
+The frontend uses a browser-safe Supabase publishable key in `assets/js/config.js`.
 
-The R2 worker validates the Supabase bearer token before upload and can be locked to one account through `ALLOWED_USER_ID`.
+Never put a Supabase secret key or service-role key in frontend code.
 
-## First milestone
+Database rows are protected by Row Level Security. Storage writes are protected by authenticated ownership policies.
 
-Included now:
+## Migrations
+
+- `supabase/migrations/001_initial.sql`: initial database schema
+- `supabase/migrations/002_supabase_media_storage.sql`: Supabase Storage buckets, media paths, and policies
+
+## Current milestone
+
+Included:
 - Supabase magic-link login
 - member create/edit/delete
 - color picker with synced hex value
-- external avatar/banner links
-- optional R2 uploads
-- 2 MB avatar and 5 MB banner limits
+- external avatar/banner URLs
+- optional Supabase Storage uploads
+- browser and server-side media size enforcement
+- automatic cleanup when stored images are replaced or their member is deleted
 - responsive desktop/mobile shell
 - schema for groups, fronts, settings, and imports
 - GitHub Pages workflow
 
 Next layers:
+- multi-user workspace model
+- invitations and partner access
 - Tupperbox import
 - PluralKit import and sync
 - group management UI
 - front tracking
-- media replacement and cleanup
 - backups and restore
