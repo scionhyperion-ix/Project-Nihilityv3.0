@@ -17,7 +17,7 @@
     <section class="card auth-card">
       <p class="eyebrow">Project Nihility</p>
       <h1>Setup required</h1>
-      <p class="muted">Add your Supabase project URL and public anon key in <code>assets/js/config.js</code>. R2 can stay blank until direct uploads are enabled.</p>
+      <p class="muted">Add your Supabase project URL and public publishable key in <code>assets/js/config.js</code>.</p>
     </section>
   </main>
 
@@ -25,7 +25,7 @@
     <section class="card auth-card">
       <p class="eyebrow">Project Nihility</p>
       <h1>Your private system cloud</h1>
-      <p class="muted">Structured data lives in Supabase. Existing image links stay as links. Only images you upload directly are stored in R2.</p>
+      <p class="muted">Structured data and optional direct uploads live in Supabase. Existing image links can stay external.</p>
       <form id="loginForm" class="stack">
         <label>Email
           <input id="emailInput" type="email" autocomplete="email" required placeholder="you@example.com">
@@ -67,7 +67,7 @@
       <section id="settingsRoute" class="route-view" hidden>
         <div class="settings-grid">
           <article class="card"><p class="eyebrow">Database</p><h3>Supabase</h3><p class="muted">Members, groups, notes, links, sync IDs, settings, and front history live here.</p></article>
-          <article class="card"><p class="eyebrow">Media</p><h3>Cloudflare R2</h3><p class="muted">Only direct uploads use R2. External image URLs remain external.</p><dl class="detail-list"><div><dt>Avatar limit</dt><dd>2 MB</dd></div><div><dt>Banner limit</dt><dd>5 MB</dd></div></dl></article>
+          <article class="card"><p class="eyebrow">Media</p><h3>Supabase Storage</h3><p class="muted">Direct uploads use Supabase Storage. External image URLs remain external and are not duplicated.</p><dl class="detail-list"><div><dt>Avatar limit</dt><dd>2 MB</dd></div><div><dt>Banner limit</dt><dd>5 MB</dd></div></dl></article>
           <article class="card"><p class="eyebrow">Account</p><h3 id="settingsEmail">Signed in</h3><p class="muted">Supabase Row Level Security keeps each account's rows isolated.</p></article>
         </div>
       </section>
@@ -100,13 +100,13 @@
         <div>
           <p class="eyebrow">Profile picture</p>
           <label>External URL<input id="memberAvatarUrl" type="url" placeholder="https://..."></label>
-          <label class="upload-row">Or upload to R2<input id="memberAvatarFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label>
+          <label class="upload-row">Or upload to Supabase<input id="memberAvatarFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label>
           <small>Maximum 2 MB.</small>
         </div>
         <div>
           <p class="eyebrow">Banner</p>
           <label>External URL<input id="memberBannerUrl" type="url" placeholder="https://..."></label>
-          <label class="upload-row">Or upload to R2<input id="memberBannerFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label>
+          <label class="upload-row">Or upload to Supabase<input id="memberBannerFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label>
           <small>Maximum 5 MB.</small>
         </div>
       </section>
@@ -121,8 +121,8 @@
     </form>
   </dialog>
 
-  <script src="assets/js/config.js?v=1" defer></script>
-  <script src="assets/js/api.js?v=1" defer></script>
-  <script src="assets/js/app.js?v=1" defer></script>
+  <script src="assets/js/config.js?v=2" defer></script>
+  <script src="assets/js/api.js?v=2" defer></script>
+  <script src="assets/js/app.js?v=2" defer></script>
 </body>
 </html>
