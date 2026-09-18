@@ -1,0 +1,14 @@
+name = "nihility-media"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "nihility-media"
+
+[vars]
+SUPABASE_URL = "https://YOUR_PROJECT.supabase.co"
+SUPABASE_ANON_KEY = "YOUR_PUBLIC_ANON_KEY"
+ALLOWED_ORIGIN = "https://YOUR_GITHUB_PAGES_DOMAIN"
+ALLOWED_USER_ID = "YOUR_SUPABASE_USER_UUID"
+R2_PUBLIC_BASE_URL = "https://media.example.com"
