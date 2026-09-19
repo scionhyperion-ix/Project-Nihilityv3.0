@@ -114,3 +114,70 @@ input,textarea{background:#151515}
 :root[data-theme="light"] .mobile-nav{background:rgba(247,247,245,.97)}
 :root[data-theme="light"] .primary-button{background:#2f2f2f;color:#fff}
 :root[data-theme="light"] .system-banner,:root[data-theme="light"] .profile-banner{background:linear-gradient(135deg,#f1f1ef,#e7e7e4)}
+
+
+/* Full Rainbow-family UI cleanup */
+:root{
+  --page-max:1180px;
+  --control-h:42px;
+  --surface-raised:#1c1c1c;
+}
+body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:0}
+h1,h2,h3,h4,.brand-lockup h1{font-family:inherit;letter-spacing:-.025em}
+.eyebrow{font-family:inherit;font-size:.7rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.login-shell{min-height:100dvh;padding:28px 18px;display:grid;place-items:center}
+.login-card{width:min(100%,480px);min-height:0;padding:30px;border-radius:22px}
+.brand-lockup{gap:14px;align-items:center}.brand-lockup-login{margin-bottom:22px}
+.brand-mark{width:48px;height:48px;border-radius:14px;font-size:1.05rem}
+.brand-lockup h1{font-size:2.15rem;line-height:1;margin-top:3px}
+.login-intro{margin:0 0 22px;line-height:1.55;font-size:.94rem}
+.login-form{gap:13px}.login-form label{gap:7px;font-size:.82rem}
+input,textarea,select{min-height:var(--control-h);border-radius:10px;padding:10px 12px}
+.login-form .primary-button,.login-form .secondary-button{min-height:44px}
+#forgotPasswordButton{margin:1px auto 0;padding:8px 12px;font-size:.85rem}
+.invite-note{margin-top:24px;padding-top:18px;border-top:1px solid var(--line)}
+.invite-note strong{font-size:.78rem}.invite-note p{margin:6px 0 0;font-size:.78rem;line-height:1.45;color:var(--muted)}
+.app-shell{grid-template-columns:228px minmax(0,1fr)}
+.sidebar{padding:16px 10px}.sidebar-brand{padding:5px 8px 16px}
+.sidebar-brand .brand-mark{width:34px;height:34px;border-radius:10px}
+.nav-list{gap:3px}.nav-item{min-height:40px;padding:9px 10px;border-radius:9px;font-size:.88rem;font-weight:600}
+.nav-item.active{background:rgba(255,255,255,.06);border-color:transparent}
+.main-column{width:100%;max-width:var(--page-max);margin:0 auto;padding:0 30px 96px}
+.topbar{height:78px;position:sticky;top:0;z-index:8}
+.topbar h2{font-size:1.35rem}.topbar-actions{gap:7px}
+.panel{border-radius:14px}.section-panel{padding:18px;margin-top:12px}
+.hero-grid{gap:12px}.current-front-panel,.system-summary-panel{min-height:235px;padding:18px}
+.panel-heading{margin-bottom:13px}.panel-heading h3,.section-panel h3{font-size:1.04rem}
+.current-front-name{font-size:1.45rem}
+.primary-button,.secondary-button,.text-button,.icon-button{min-height:38px;border-radius:9px;font-weight:650}
+.member-chip-grid{gap:8px}.member-chip{flex-basis:96px;min-height:112px;padding:10px 8px;border-radius:12px}
+.member-chip .timeline-avatar{width:52px;height:52px;border-radius:12px}
+.member-card-grid{gap:10px}.member-card{padding:12px;border-radius:13px}
+.member-card-avatar{width:50px;height:50px;border-radius:12px}
+.member-card h4{font-size:.93rem}.member-card-desc{font-size:.78rem;line-height:1.4}
+.search-field{min-height:40px;border-radius:10px}
+.settings-grid,.profile-layout{gap:12px}.settings-grid .panel,.profile-card{border-radius:14px}
+.radio-card{padding:11px 12px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--line)}
+.radio-card:has(input:checked){background:var(--accent-soft);border-color:rgba(184,167,255,.25)}
+dialog{padding:0}.modal-card{border-radius:18px;padding:20px}.modal-header{margin-bottom:15px}
+.mobile-nav{border:1px solid var(--line)}.mobile-nav-item{font-size:.69rem}
+:root[data-theme="light"]{--surface-raised:#fff}
+:root[data-theme="light"] .nav-item.active{background:#eaeae7}
+:root[data-theme="light"] .radio-card{background:#fafaf9}
+:root[data-theme="light"] .radio-card:has(input:checked){background:#eaeae7;border-color:#d8d8d3}
+@media(max-width:900px){
+ .app-shell{display:block}.main-column{padding:0 16px 100px;max-width:760px}
+ .topbar{height:68px}.hero-grid{grid-template-columns:1fr}
+ .current-front-panel,.system-summary-panel{min-height:0}
+}
+@media(max-width:620px){
+ .login-shell{padding:16px 12px}.login-card{padding:24px 20px;border-radius:18px}
+ .brand-lockup h1{font-size:1.9rem}.brand-mark{width:44px;height:44px;border-radius:13px}
+ .login-intro{font-size:.9rem;margin-bottom:18px}
+ .main-column{padding-left:12px;padding-right:12px}
+ .topbar{height:62px}.topbar h2{font-size:1.2rem}
+ .section-panel,.current-front-panel,.system-summary-panel{padding:14px}
+ .member-card-grid{grid-template-columns:1fr 1fr}
+ .member-chip{flex-basis:88px}
+ .mobile-nav{left:10px;right:10px;bottom:10px}
+}
