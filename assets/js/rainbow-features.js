@@ -389,15 +389,66 @@
     return dialog;
   }
   let workingGroupMembers=new Set();
+  let groupPreviewObjectUrls=[];
+  function clearGroupPreviewObjectUrls(){groupPreviewObjectUrls.forEach(url=>URL.revokeObjectURL(url));groupPreviewObjectUrls=[]}
+  function groupPreviewFileUrl(input){
+    const file=input?.files?.[0];if(!file)return '';
+    const url=URL.createObjectURL(file);groupPreviewObjectUrls.push(url);return url;
+  }
+  function currentEditingGroup(){
+    const id=document.querySelector('#groupsManagerRef')?.value;
+    return id?state.groups.find(g=>g.id===id)||null:null;
+  }
+  function selectedGroupMembers(){
+    return [...workingGroupMembers].map(id=>state.members.find(m=>m.id===id)).filter(Boolean);
+  }
+  function updateGroupPreview(){
+    const group=currentEditingGroup();
+    const name=document.querySelector('#groupsManagerDisplayName')?.value.trim()||document.querySelector('#groupsManagerName')?.value.trim()||'Group name';
+    const color=hex(document.querySelector('#groupsManagerColor')?.value)||'#8B7CF6';
+    const members=selectedGroupMembers();
+    const count=members.length;
+    const nameEl=document.querySelector('#groupPreviewName');if(nameEl)nameEl.textContent=name;
+    const countEl=document.querySelector('#groupPreviewMemberCount');if(countEl)countEl.textContent=count+' member'+(count===1?'':'s');
+    const colorEl=document.querySelector('#groupPreviewColor');if(colorEl)colorEl.style.background=color;
+
+    const previews=document.querySelector('#groupPreviewMembers');
+    if(previews){
+      previews.replaceChildren();
+      members.slice(0,4).forEach(m=>previews.append(avatarEl(m,'group-member-mini')));
+      if(count>4){const more=document.createElement('span');more.className='group-member-more';more.textContent='+'+(count-4);previews.append(more)}
+    }
+
+    clearGroupPreviewObjectUrls();
+    const iconUrl=groupPreviewFileUrl(document.querySelector('#groupsManagerIconFile'))||document.querySelector('#groupsManagerIconUrl')?.value.trim()||group?.icon_display_url||'';
+    const bannerUrl=groupPreviewFileUrl(document.querySelector('#groupsManagerBannerFile'))||document.querySelector('#groupsManagerBannerUrl')?.value.trim()||group?.banner_display_url||'';
+
+    const iconImg=document.querySelector('#groupPreviewIconImage'),iconFallback=document.querySelector('#groupPreviewIconFallback');
+    if(iconImg&&iconFallback){
+      if(iconUrl){iconImg.hidden=false;iconImg.src=iconUrl;iconFallback.hidden=true;iconImg.onerror=()=>{iconImg.hidden=true;iconFallback.hidden=false}}
+      else{iconImg.hidden=true;iconImg.removeAttribute('src');iconFallback.hidden=false;iconFallback.textContent=initial(name)}
+    }
+    const banner=document.querySelector('#groupPreviewBanner');
+    if(banner)banner.style.backgroundImage=bannerUrl?'url("'+bannerUrl.replaceAll('"','%22')+'")':'';
+  }
   function renderGroupMemberPicker(){
     const box=document.querySelector('#groupsMemberPicker');if(!box)return;box.replaceChildren();
     const q=(document.querySelector('#groupsMemberSearch')?.value||'').trim().toLowerCase();
     sortedMembers(activeMembers().filter(m=>!q||[m.name,m.display_name,m.pronouns].filter(Boolean).some(v=>String(v).toLowerCase().includes(q)))).forEach(m=>{
       const row=document.createElement('label');row.className='picker-row';row.append(avatarEl(m,'picker-avatar'));
-      const c=document.createElement('span');c.className='picker-copy';const s=document.createElement('strong');s.textContent=memberName(m);const sm=document.createElement('small');sm.textContent=m.pronouns||m.name;c.append(s,sm);
-      const i=document.createElement('input');i.type='checkbox';i.value=m.id;i.checked=workingGroupMembers.has(m.id);i.onchange=()=>{i.checked?workingGroupMembers.add(m.id):workingGroupMembers.delete(m.id)};
-      row.append(c,i);box.append(row);
+      const copy=document.createElement('span');copy.className='picker-copy';
+      const strong=document.createElement('strong');strong.textContent=memberName(m);
+      const small=document.createElement('small');small.textContent=m.pronouns||m.name;
+      copy.append(strong,small);
+      const input=document.createElement('input');input.type='checkbox';input.value=m.id;input.checked=workingGroupMembers.has(m.id);
+      input.onchange=()=>{input.checked?workingGroupMembers.add(m.id):workingGroupMembers.delete(m.id);updateGroupSelectedCount();updateGroupPreview()};
+      row.append(copy,input);box.append(row);
     });
+    updateGroupSelectedCount();
+  }
+  function updateGroupSelectedCount(){
+    const count=workingGroupMembers.size;
+    const el=document.querySelector('#groupsSelectedCount');if(el)el.textContent=count+' selected';
   }
   function openGroupManager(group=null){
     const dialog=ensureGroupDialog();workingGroupMembers=new Set(group?groupMemberIds(group.id):[]);
@@ -407,29 +458,78 @@
     document.querySelector('#groupsManagerDisplayName').value=group?.display_name||'';
     document.querySelector('#groupsManagerColor').value=group?.color?'#'+group.color:'';
     document.querySelector('#groupsManagerDescription').value=group?.description||'';
+    document.querySelector('#groupsManagerIconUrl').value='';
+    document.querySelector('#groupsManagerBannerUrl').value='';
+    document.querySelector('#groupsManagerIconFile').value='';
+    document.querySelector('#groupsManagerBannerFile').value='';
     document.querySelector('#groupsMemberSearch').value='';
-    document.querySelector('#deleteGroupButton').hidden=!group;document.querySelector('#groupsManagerError').hidden=true;
-    renderGroupMemberPicker();dialog.showModal();
+    document.querySelector('#deleteGroupButton').hidden=!group;
+    document.querySelector('#groupsManagerError').hidden=true;
+    clearGroupPreviewObjectUrls();
+    renderGroupMemberPicker();updateGroupPreview();dialog.showModal();
   }
   async function saveGroup(e){
-    e.preventDefault();const err=document.querySelector('#groupsManagerError');err.hidden=true;
+    e.preventDefault();const err=document.querySelector('#groupsManagerError');err.hidden=true;let iconUpload=null,bannerUpload=null;
     try{
-      const id=document.querySelector('#groupsManagerRef').value,old=id?state.groups.find(g=>g.id===id):null,c=hex(document.querySelector('#groupsManagerColor').value);
-      const body={user_id:state.user.id,name:document.querySelector('#groupsManagerName').value.trim(),display_name:document.querySelector('#groupsManagerDisplayName').value.trim()||null,description:document.querySelector('#groupsManagerDescription').value.trim()||null,color:c?c.slice(1).toLowerCase():null,pk_id:old?.pk_id||null,tupper_id:old?.tupper_id||null,metadata:old?.metadata||{}};
+      const id=document.querySelector('#groupsManagerRef').value;
+      const old=id?state.groups.find(g=>g.id===id):null;
+      const color=hex(document.querySelector('#groupsManagerColor').value);
+      iconUpload=await maybeUpload('avatar',document.querySelector('#groupsManagerIconFile'));
+      bannerUpload=await maybeUpload('banner',document.querySelector('#groupsManagerBannerFile'));
+      const iconExternal=document.querySelector('#groupsManagerIconUrl').value.trim();
+      const bannerExternal=document.querySelector('#groupsManagerBannerUrl').value.trim();
+      const importedIconPath=!iconUpload&&iconExternal?await importExternalMedia('avatar',iconExternal):null;
+      const importedBannerPath=!bannerUpload&&bannerExternal?await importExternalMedia('banner',bannerExternal):null;
+      const oldIconPath=old?.metadata?.icon_storage_path||null;
+      const oldBannerPath=old?.metadata?.banner_storage_path||null;
+      const iconPath=iconUpload?.path||importedIconPath||oldIconPath;
+      const bannerPath=bannerUpload?.path||importedBannerPath||oldBannerPath;
+      const metadata={...(old?.metadata||{}),icon_storage_path:iconPath||null,banner_storage_path:bannerPath||null};
+
+      const body={
+        user_id:state.user.id,
+        name:document.querySelector('#groupsManagerName').value.trim(),
+        display_name:document.querySelector('#groupsManagerDisplayName').value.trim()||null,
+        description:document.querySelector('#groupsManagerDescription').value.trim()||null,
+        color:color?color.slice(1).toLowerCase():null,
+        icon_url:null,
+        icon_source:null,
+        pk_id:old?.pk_id||null,
+        tupper_id:old?.tupper_id||null,
+        metadata
+      };
       if(!body.name)throw new Error('Name is required.');
+
       let groupId=id;
       if(id)await nihilityApi.rest('groups',{method:'PATCH',query:'id=eq.'+encodeURIComponent(id),body,prefer:'return=minimal'});
       else{const rows=await nihilityApi.rest('groups',{method:'POST',body,prefer:'return=representation'});groupId=rows?.[0]?.id}
+
       if(groupId){
         await nihilityApi.rest('member_groups',{method:'DELETE',query:'group_id=eq.'+encodeURIComponent(groupId),prefer:'return=minimal'});
-        for(const memberId of workingGroupMembers)await nihilityApi.rest('member_groups',{method:'POST',body:{user_id:state.user.id,member_id:memberId,group_id:groupId},prefer:'return=minimal'});
+        for(const memberId of workingGroupMembers){
+          await nihilityApi.rest('member_groups',{method:'POST',body:{user_id:state.user.id,member_id:memberId,group_id:groupId},prefer:'return=minimal'});
+        }
       }
-      document.querySelector('#groupsManagerDialog').close();toast(id?'Group updated':'Group created');await loadData();
-    }catch(error){err.textContent=error.message;err.hidden=false}
+      if(oldIconPath&&oldIconPath!==iconPath)await safeDelete('avatar',oldIconPath);
+      if(oldBannerPath&&oldBannerPath!==bannerPath)await safeDelete('banner',oldBannerPath);
+
+      clearGroupPreviewObjectUrls();
+      document.querySelector('#groupsManagerDialog').close();
+      toast(id?'Group updated':'Group created');
+      await loadData();
+    }catch(error){
+      if(iconUpload?.path)await safeDelete('avatar',iconUpload.path);
+      if(bannerUpload?.path)await safeDelete('banner',bannerUpload.path);
+      err.textContent=error.message;err.hidden=false
+    }
   }
   async function deleteGroup(){
     const id=document.querySelector('#groupsManagerRef').value;if(!id||!confirm('Delete this Nihility group? Members will not be deleted.'))return;
+    const group=state.groups.find(g=>g.id===id);
     await nihilityApi.rest('groups',{method:'DELETE',query:'id=eq.'+encodeURIComponent(id),prefer:'return=minimal'});
+    await safeDelete('avatar',group?.metadata?.icon_storage_path);
+    await safeDelete('banner',group?.metadata?.banner_storage_path);
+    clearGroupPreviewObjectUrls();
     document.querySelector('#groupsManagerDialog').close();toast('Group deleted');await loadData();
   }
   function renderGroups(){
@@ -439,11 +539,33 @@
     grid.replaceChildren();empty.hidden=groups.length>0;
     groups.forEach(g=>{
       const card=document.createElement('button');card.type='button';card.className='group-card';
+      if(g.banner_display_url){
+        const banner=document.createElement('div');banner.className='group-card-banner';banner.style.backgroundImage='url("'+g.banner_display_url.replaceAll('"','%22')+'")';card.append(banner);card.classList.add('has-group-banner');
+      }
+
       const content=document.createElement('div');content.className='group-card-content';
-      const icon=document.createElement('div');icon.className='group-card-icon fallback-avatar';icon.textContent=initial(groupName(g));
-      const copy=document.createElement('div');copy.className='group-card-copy';const h=document.createElement('h3');h.textContent=groupName(g);const sm=document.createElement('small');const count=groupMemberIds(g.id).length;sm.textContent=count+' member'+(count===1?'':'s');copy.append(h,sm);
-      const previews=document.createElement('div');previews.className='group-member-preview';groupMemberIds(g.id).slice(0,4).map(id=>state.members.find(m=>m.id===id)).filter(Boolean).forEach(m=>previews.append(avatarEl(m,'group-member-mini')));
-      content.append(icon,copy,previews);card.append(content);const bar=document.createElement('span');bar.className='group-color-bar';bar.style.background=g.color?'#'+g.color:'var(--accent)';card.append(bar);card.onclick=()=>openGroupManager(g);grid.append(card);
+      let icon;
+      if(g.icon_display_url){
+        icon=document.createElement('img');icon.className='group-card-icon';icon.src=g.icon_display_url;icon.alt='';icon.loading='lazy';
+        icon.onerror=()=>{const fallback=document.createElement('div');fallback.className='group-card-icon fallback-avatar';fallback.textContent=initial(groupName(g));icon.replaceWith(fallback)};
+      }else{
+        icon=document.createElement('div');icon.className='group-card-icon fallback-avatar';icon.textContent=initial(groupName(g));
+      }
+
+      const copy=document.createElement('div');copy.className='group-card-copy';
+      const title=document.createElement('h3');title.textContent=groupName(g);
+      const count=groupMemberIds(g.id).length;
+      const meta=document.createElement('small');meta.textContent=count+' member'+(count===1?'':'s');
+      copy.append(title,meta);
+
+      const previews=document.createElement('div');previews.className='group-member-preview';
+      const members=groupMemberIds(g.id).map(id=>state.members.find(m=>m.id===id)).filter(Boolean);
+      members.slice(0,4).forEach(m=>previews.append(avatarEl(m,'group-member-mini')));
+      if(members.length>4){const more=document.createElement('span');more.className='group-member-more';more.textContent='+'+(members.length-4);previews.append(more)}
+
+      content.append(icon,copy,previews);card.append(content);
+      const bar=document.createElement('span');bar.className='group-color-bar';bar.style.background=g.color?'#'+g.color:'var(--accent)';card.append(bar);
+      card.onclick=()=>openGroupManager(g);grid.append(card);
     });
   }
 
