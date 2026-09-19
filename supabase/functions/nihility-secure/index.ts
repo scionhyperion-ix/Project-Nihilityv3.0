@@ -252,7 +252,7 @@ async function actionImportPkGroups(user:any){
   });
 
   const localMembers=await admin("/rest/v1/members?user_id=eq."+encodeURIComponent(user.id)+"&select=id,pk_id,metadata");
-  const localGroups=await admin("/rest/v1/groups?user_id=eq."+encodeURIComponent(user.id)+"&select=id,pk_id,metadata");
+  const localGroups=await admin("/rest/v1/groups?user_id=eq."+encodeURIComponent(user.id)+"&select=id,name,display_name,description,color,pk_id,metadata");
   const existingLinks=await admin("/rest/v1/member_groups?user_id=eq."+encodeURIComponent(user.id)+"&select=member_id,group_id");
 
   const memberMap=new Map<string,string>();
@@ -290,6 +290,12 @@ async function actionImportPkGroups(user:any){
 
   for(const g of pkGroups||[]){
     let local=groupByPk.get(String(g.id))||(g.uuid?groupByPk.get(String(g.uuid)):null);
+    let iconPath=local?.metadata?.icon_storage_path||null;
+    let bannerPath=local?.metadata?.banner_storage_path||null;
+    const iconUrl=g.icon||g.icon_url||null;
+    const bannerUrl=g.banner||g.banner_url||null;
+    if(!iconPath&&iconUrl){try{iconPath=await storeImage(user.id,"avatar",iconUrl)}catch{}}
+    if(!bannerPath&&bannerUrl){try{bannerPath=await storeImage(user.id,"banner",bannerUrl)}catch{}}
     if(!local){
       const created=await admin("/rest/v1/groups",{
         method:"POST",headers:{Prefer:"return=representation"},
@@ -302,7 +308,7 @@ async function actionImportPkGroups(user:any){
           icon_url:null,
           icon_source:null,
           pk_id:g.id,
-          metadata:{pk_uuid:g.uuid||null,pk_icon_url:g.icon||null,pk_banner_url:g.banner||null}
+          metadata:{pk_uuid:g.uuid||null,pk_icon_url:iconUrl,pk_banner_url:bannerUrl,icon_storage_path:iconPath,banner_storage_path:bannerPath}
         })
       });
       local=created?.[0];
@@ -312,7 +318,7 @@ async function actionImportPkGroups(user:any){
         if(g.uuid)groupByPk.set(String(g.uuid),local);
       }
     }else{
-      const metadata={...(local.metadata||{}),pk_uuid:g.uuid||local.metadata?.pk_uuid||null,pk_icon_url:g.icon||local.metadata?.pk_icon_url||null,pk_banner_url:g.banner||local.metadata?.pk_banner_url||null};
+      const metadata={...(local.metadata||{}),pk_uuid:g.uuid||local.metadata?.pk_uuid||null,pk_icon_url:iconUrl||local.metadata?.pk_icon_url||null,pk_banner_url:bannerUrl||local.metadata?.pk_banner_url||null,icon_storage_path:iconPath||local.metadata?.icon_storage_path||null,banner_storage_path:bannerPath||local.metadata?.banner_storage_path||null};
       await admin("/rest/v1/groups?id=eq."+encodeURIComponent(local.id),{
         method:"PATCH",
         headers:{Prefer:"return=minimal"},
