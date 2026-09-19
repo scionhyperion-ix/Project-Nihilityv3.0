@@ -9,7 +9,7 @@ function applyTheme(mode){
   localStorage.setItem(THEME_KEY,selected);
   const resolved=selected==='system'?(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):selected;
   document.documentElement.dataset.theme=resolved;
-  $('input[name="themeMode"]').forEach(i=>i.checked=i.value===selected);
+  document.querySelectorAll('input[name="themeMode"]').forEach(i=>i.checked=i.value===selected);
 }
 function initTheme(){applyTheme(localStorage.getItem(THEME_KEY)||'system')}
 
