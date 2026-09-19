@@ -254,7 +254,9 @@ async function boot(){
   setView('app');await loadData();const requested=(location.hash||'#home').slice(1);setRoute(['home','members','history','settings','profile'].includes(requested)?requested:'home');
 }
 
-$('#loginForm').onsubmit=async e=>{e.preventDefault();const m=$('#loginMessage');m.textContent='Sending...';try{await nihilityApi.sendMagicLink($('#emailInput').value.trim());m.textContent='Check your email for the sign-in link.'}catch(error){m.textContent=error.message}};
+$('#loginForm').onsubmit=async e=>{e.preventDefault();const m=$('#loginMessage'),email=$('#emailInput').value.trim(),password=$('#passwordInput').value;if(!password){m.textContent='Enter your password, or use the magic-link button.';return}m.textContent='Signing in...';try{await nihilityApi.signInWithPassword(email,password);location.reload()}catch(error){m.textContent=error.message}};
+$('#magicLinkButton').onclick=async()=>{const m=$('#loginMessage'),email=$('#emailInput').value.trim();if(!email){m.textContent='Enter your email first.';return}m.textContent='Sending...';try{await nihilityApi.sendMagicLink(email);m.textContent='Check your email for the sign-in link.'}catch(error){m.textContent=error.message}};
+$('#passwordForm').onsubmit=async e=>{e.preventDefault();const m=$('#passwordMessage'),password=$('#newPasswordInput').value;m.textContent='Saving...';try{await nihilityApi.setPassword(password);$('#newPasswordInput').value='';m.textContent='Password saved. You can use it the next time you sign in.'}catch(error){m.textContent=error.message}};
 function signOut(){nihilityApi.saveSession(null);location.reload()}
 $('#signOutButton').onclick=signOut;$('#deniedSignOut').onclick=signOut;$('#sidebarProfileButton').onclick=()=>setRoute('profile');
 $$('[data-route]').forEach(b=>b.onclick=()=>setRoute(b.dataset.route));$$('[data-route-link]').forEach(b=>b.onclick=()=>setRoute(b.dataset.routeLink));
