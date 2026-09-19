@@ -84,6 +84,7 @@ function renderHeader(){
 function renderHome(){
   const front=activeFront(),members=front?frontMembers(front.id):[];
   $('#currentFrontMembers').replaceChildren();
+  const rainbowSubtitle=$('#rainbowFrontSubtitle');if(rainbowSubtitle)rainbowSubtitle.textContent=!members.length?'No one is currently fronting':members.length===1?(label(members[0])+' is currently fronting'):(members.length+' members are currently fronting');
   if(!front||!members.length){
     $('#currentFrontHeading').textContent='Nobody is fronting';$('#frontDuration').textContent='--';
     const p=document.createElement('p');p.className='muted';p.textContent='Start a front from Quick front or Manage front.';$('#currentFrontMembers').append(p);
@@ -98,7 +99,7 @@ function renderHome(){
   const counts=new Map();state.frontMembers.forEach(x=>counts.set(x.member_id,(counts.get(x.member_id)||0)+1));
   const frequent=[...activeMembers()].sort((a,b)=>(counts.get(b.id)||0)-(counts.get(a.id)||0)).slice(0,8);
   $('#frequentMembers').replaceChildren();
-  frequent.forEach(m=>{const b=document.createElement('button');b.className='member-chip';b.append(avatarEl(m,'timeline-avatar'));const c=document.createElement('div');c.className='member-chip-copy';const s=document.createElement('strong');s.textContent=label(m);const sm=document.createElement('small');sm.textContent=(counts.get(m.id)||0)+' fronts';c.append(s,sm);b.append(c);b.onclick=()=>quickFront(m);$('#frequentMembers').append(b)});
+  frequent.forEach(m=>{const b=document.createElement('button');const isFronting=members.some(x=>x.id===m.id);b.className='member-chip'+(isFronting?' fronting':'');b.append(avatarEl(m,'timeline-avatar'));const c=document.createElement('div');c.className='member-chip-copy';const s=document.createElement('strong');s.textContent=label(m);c.append(s);b.append(c);b.onclick=()=>openMember(m);let timer=null,moved=false;const start=()=>{moved=false;timer=setTimeout(()=>{timer=null;if(!moved)quickToggleFront(m)},520)};const cancel=()=>{if(timer){clearTimeout(timer);timer=null}};b.addEventListener('pointerdown',start);b.addEventListener('pointermove',()=>{moved=true;cancel()});b.addEventListener('pointerup',cancel);b.addEventListener('pointercancel',cancel);b.addEventListener('contextmenu',e=>e.preventDefault());$('#frequentMembers').append(b)});
 
   $('#recentFronts').replaceChildren();
   state.fronts.slice(0,6).forEach(f=>{const ms=frontMembers(f.id),row=document.createElement('div');row.className='timeline-row';row.append(ms[0]?avatarEl(ms[0],'timeline-avatar'):avatarEl({name:'Out'},'timeline-avatar'));const c=document.createElement('div');c.className='timeline-copy';const s=document.createElement('strong');s.textContent=ms.length?ms.map(label).join(', '):'Switch out';const sm=document.createElement('small');sm.textContent=fmt(f.started_at);c.append(s,sm);const t=document.createElement('span');t.className='timeline-time';t.textContent=relative(f.started_at);row.append(c,t);$('#recentFronts').append(row)});
@@ -190,7 +191,8 @@ async function saveFront(e){
     await logFront(ids,ts);$('#frontDialog').close();toast('Front updated',state.integration?.share_fronting_updates?'Nihility saved first. External sharing was attempted.':'Saved only to Nihility.');
   }catch(error){err.textContent=error.message;err.hidden=false}
 }
-async function quickFront(m){if(confirm('Start a new front with '+label(m)+'?')){await logFront([m.id],null);toast('Front updated')}}
+async function quickFront(m){await quickToggleFront(m)}
+async function quickToggleFront(m){const current=activeFront(),ids=current?frontMembers(current.id).map(x=>x.id):[],has=ids.includes(m.id);const next=has?ids.filter(id=>id!==m.id):[...ids,m.id];await logFront(next,null);toast(has?'Front ended':'Fronter added',label(m))}
 async function switchOut(){if(!confirm('Switch out with nobody fronting?'))return;await logFront([],null);toast('Switched out')}
 
 async function connectPk(){
@@ -282,7 +284,7 @@ $('#passwordForm').onsubmit=async e=>{e.preventDefault();const m=$('#passwordMes
 function signOut(){nihilityApi.saveSession(null);location.reload()}
 $('#signOutButton').onclick=signOut;$('#deniedSignOut').onclick=signOut;$('#sidebarProfileButton').onclick=()=>setRoute('profile');
 $$('[data-route]').forEach(b=>b.onclick=()=>setRoute(b.dataset.route));$$('[data-route-link]').forEach(b=>b.onclick=()=>setRoute(b.dataset.routeLink));
-$('#refreshButton').onclick=loadData;$('#openFrontManager').onclick=()=>openFront('replace');$('#chooseAnyMemberButton').onclick=()=>openFront('replace');$('#newFrontButton').onclick=()=>openFront('replace');$('#addCoFronterButton').onclick=()=>openFront('add');$('#switchOutButton').onclick=switchOut;
+$('#refreshButton').onclick=loadData;$('#rainbowAddFrontButton').onclick=()=>openFront('add');$('#focusMemberSearch').onclick=()=>$('#memberSearch').focus();$('#rainbowNewMember').onclick=()=>openMember();$('#openFrontManager').onclick=()=>openFront('replace');$('#chooseAnyMemberButton').onclick=()=>openFront('replace');$('#newFrontButton').onclick=()=>openFront('replace');$('#addCoFronterButton').onclick=()=>openFront('add');$('#switchOutButton').onclick=switchOut;
 $('#createMemberButton').onclick=()=>openMember();$('#memberSearch').oninput=renderMembers;$('#memberForm').onsubmit=saveMember;$('#deleteMemberButton').onclick=deleteMember;$('#closeMemberDialog').onclick=$('#cancelMemberButton').onclick=()=>$('#memberDialog').close();$('#memberColorPicker').oninput=e=>$('#memberColor').value=e.target.value.toUpperCase();$('#memberColor').oninput=e=>{const c=hex(e.target.value);if(c)$('#memberColorPicker').value=c};
 $('#frontForm').onsubmit=saveFront;$('#closeFrontDialog').onclick=$('#cancelFrontButton').onclick=()=>$('#frontDialog').close();$('#frontMemberSearch').oninput=()=>buildFrontPicker($$('#frontMemberPicker input:checked').map(i=>i.value));$('#customFrontTimeEnabled').onchange=e=>$('#customFrontTimeRow').hidden=!e.target.checked;
 $('#connectPkButton').onclick=connectPk;$('#disconnectPkButton').onclick=disconnectPk;$('#shareFrontingToggle').onchange=toggleShare;$('#importPkButton').onclick=importPk;
