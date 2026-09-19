@@ -9,6 +9,7 @@
   <title>Project Nihility</title>
   <meta name="description" content="A private system workspace with optional PluralKit front sharing.">
   <link rel="stylesheet" href="assets/css/app.css?v=16">
+  <link rel="stylesheet" href="assets/css/rainbowpk-web.css?v=1">
 </head>
 <body>
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
@@ -88,7 +89,7 @@
             <div class="panel-actions"><button id="addCoFronterButton" class="secondary-button">Add co-fronter</button><button id="switchOutButton" class="text-button danger-text">Switch out</button></div>
           </article>
 
-          <article class="panel system-summary-panel rainbow-hidden-dashboard">
+          <article class="panel system-summary-panel">
             <div class="system-banner"></div>
             <div class="system-summary-content">
               <div id="homeProfileAvatar" class="system-avatar large fallback-avatar">N</div>
@@ -98,13 +99,14 @@
           </article>
         </div>
 
-        <article class="rainbow-quick-section">
-          <div class="rainbow-section-heading"><div><h2 class="rainbow-section-title">Quick front</h2><p class="muted">Frequently used</p></div><button id="chooseAnyMemberButton" class="icon-button" title="Select fronter">＋</button></div>
+        <article class="panel section-panel">
+          <div class="panel-heading split-heading"><div><p class="eyebrow">Quick front</p><h3>Frequent members</h3></div><button id="chooseAnyMemberButton" class="text-button" type="button">Choose member</button></div>
+          <p class="muted section-copy">Selecting a member starts a new Nihility front. PluralKit is also updated when front sharing is enabled.</p>
           
           <div id="frequentMembers" class="member-chip-grid"></div>
         </article>
 
-        <article class="panel section-panel rainbow-hidden-dashboard">
+        <article class="panel section-panel">
           <div class="panel-heading split-heading"><div><p class="eyebrow">Recent activity</p><h3>Latest fronts</h3></div><button class="text-button" data-route-link="history">View history</button></div>
           <div id="recentFronts" class="timeline"></div>
         </article>
@@ -112,7 +114,7 @@
 
       <section id="membersRoute" class="route-view rainbow-page" hidden>
         <div class="rainbow-page-header"><h1>Members</h1><div class="rainbow-header-actions"><button id="focusMemberSearch" class="icon-button" title="Search members">⌕</button><button id="rainbowNewMember" class="icon-button" title="Add member">＋</button></div></div>
-        <div class="toolbar-row rainbow-search-row"><label class="search-field"><span>⌕</span><input id="memberSearch" type="search" placeholder="Search members"></label><button id="createMemberButton" class="primary-button">New member</button></div>
+        <div class="toolbar-row"><label class="search-field"><span>⌕</span><input id="memberSearch" type="search" placeholder="Search members"></label><button id="createMemberButton" class="primary-button">New member</button></div>
         <div id="memberGrid" class="member-card-grid"></div>
         <div id="membersEmpty" class="empty-state" hidden><h3>No members found</h3><p>Create a member or import a copy from PluralKit.</p></div>
       </section>
@@ -129,7 +131,7 @@
         <div class="rainbow-page-header"><div><h1>Settings</h1><p class="muted">Project Nihility</p></div></div>
         <div class="settings-grid">
           <article class="rainbow-settings-group"><h2 class="rainbow-section-title">Account</h2><button class="rainbow-list-card" data-route-link="profile"><span>◎</span><span><strong>Profile & account</strong><small>Profile, password, invites and sign out</small></span><b>›</b></button></article>
-          <article class="panel section-panel"><p class="eyebrow">Appearance</p><h3>Theme</h3><p class="muted">Match Project Rainbow or follow your device.</p><div class="theme-options"><label class="radio-card"><input type="radio" name="themeMode" value="system"><span><strong>Use system theme</strong><small>Follow your device light or dark mode</small></span></label><label class="radio-card"><input type="radio" name="themeMode" value="light"><span><strong>Light</strong></span></label><label class="radio-card"><input type="radio" name="themeMode" value="dark"><span><strong>Dark</strong></span></label></div></article>
+          <article id="appearanceThemePanel" class="panel section-panel appearance-panel"><p class="eyebrow">Appearance</p><h3>Theme</h3><p class="muted appearance-copy">Choose the same appearance themes available in RainbowPK. This preference is stored in this browser.</p><div id="themeOptions" class="theme-options" role="radiogroup" aria-label="Nihility appearance theme"></div></article>
           <article class="panel section-panel">
             <p class="eyebrow">Integrations</p><h3>PluralKit</h3>
             <p class="muted">Optional. Nihility keeps its own data after import.</p>
@@ -207,6 +209,6 @@
 
   <script src="assets/js/config.js?v=2" defer></script>
   <script src="assets/js/api.js?v=8" defer></script>
-  <script src="assets/js/app.js?v=16" defer></script>
+  <script src="assets/js/app.js?v=17" defer></script>
 </body>
 </html>
