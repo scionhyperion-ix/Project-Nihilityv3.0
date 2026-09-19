@@ -224,6 +224,41 @@ async function actionImportPk(user:any,body:any){
   }
   return {total:(all||[]).length,offset,processed:batch.length,added,skipped,mediaCopied,nextOffset:offset+batch.length<(all||[]).length?offset+batch.length:null};
 }
+async function actionImportPkFronts(user:any,body:any){
+  const token=await getSecret(user.id);
+  const limit=Math.min(100,Math.max(1,Number(body.limit)||100));
+  const before=body.before?String(body.before):null;
+  const query="?limit="+limit+(before?"&before="+encodeURIComponent(before):"");
+  const switches=await pk(token,"/systems/@me/switches"+query);
+  let added=0,skipped=0,unresolved=0;
+  for(const sw of switches||[]){
+    if(!sw?.id||!sw?.timestamp)continue;
+    const existing=await admin("/rest/v1/fronts?user_id=eq."+encodeURIComponent(user.id)+"&source=eq.pluralkit&external_id=eq."+encodeURIComponent(sw.id)+"&select=id&limit=1");
+    if(existing?.length){skipped++;continue}
+    const memberIds=(Array.isArray(sw.members)?sw.members:[]).map((m:any)=>typeof m==="string"?m:m?.id).filter(Boolean);
+    const localMembers:any[]=[];
+    for(const pkId of memberIds){
+      const rows=await admin("/rest/v1/members?user_id=eq."+encodeURIComponent(user.id)+"&pk_id=eq."+encodeURIComponent(pkId)+"&select=id&limit=1");
+      if(rows?.[0]?.id)localMembers.push(rows[0].id);else unresolved++;
+    }
+    const newer=await admin("/rest/v1/fronts?user_id=eq."+encodeURIComponent(user.id)+"&started_at=gt."+encodeURIComponent(sw.timestamp)+"&order=started_at.asc&select=started_at&limit=1");
+    const created=await admin("/rest/v1/fronts",{
+      method:"POST",headers:{Prefer:"return=representation"},
+      body:JSON.stringify({user_id:user.id,started_at:sw.timestamp,ended_at:newer?.[0]?.started_at||null,note:null,source:"pluralkit",external_id:sw.id})
+    });
+    const frontId=created?.[0]?.id;
+    if(frontId){
+      for(const memberId of localMembers){
+        await admin("/rest/v1/front_members",{method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify({user_id:user.id,front_id:frontId,member_id:memberId,joined_at:sw.timestamp,left_at:newer?.[0]?.started_at||null})});
+      }
+      const older=await admin("/rest/v1/fronts?user_id=eq."+encodeURIComponent(user.id)+"&started_at=lt."+encodeURIComponent(sw.timestamp)+"&ended_at=is.null&select=id&limit=20");
+      for(const f of older||[])await admin("/rest/v1/fronts?id=eq."+encodeURIComponent(f.id),{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({ended_at:sw.timestamp})});
+      added++;
+    }
+  }
+  const oldest=(switches||[]).length?switches[switches.length-1]?.timestamp:null;
+  return {processed:(switches||[]).length,added,skipped,unresolved,nextBefore:(switches||[]).length===limit?oldest:null};
+}
 async function actionImportMedia(user:any,body:any){
   const kind=String(body.kind||""); const url=String(body.url||"");
   const path=await storeImage(user.id,kind,url);
@@ -247,6 +282,7 @@ Deno.serve(async(req)=>{
     else if(action==="pk_disconnect")result=await actionDisconnect(user);
     else if(action==="pk_mirror_front")result=await actionMirror(user,body);
     else if(action==="pk_import")result=await actionImportPk(user,body);
+    else if(action==="pk_import_fronts")result=await actionImportPkFronts(user,body);
     else if(action==="import_media")result=await actionImportMedia(user,body);
     else return json({error:"Unknown action"},400,origin);
     return json(result,200,origin);

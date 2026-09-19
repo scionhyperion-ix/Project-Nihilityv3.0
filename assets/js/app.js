@@ -3,6 +3,16 @@
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const state={user:null,profile:null,members:[],fronts:[],frontMembers:[],integration:null,pkConnected:false,route:'home'};
 
+const THEME_KEY='nihility_theme';
+function applyTheme(mode){
+  const selected=['system','light','dark'].includes(mode)?mode:'system';
+  localStorage.setItem(THEME_KEY,selected);
+  const resolved=selected==='system'?(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):selected;
+  document.documentElement.dataset.theme=resolved;
+  $('input[name="themeMode"]').forEach(i=>i.checked=i.value===selected);
+}
+function initTheme(){applyTheme(localStorage.getItem(THEME_KEY)||'system')}
+
 function toast(title,detail='',type=''){
   const n=document.createElement('div');n.className='toast '+type;
   const strong=document.createElement('strong');strong.textContent=title;n.append(strong);
@@ -206,18 +216,26 @@ async function disconnectPk(){
 }
 async function toggleShare(){if(!state.integration)return;const value=$('#shareFrontingToggle').checked;await nihilityApi.rest('external_integrations',{method:'PATCH',query:'provider=eq.pluralkit',body:{share_fronting_updates:value},prefer:'return=minimal'});state.integration.share_fronting_updates=value;renderHome();toast('Front sharing '+(value?'enabled':'disabled'))}
 async function importPk(){
-  const message=$('#pkMessage');message.textContent='Importing securely...';
+  const message=$('#pkMessage');message.textContent='Importing members securely...';
   try{
     let offset=0,total=null,added=0,skipped=0,mediaCopied=0;
     while(total===null||offset<total){
       const result=await nihilityApi.secure('pk_import',{offset,limit:10});
       total=result.total;added+=result.added;skipped+=result.skipped;mediaCopied+=result.mediaCopied;
       offset=result.nextOffset??total;
-      message.textContent='Importing securely... '+Math.min(offset,total)+' / '+total;
+      message.textContent='Importing members... '+Math.min(offset,total)+' / '+total;
       if(result.processed===0)break;
     }
-    await nihilityApi.rest('imports',{method:'POST',body:{user_id:state.user.id,source:'pluralkit',summary:{members_added:added,members_skipped:skipped,media_copied:mediaCopied}},prefer:'return=minimal'});
-    message.textContent='Imported '+added+' new members. Existing Nihility copies were unchanged, and available media was copied into private storage.';
+    let before=null,frontAdded=0,frontSkipped=0,unresolved=0,batches=0;
+    do{
+      message.textContent='Importing PluralKit front history... '+frontAdded+' imported';
+      const result=await nihilityApi.secure('pk_import_fronts',{before,limit:100});
+      frontAdded+=result.added||0;frontSkipped+=result.skipped||0;unresolved+=result.unresolved||0;
+      before=result.nextBefore||null;batches++;
+      if(!result.processed||batches>=100)break;
+    }while(before);
+    await nihilityApi.rest('imports',{method:'POST',body:{user_id:state.user.id,source:'pluralkit',summary:{members_added:added,members_skipped:skipped,media_copied:mediaCopied,fronts_added:frontAdded,fronts_skipped:frontSkipped,front_members_unresolved:unresolved}},prefer:'return=minimal'});
+    message.textContent='Import complete: '+added+' new members and '+frontAdded+' front-history entries added. Existing Nihility copies were unchanged.'+(unresolved?' '+unresolved+' historical member links could not be matched.':'');
     await loadData();
   }catch(error){message.textContent=error.message}
 }
@@ -247,6 +265,7 @@ async function invite(e){
 }
 
 async function boot(){
+  initTheme();
   localStorage.removeItem('nihility_pk_token');sessionStorage.removeItem('nihility_pk_token_session');
   if(!nihilityApi.configured()){setView('setup');return}
   nihilityApi.readSessionFromUrl();state.user=await nihilityApi.user();if(!state.user){setView('login');return}
@@ -267,6 +286,8 @@ $('#refreshButton').onclick=loadData;$('#openFrontManager').onclick=()=>openFron
 $('#createMemberButton').onclick=()=>openMember();$('#memberSearch').oninput=renderMembers;$('#memberForm').onsubmit=saveMember;$('#deleteMemberButton').onclick=deleteMember;$('#closeMemberDialog').onclick=$('#cancelMemberButton').onclick=()=>$('#memberDialog').close();$('#memberColorPicker').oninput=e=>$('#memberColor').value=e.target.value.toUpperCase();$('#memberColor').oninput=e=>{const c=hex(e.target.value);if(c)$('#memberColorPicker').value=c};
 $('#frontForm').onsubmit=saveFront;$('#closeFrontDialog').onclick=$('#cancelFrontButton').onclick=()=>$('#frontDialog').close();$('#frontMemberSearch').oninput=()=>buildFrontPicker($$('#frontMemberPicker input:checked').map(i=>i.value));$('#customFrontTimeEnabled').onchange=e=>$('#customFrontTimeRow').hidden=!e.target.checked;
 $('#connectPkButton').onclick=connectPk;$('#disconnectPkButton').onclick=disconnectPk;$('#shareFrontingToggle').onchange=toggleShare;$('#importPkButton').onclick=importPk;
+$('input[name="themeMode"]').forEach(i=>i.onchange=()=>applyTheme(i.value));
+matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change',()=>{if((localStorage.getItem(THEME_KEY)||'system')==='system')applyTheme('system')});
 $('#profileForm').onsubmit=saveProfile;$('#inviteForm').onsubmit=invite;
 setInterval(()=>{const f=activeFront();if(f)$('#frontDuration').textContent=duration(f.started_at)},60000);
 boot().catch(error=>{console.error(error);toast('Unable to start Nihility',error.message,'error')});
