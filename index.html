@@ -8,7 +8,7 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://oshuprrppelxcxfmcumm.supabase.co; img-src 'self' data: blob: https://oshuprrppelxcxfmcumm.supabase.co; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <title>Project Nihility</title>
   <meta name="description" content="A private system workspace with optional PluralKit front sharing.">
-  <link rel="stylesheet" href="assets/css/app.css?v=9?v=4">
+  <link rel="stylesheet" href="assets/css/app.css?v=10?v=4">
 </head>
 <body>
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
@@ -123,6 +123,7 @@
 
       <section id="settingsRoute" class="route-view" hidden>
         <div class="settings-grid">
+          <article class="panel section-panel"><p class="eyebrow">Appearance</p><h3>Theme</h3><p class="muted">Match Project Rainbow or follow your device.</p><div class="theme-options"><label class="radio-card"><input type="radio" name="themeMode" value="system"><span><strong>Use system theme</strong><small>Follow your device light or dark mode</small></span></label><label class="radio-card"><input type="radio" name="themeMode" value="light"><span><strong>Light</strong></span></label><label class="radio-card"><input type="radio" name="themeMode" value="dark"><span><strong>Dark</strong></span></label></div></article>
           <article class="panel section-panel">
             <p class="eyebrow">Integrations</p><h3>PluralKit</h3>
             <p class="muted">Optional. Nihility keeps its own data after import.</p>
@@ -134,7 +135,7 @@
             <div id="pkConnected" hidden>
               <dl class="detail-list"><div><dt>System</dt><dd id="pkSystemName">Connected</dd></div><div><dt>System ID</dt><dd id="pkSystemId">...</dd></div></dl>
               <label class="toggle-row"><span><strong>Share fronting updates</strong><small>New Nihility fronts are mirrored to PluralKit when every selected member has a PK link.</small></span><input id="shareFrontingToggle" type="checkbox" checked></label>
-              <div class="button-row"><button id="importPkButton" class="secondary-button">Import members from PK</button><button id="disconnectPkButton" class="text-button danger-text">Disconnect on this device</button></div>
+              <div class="button-row"><button id="importPkButton" class="secondary-button">Import members + fronts from PK</button><button id="disconnectPkButton" class="text-button danger-text">Disconnect on this device</button></div>
             </div>
             <p id="pkMessage" class="form-message"></p>
           </article>
@@ -197,6 +198,6 @@
 
   <script src="assets/js/config.js?v=2" defer></script>
   <script src="assets/js/api.js?v=8" defer></script>
-  <script src="assets/js/app.js?v=9" defer></script>
+  <script src="assets/js/app.js?v=10" defer></script>
 </body>
 </html>
