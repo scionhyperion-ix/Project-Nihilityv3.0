@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#0f1020">
   <meta name="referrer" content="no-referrer">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://oshuprrppelxcxfmcumm.supabase.co https://api.pluralkit.me; img-src 'self' data: blob: https://oshuprrppelxcxfmcumm.supabase.co https:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://oshuprrppelxcxfmcumm.supabase.co; img-src 'self' data: blob: https://oshuprrppelxcxfmcumm.supabase.co; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <title>Project Nihility</title>
   <meta name="description" content="A private system workspace with optional PluralKit front sharing.">
   <link rel="stylesheet" href="assets/css/app.css?v=4">
@@ -113,7 +113,7 @@
             <p class="muted">Optional. Nihility keeps its own data after import.</p>
             <div id="pkDisconnected">
               <label>PluralKit token<input id="pkTokenInput" type="password" autocomplete="off" placeholder="Paste token from pk;token"></label>
-              <label class="check-row"><input id="rememberPkToken" type="checkbox"><span><strong>Remember this PK token on this device</strong><small>Off by default. When enabled, the token is stored in this browser until you disconnect it.</small></span></label>
+              <div class="security-note"><strong>Server protected</strong><p>The token is sent directly to Nihility's secure backend, encrypted there, and is not saved in this browser.</p></div>
               <button id="connectPkButton" class="secondary-button">Connect PluralKit</button>
             </div>
             <div id="pkConnected" hidden>
@@ -125,7 +125,7 @@
           </article>
 
           <article class="panel section-panel"><p class="eyebrow">Data ownership</p><h3>Nihility is primary</h3><div class="prose-stack"><p>Imported members become independent Nihility records. Re-importing does not overwrite existing Nihility copies.</p><p>Editing a Nihility member does not rewrite PluralKit or Tupperbox.</p><p>Front sharing is the only automatic external update currently supported.</p></div></article>
-          <article class="panel section-panel"><p class="eyebrow">Storage</p><h3>Supabase</h3><dl class="detail-list"><div><dt>Avatar upload</dt><dd>2 MB max</dd></div><div><dt>Banner upload</dt><dd>5 MB max</dd></div><div><dt>External links</dt><dd>Stored as URLs</dd></div></dl></article>
+          <article class="panel section-panel"><p class="eyebrow">Storage</p><h3>Supabase</h3><dl class="detail-list"><div><dt>Avatar upload</dt><dd>2 MB max</dd></div><div><dt>Banner upload</dt><dd>5 MB max</dd></div><div><dt>External links</dt><dd>Copied privately</dd></div></dl></article>
         </div>
       </section>
 
@@ -181,7 +181,7 @@
   </dialog>
 
   <script src="assets/js/config.js?v=2" defer></script>
-  <script src="assets/js/api.js?v=5" defer></script>
-  <script src="assets/js/app.js?v=5" defer></script>
+  <script src="assets/js/api.js?v=6" defer></script>
+  <script src="assets/js/app.js?v=6" defer></script>
 </body>
 </html>
