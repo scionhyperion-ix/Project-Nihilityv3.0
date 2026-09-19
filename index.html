@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#0f1020">
   <meta name="referrer" content="no-referrer">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https:; img-src 'self' data: blob: https:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://oshuprrppelxcxfmcumm.supabase.co https://api.pluralkit.me; img-src 'self' data: blob: https://oshuprrppelxcxfmcumm.supabase.co https:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <title>Project Nihility</title>
   <meta name="description" content="A private system workspace with optional PluralKit front sharing.">
   <link rel="stylesheet" href="assets/css/app.css?v=4">
@@ -113,7 +113,7 @@
             <p class="muted">Optional. Nihility keeps its own data after import.</p>
             <div id="pkDisconnected">
               <label>PluralKit token<input id="pkTokenInput" type="password" autocomplete="off" placeholder="Paste token from pk;token"></label>
-              <label class="check-row"><input id="rememberPkToken" type="checkbox" checked><span><strong>Keep this connection on this device</strong><small>The token stays in this browser and is not stored in Nihility's database.</small></span></label>
+              <label class="check-row"><input id="rememberPkToken" type="checkbox"><span><strong>Remember this PK token on this device</strong><small>Off by default. When enabled, the token is stored in this browser until you disconnect it.</small></span></label>
               <button id="connectPkButton" class="secondary-button">Connect PluralKit</button>
             </div>
             <div id="pkConnected" hidden>
@@ -181,7 +181,7 @@
   </dialog>
 
   <script src="assets/js/config.js?v=2" defer></script>
-  <script src="assets/js/api.js?v=4" defer></script>
-  <script src="assets/js/app.js?v=4" defer></script>
+  <script src="assets/js/api.js?v=5" defer></script>
+  <script src="assets/js/app.js?v=5" defer></script>
 </body>
 </html>
