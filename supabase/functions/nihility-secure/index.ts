@@ -226,10 +226,30 @@ async function actionImportPk(user:any,body:any){
 }
 async function actionImportPkGroups(user:any){
   const token=await getSecret(user.id);
-  const [pkGroups,pkMembers]=await Promise.all([
+  const [pkSystem,pkGroups,pkMembers]=await Promise.all([
+    pk(token,"/systems/@me"),
     pk(token,"/systems/@me/groups?with_members=true"),
     pk(token,"/systems/@me/members")
   ]);
+
+  const settingsRows=await admin("/rest/v1/app_settings?user_id=eq."+encodeURIComponent(user.id)+"&select=settings&limit=1");
+  const existingSettings=settingsRows?.[0]?.settings||{};
+  const importedSystem={
+    id:pkSystem?.id||null,
+    uuid:pkSystem?.uuid||null,
+    name:pkSystem?.name||null,
+    display_name:pkSystem?.display_name||null,
+    description:pkSystem?.description||null,
+    tag:pkSystem?.tag||null,
+    pronouns:pkSystem?.pronouns||null,
+    color:pkSystem?.color||null
+  };
+  const mergedSettings={...existingSettings,system_profile:importedSystem,system_name:importedSystem.name||importedSystem.display_name||null};
+  await admin("/rest/v1/app_settings?on_conflict=user_id",{
+    method:"POST",
+    headers:{Prefer:"resolution=merge-duplicates,return=minimal"},
+    body:JSON.stringify({user_id:user.id,settings:mergedSettings})
+  });
 
   const localMembers=await admin("/rest/v1/members?user_id=eq."+encodeURIComponent(user.id)+"&select=id,pk_id,metadata");
   const localGroups=await admin("/rest/v1/groups?user_id=eq."+encodeURIComponent(user.id)+"&select=id,pk_id,metadata");
@@ -292,6 +312,19 @@ async function actionImportPkGroups(user:any){
         if(g.uuid)groupByPk.set(String(g.uuid),local);
       }
     }else{
+      const metadata={...(local.metadata||{}),pk_uuid:g.uuid||local.metadata?.pk_uuid||null,pk_icon_url:g.icon||local.metadata?.pk_icon_url||null,pk_banner_url:g.banner||local.metadata?.pk_banner_url||null};
+      await admin("/rest/v1/groups?id=eq."+encodeURIComponent(local.id),{
+        method:"PATCH",
+        headers:{Prefer:"return=minimal"},
+        body:JSON.stringify({
+          name:g.name||g.display_name||local.name,
+          display_name:g.display_name||null,
+          description:g.description||null,
+          color:g.color||null,
+          metadata
+        })
+      });
+      local={...local,name:g.name||g.display_name||local.name,display_name:g.display_name||null,description:g.description||null,color:g.color||null,metadata};
       skipped++;
     }
     if(!local?.id)continue;
@@ -312,7 +345,16 @@ async function actionImportPkGroups(user:any){
     }
   }
 
-  return {total:(pkGroups||[]).length,added,skipped,membershipsAdded,unresolved,metadataUpdated};
+  return {
+    total:(pkGroups||[]).length,
+    added,
+    updated:skipped,
+    membershipsAdded,
+    unresolved,
+    metadataUpdated,
+    systemName:importedSystem.name||importedSystem.display_name||null,
+    systemId:importedSystem.id||null
+  };
 }
 async function actionImportPkFronts(user:any,body:any){
   const token=await getSecret(user.id);
