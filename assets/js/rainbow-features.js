@@ -50,6 +50,18 @@
     ]);
     state.groups=groups||[];
     state.memberGroups=links||[];
+    await Promise.all(state.groups.map(async g=>{
+      const iconPath=g.metadata?.icon_storage_path||null;
+      const bannerPath=g.metadata?.banner_storage_path||null;
+      if(iconPath){
+        try{g.icon_display_url=await nihilityApi.privateMediaUrl('avatar',iconPath)}
+        catch(error){console.warn('Unable to load group icon',g.id,error);g.icon_display_url=null}
+      }else g.icon_display_url=null;
+      if(bannerPath){
+        try{g.banner_display_url=await nihilityApi.privateMediaUrl('banner',bannerPath)}
+        catch(error){console.warn('Unable to load group banner',g.id,error);g.banner_display_url=null}
+      }else g.banner_display_url=null;
+    }));
     state.systemProfile=settingsRows?.[0]?.settings?.system_profile||null;
     state.historyHasMore=state.fronts.length>=100;
     refreshFeatureControls();
