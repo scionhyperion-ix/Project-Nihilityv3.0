@@ -1,7 +1,7 @@
 'use strict';
 
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
-const state={user:null,profile:null,members:[],fronts:[],frontMembers:[],integration:null,route:'home'};
+const state={user:null,profile:null,members:[],fronts:[],frontMembers:[],integration:null,pkConnected:false,route:'home'};
 
 function toast(title,detail='',type=''){
   const n=document.createElement('div');n.className='toast '+type;
@@ -41,9 +41,10 @@ async function loadData(){
     nihilityApi.rest('members',{query:'select=*&order=name.asc'}),
     nihilityApi.rest('fronts',{query:'select=*&order=started_at.desc&limit=100'}),
     nihilityApi.rest('front_members',{query:'select=*&order=joined_at.desc'}),
-    nihilityApi.rest('external_integrations',{query:'provider=eq.pluralkit&select=*'})
+    nihilityApi.rest('external_integrations',{query:'provider=eq.pluralkit&select=*'}),
+    nihilityApi.secure('pk_status').catch(()=>({connected:false}))
   ]);
-  state.members=data[0]||[];state.fronts=data[1]||[];state.frontMembers=data[2]||[];state.integration=data[3]?.[0]||null;
+  state.members=data[0]||[];state.fronts=data[1]||[];state.frontMembers=data[2]||[];state.integration=data[3]?.[0]||null;state.pkConnected=Boolean(data[4]?.connected);
   await Promise.all(state.members.map(async m=>{
     if(m.avatar_storage_path)m.avatar_url=await nihilityApi.privateMediaUrl('avatar',m.avatar_storage_path);
     if(m.banner_storage_path)m.banner_url=await nihilityApi.privateMediaUrl('banner',m.banner_storage_path);
@@ -72,8 +73,8 @@ function renderHome(){
     members.forEach(m=>{const row=document.createElement('div');row.className='front-person';row.append(avatarEl(m,'timeline-avatar'));const copy=document.createElement('div');copy.className='front-person-copy';const s=document.createElement('strong');s.textContent=label(m);const sm=document.createElement('small');sm.textContent=m.pronouns||m.name;copy.append(s,sm);row.append(copy);$('#currentFrontMembers').append(row)});
   }
   $('#homeProfileName').textContent=state.profile?.display_name||state.user?.email||'Account';
-  $('#homeIntegrationState').textContent=(state.integration&&nihilityApi.getPkToken())?'PluralKit connected':'Independent storage';
-  $('#homeMemberCount').textContent=String(activeMembers().length);$('#homeFrontCount').textContent=String(state.fronts.length);$('#homeShareState').textContent=(state.integration?.share_fronting_updates&&nihilityApi.getPkToken())?'On':'Off';
+  $('#homeIntegrationState').textContent=(state.integration&&state.pkConnected)?'PluralKit connected':'Independent storage';
+  $('#homeMemberCount').textContent=String(activeMembers().length);$('#homeFrontCount').textContent=String(state.fronts.length);$('#homeShareState').textContent=(state.integration?.share_fronting_updates&&state.pkConnected)?'On':'Off';
 
   const counts=new Map();state.frontMembers.forEach(x=>counts.set(x.member_id,(counts.get(x.member_id)||0)+1));
   const frequent=[...activeMembers()].sort((a,b)=>(counts.get(b.id)||0)-(counts.get(a.id)||0)).slice(0,8);
@@ -95,7 +96,7 @@ function renderHistory(){
   state.fronts.forEach(f=>{const row=document.createElement('div');row.className='history-row';const date=document.createElement('div');date.className='history-date';date.textContent=fmt(f.started_at);const members=document.createElement('div');members.className='history-members';const ms=frontMembers(f.id);if(!ms.length){const pill=document.createElement('span');pill.className='mini-member-pill';pill.textContent='Switch out';members.append(pill)}else ms.forEach(m=>{const pill=document.createElement('span');pill.className='mini-member-pill';pill.textContent=label(m);members.append(pill)});row.append(date,members);$('#historyList').append(row)});
 }
 function renderSettings(){
-  const connected=Boolean(state.integration&&nihilityApi.getPkToken());$('#pkDisconnected').hidden=connected;$('#pkConnected').hidden=!connected;
+  const connected=Boolean(state.integration&&state.pkConnected);$('#pkDisconnected').hidden=connected;$('#pkConnected').hidden=!connected;
   if(state.integration){$('#pkSystemName').textContent=state.integration.external_system_name||'PluralKit system';$('#pkSystemId').textContent=state.integration.external_system_id||'...';$('#shareFrontingToggle').checked=state.integration.share_fronting_updates!==false}
 }
 function renderProfile(){
@@ -145,10 +146,10 @@ function buildFrontPicker(selected=[]){
 }
 function openFront(mode='replace',pre=[]){$('input[name="frontMode"][value="'+mode+'"]').checked=true;$('#frontMemberSearch').value='';$('#frontError').hidden=true;$('#customFrontTimeEnabled').checked=false;$('#customFrontTimeRow').hidden=true;buildFrontPicker(pre);$('#frontDialog').showModal()}
 async function mirrorFrontToPk(memberIds,timestamp){
-  if(!state.integration?.share_fronting_updates||!nihilityApi.getPkToken())return{shared:false};
+  if(!state.integration?.share_fronting_updates||!state.pkConnected)return{shared:false};
   const chosen=memberIds.map(id=>state.members.find(m=>m.id===id)).filter(Boolean);
   if(chosen.some(m=>!m.pk_id))return{shared:false,reason:'Some selected members are not linked to PluralKit.'};
-  const body={members:chosen.map(m=>m.pk_id)};if(timestamp)body.timestamp=timestamp;await nihilityApi.pk('/systems/@me/switches',{method:'POST',body});return{shared:true};
+  return nihilityApi.secure('pk_mirror_front',{memberIds,timestamp});
 }
 async function logFront(memberIds,timestamp){
   await nihilityApi.rpc('log_front',{p_member_ids:memberIds,p_started_at:timestamp||new Date().toISOString(),p_note:null});
