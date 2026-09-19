@@ -3,15 +3,34 @@
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const state={user:null,profile:null,members:[],fronts:[],frontMembers:[],integration:null,pkConnected:false,route:'home'};
 
-const THEME_KEY='nihility_theme';
+const THEME_KEY='nihility_appearance_theme';
+const THEMES=[
+  {id:'twilight',name:'Twilight',description:'Violet and lavender'},
+  {id:'rainbow',name:'Rainbow',description:'Prismatic dark color'},
+  {id:'ocean',name:'Ocean',description:'Blue and cyan'},
+  {id:'rose',name:'Rose',description:'Berry and pink'},
+  {id:'forest',name:'Forest',description:'Emerald and mint'},
+  {id:'amber',name:'Amber',description:'Gold and warm orange'},
+  {id:'cherry',name:'Cherry',description:'Ruby and soft red'},
+  {id:'sunset',name:'Sunset',description:'Coral and peach'},
+  {id:'lagoon',name:'Lagoon',description:'Teal and aqua'},
+  {id:'cocoa',name:'Cocoa',description:'Chocolate and cream'}
+];
 function applyTheme(mode){
-  const selected=['system','light','dark'].includes(mode)?mode:'system';
+  const selected=THEMES.some(t=>t.id===mode)?mode:'twilight';
   localStorage.setItem(THEME_KEY,selected);
-  const resolved=selected==='system'?(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):selected;
-  document.documentElement.dataset.theme=resolved;
-  document.querySelectorAll('input[name="themeMode"]').forEach(i=>i.checked=i.value===selected);
+  document.documentElement.dataset.theme=selected;
+  document.querySelectorAll('[data-theme-choice]').forEach(b=>{const on=b.dataset.themeChoice===selected;b.classList.toggle('selected',on);b.setAttribute('aria-checked',String(on))});
 }
-function initTheme(){applyTheme(localStorage.getItem(THEME_KEY)||'system')}
+function renderThemeOptions(){
+  const box=$('#themeOptions');if(!box)return;box.replaceChildren();
+  THEMES.forEach(theme=>{const b=document.createElement('button');b.type='button';b.className='theme-option';b.dataset.themeChoice=theme.id;b.setAttribute('role','radio');
+    const sw=document.createElement('span');sw.className='theme-swatch theme-swatch-'+theme.id;
+    const cp=document.createElement('span');cp.className='theme-option-copy';const st=document.createElement('strong');st.textContent=theme.name;const sm=document.createElement('small');sm.textContent=theme.description;cp.append(st,sm);
+    const ck=document.createElement('span');ck.className='theme-check';ck.textContent='✓';b.append(sw,cp,ck);b.onclick=()=>{applyTheme(theme.id);toast('Appearance updated',theme.name+' theme is now active.')};box.append(b)});
+  applyTheme(localStorage.getItem(THEME_KEY)||'twilight');
+}
+function initTheme(){applyTheme(localStorage.getItem(THEME_KEY)||'twilight')}
 
 function toast(title,detail='',type=''){
   const n=document.createElement('div');n.className='toast '+type;
@@ -99,7 +118,7 @@ function renderHome(){
   const counts=new Map();state.frontMembers.forEach(x=>counts.set(x.member_id,(counts.get(x.member_id)||0)+1));
   const frequent=[...activeMembers()].sort((a,b)=>(counts.get(b.id)||0)-(counts.get(a.id)||0)).slice(0,8);
   $('#frequentMembers').replaceChildren();
-  frequent.forEach(m=>{const b=document.createElement('button');const isFronting=members.some(x=>x.id===m.id);b.className='member-chip'+(isFronting?' fronting':'');b.append(avatarEl(m,'timeline-avatar'));const c=document.createElement('div');c.className='member-chip-copy';const s=document.createElement('strong');s.textContent=label(m);c.append(s);b.append(c);b.onclick=()=>openMember(m);let timer=null,moved=false;const start=()=>{moved=false;timer=setTimeout(()=>{timer=null;if(!moved)quickToggleFront(m)},520)};const cancel=()=>{if(timer){clearTimeout(timer);timer=null}};b.addEventListener('pointerdown',start);b.addEventListener('pointermove',()=>{moved=true;cancel()});b.addEventListener('pointerup',cancel);b.addEventListener('pointercancel',cancel);b.addEventListener('contextmenu',e=>e.preventDefault());$('#frequentMembers').append(b)});
+  frequent.forEach(m=>{const b=document.createElement('button');b.className='member-chip';b.type='button';b.append(avatarEl(m,'timeline-avatar'));const c=document.createElement('div');c.className='member-chip-copy';const s=document.createElement('strong');s.textContent=label(m);const sm=document.createElement('small');sm.textContent=(counts.get(m.id)||0)+' fronts';c.append(s,sm);b.append(c);b.onclick=()=>quickFront(m);$('#frequentMembers').append(b)});
 
   $('#recentFronts').replaceChildren();
   state.fronts.slice(0,6).forEach(f=>{const ms=frontMembers(f.id),row=document.createElement('div');row.className='timeline-row';row.append(ms[0]?avatarEl(ms[0],'timeline-avatar'):avatarEl({name:'Out'},'timeline-avatar'));const c=document.createElement('div');c.className='timeline-copy';const s=document.createElement('strong');s.textContent=ms.length?ms.map(label).join(', '):'Switch out';const sm=document.createElement('small');sm.textContent=fmt(f.started_at);c.append(s,sm);const t=document.createElement('span');t.className='timeline-time';t.textContent=relative(f.started_at);row.append(c,t);$('#recentFronts').append(row)});
@@ -116,7 +135,7 @@ function renderHistory(){
   state.fronts.forEach(f=>{const row=document.createElement('div');row.className='history-row';const date=document.createElement('div');date.className='history-date';date.textContent=fmt(f.started_at);const members=document.createElement('div');members.className='history-members';const ms=frontMembers(f.id);if(!ms.length){const pill=document.createElement('span');pill.className='mini-member-pill';pill.textContent='Switch out';members.append(pill)}else ms.forEach(m=>{const pill=document.createElement('span');pill.className='mini-member-pill';pill.textContent=label(m);members.append(pill)});row.append(date,members);$('#historyList').append(row)});
 }
 function renderSettings(){
-  const connected=Boolean(state.integration&&state.pkConnected);$('#pkDisconnected').hidden=connected;$('#pkConnected').hidden=!connected;
+  renderThemeOptions();  const connected=Boolean(state.integration&&state.pkConnected);$('#pkDisconnected').hidden=connected;$('#pkConnected').hidden=!connected;
   if(state.integration){$('#pkSystemName').textContent=state.integration.external_system_name||'PluralKit system';$('#pkSystemId').textContent=state.integration.external_system_id||'...';$('#shareFrontingToggle').checked=state.integration.share_fronting_updates!==false}
 }
 function renderProfile(){
@@ -191,8 +210,7 @@ async function saveFront(e){
     await logFront(ids,ts);$('#frontDialog').close();toast('Front updated',state.integration?.share_fronting_updates?'Nihility saved first. External sharing was attempted.':'Saved only to Nihility.');
   }catch(error){err.textContent=error.message;err.hidden=false}
 }
-async function quickFront(m){await quickToggleFront(m)}
-async function quickToggleFront(m){const current=activeFront(),ids=current?frontMembers(current.id).map(x=>x.id):[],has=ids.includes(m.id);const next=has?ids.filter(id=>id!==m.id):[...ids,m.id];await logFront(next,null);toast(has?'Front ended':'Fronter added',label(m))}
+async function quickFront(m){if(!confirm('Start a new front with '+label(m)+' fronting?'))return;await logFront([m.id],null);toast('Front updated',label(m)+' is now fronting.')}
 async function switchOut(){if(!confirm('Switch out with nobody fronting?'))return;await logFront([],null);toast('Switched out')}
 
 async function connectPk(){
@@ -289,7 +307,6 @@ $('#createMemberButton').onclick=()=>openMember();$('#memberSearch').oninput=ren
 $('#frontForm').onsubmit=saveFront;$('#closeFrontDialog').onclick=$('#cancelFrontButton').onclick=()=>$('#frontDialog').close();$('#frontMemberSearch').oninput=()=>buildFrontPicker($$('#frontMemberPicker input:checked').map(i=>i.value));$('#customFrontTimeEnabled').onchange=e=>$('#customFrontTimeRow').hidden=!e.target.checked;
 $('#connectPkButton').onclick=connectPk;$('#disconnectPkButton').onclick=disconnectPk;$('#shareFrontingToggle').onchange=toggleShare;$('#importPkButton').onclick=importPk;
 document.querySelectorAll('input[name="themeMode"]').forEach(i=>i.onchange=()=>applyTheme(i.value));
-matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change',()=>{if((localStorage.getItem(THEME_KEY)||'system')==='system')applyTheme('system')});
 $('#profileForm').onsubmit=saveProfile;$('#inviteForm').onsubmit=invite;
 setInterval(()=>{const f=activeFront();if(f)$('#frontDuration').textContent=duration(f.started_at)},60000);
 boot().catch(error=>{console.error(error);toast('Unable to start Nihility',error.message,'error')});
