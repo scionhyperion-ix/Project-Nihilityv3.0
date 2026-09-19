@@ -8,8 +8,19 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://oshuprrppelxcxfmcumm.supabase.co; img-src 'self' data: blob: https://oshuprrppelxcxfmcumm.supabase.co; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <title>Project Nihility</title>
   <meta name="description" content="A private system workspace with optional PluralKit front sharing.">
-  <link rel="stylesheet" href="assets/css/app.css?v=17">
-  <link rel="stylesheet" href="assets/css/rainbowpk-web.css?v=2">
+
+  <link rel="stylesheet" href="assets/rainbowpk/styles.css?v=1">
+  <link rel="stylesheet" href="assets/rainbowpk/enhancements.css?v=1">
+  <link rel="stylesheet" href="assets/rainbowpk/themes.css?v=1">
+  <link rel="stylesheet" href="assets/rainbowpk/theme-extras.css?v=1">
+  <link rel="stylesheet" href="assets/rainbowpk/theme-cocoa.css?v=1">
+  <link rel="stylesheet" href="assets/rainbowpk/site-features.css?v=1">
+  <link rel="stylesheet" href="assets/rainbowpk/member-color-picker.css?v=1">
+  <link rel="stylesheet" href="assets/rainbowpk/app-theme-shell.css?v=1">
+  <link rel="stylesheet" href="assets/css/nihility-rainbow-adapter.css?v=1">
+  <link rel="stylesheet" href="assets/rainbowpk/mobile.css?v=1" media="(max-width: 760px)">
+  <link rel="stylesheet" href="assets/rainbowpk/mobile-front-timers.css?v=1" media="(max-width: 760px)">
+  <link rel="stylesheet" href="assets/rainbowpk/mobile-system-summary.css?v=1" media="(max-width: 760px)">
 </head>
 <body>
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
@@ -60,12 +71,11 @@
   <div id="appView" class="app-shell" hidden>
     <aside class="sidebar">
       <div class="brand-lockup sidebar-brand"><div class="brand-mark compact">N</div><div><strong>Nihility</strong><small>private cloud</small></div></div>
-      <nav class="nav-list">
-        <button class="nav-item active" data-route="home"><span>⌂</span>Home</button>
-        <button class="nav-item" data-route="members"><span>𐀪</span>Members</button>
-        <button class="nav-item" data-route="history"><span>↻</span>Front history</button>
-        <button class="nav-item" data-route="settings"><span>⚙</span>Settings</button>
-        <button class="nav-item" data-route="profile"><span>◎</span>Profile</button>
+      <nav class="nav-list" aria-label="Primary navigation">
+        <button class="nav-item active" data-route="home" type="button"><span>⌂</span>Home</button>
+        <button class="nav-item" data-route="members" type="button"><span>𐀪</span>Members</button>
+        <button class="nav-item" data-route="history" type="button"><span>↻</span>Front history</button>
+        <button class="nav-item" data-route="settings" type="button"><span>⚙</span>Settings</button>
       </nav>
       <button id="sidebarProfileButton" class="sidebar-account" type="button">
         <div id="sidebarAvatar" class="system-avatar fallback-avatar">N</div>
@@ -76,80 +86,63 @@
     <div class="main-column">
       <header class="topbar">
         <div><p id="pageEyebrow" class="eyebrow">Overview</p><h2 id="pageTitle">Home</h2></div>
-        <div class="topbar-actions"><button id="refreshButton" class="secondary-button">Refresh</button><button id="openFrontManager" class="primary-button">Manage front</button></div>
+        <div class="topbar-actions">
+          <button id="refreshButton" class="secondary-button" type="button">Refresh</button>
+          <button id="openFrontManager" class="primary-button" type="button">Manage front</button>
+        </div>
       </header>
 
-      <section id="homeRoute" class="route-view rainbow-page">
-        <div class="rainbow-page-header"><div><h1>Home</h1><p id="rainbowFrontSubtitle" class="muted">No one is currently fronting</p></div><button id="rainbowAddFrontButton" class="icon-button rainbow-header-action" type="button" title="Add or replace fronter">＋</button></div>
-        <h2 class="rainbow-section-title">Current front</h2>
+      <section id="homeRoute" class="route-view">
         <div class="hero-grid">
           <article class="panel current-front-panel">
             <div class="panel-heading"><div><p class="eyebrow">Current front</p><h3 id="currentFrontHeading">Nobody is fronting</h3></div><span id="frontDuration" class="soft-pill">--</span></div>
             <div id="currentFrontMembers" class="current-front-members"></div>
-            <div class="panel-actions"><button id="addCoFronterButton" class="secondary-button">Add co-fronter</button><button id="switchOutButton" class="text-button danger-text">Switch out</button></div>
+            <div class="panel-actions"><button id="addCoFronterButton" class="secondary-button" type="button">Add co-fronter</button><button id="switchOutButton" class="text-button danger-text" type="button">Switch out</button></div>
           </article>
 
           <article class="panel system-summary-panel">
             <div class="system-banner"></div>
-            <div class="system-summary-content">
-              <div id="homeProfileAvatar" class="system-avatar large fallback-avatar">N</div>
-              <div><p class="eyebrow">Nihility workspace</p><h3 id="homeProfileName">Account</h3><p id="homeIntegrationState" class="muted">Independent storage</p></div>
-            </div>
+            <div class="system-summary-content"><div id="homeProfileAvatar" class="system-avatar large fallback-avatar">N</div><div><p class="eyebrow">Nihility workspace</p><h3 id="homeProfileName">Account</h3><p id="homeIntegrationState" class="muted">Independent storage</p></div></div>
             <div class="stats-row"><div><strong id="homeMemberCount">0</strong><span>Members</span></div><div><strong id="homeFrontCount">0</strong><span>Fronts</span></div><div><strong id="homeShareState">Off</strong><span>PK sharing</span></div></div>
           </article>
         </div>
 
         <article class="panel section-panel">
           <div class="panel-heading split-heading"><div><p class="eyebrow">Quick front</p><h3>Frequent members</h3></div><button id="chooseAnyMemberButton" class="text-button" type="button">Choose member</button></div>
-          <p class="muted section-copy">Selecting a member starts a new Nihility front. PluralKit is also updated when front sharing is enabled.</p>
-          
+          <p class="muted section-copy">Selecting a member starts a new Nihility front. PluralKit is updated too when front sharing is enabled.</p>
           <div id="frequentMembers" class="member-chip-grid"></div>
         </article>
 
         <article class="panel section-panel">
-          <div class="panel-heading split-heading"><div><p class="eyebrow">Recent activity</p><h3>Latest fronts</h3></div><button class="text-button" data-route-link="history">View history</button></div>
+          <div class="panel-heading split-heading"><div><p class="eyebrow">Recent activity</p><h3>Latest fronts</h3></div><button class="text-button" data-route-link="history" type="button">View history</button></div>
           <div id="recentFronts" class="timeline"></div>
         </article>
       </section>
 
-      <section id="membersRoute" class="route-view rainbow-page" hidden>
-        <div class="rainbow-page-header"><h1>Members</h1><div class="rainbow-header-actions"><button id="focusMemberSearch" class="icon-button" title="Search members">⌕</button><button id="rainbowNewMember" class="icon-button" title="Add member">＋</button></div></div>
-        <div class="toolbar-row"><label class="search-field"><span>⌕</span><input id="memberSearch" type="search" placeholder="Search members"></label><button id="createMemberButton" class="primary-button">New member</button></div>
+      <section id="membersRoute" class="route-view" hidden>
+        <div class="toolbar-row"><label class="search-field"><span>⌕</span><input id="memberSearch" type="search" placeholder="Search members" autocomplete="off"></label><button id="createMemberButton" class="primary-button" type="button">New member</button></div>
         <div id="memberGrid" class="member-card-grid"></div>
         <div id="membersEmpty" class="empty-state" hidden><h3>No members found</h3><p>Create a member or import a copy from PluralKit.</p></div>
       </section>
 
-      <section id="historyRoute" class="route-view rainbow-page" hidden>
-        <div class="rainbow-page-header"><div><h1>Front history</h1><p class="muted">Nihility front sessions</p></div></div>
+      <section id="historyRoute" class="route-view" hidden>
         <article class="panel section-panel">
-          <div class="panel-heading split-heading"><div><p class="eyebrow">Nihility log</p><h3>Front history</h3></div><button id="newFrontButton" class="primary-button">Log front</button></div>
+          <div class="panel-heading split-heading"><div><p class="eyebrow">Nihility front log</p><h3>Front history</h3></div><button id="newFrontButton" class="primary-button" type="button">Log front</button></div>
           <div id="historyList" class="history-list"></div>
         </article>
       </section>
 
-      <section id="settingsRoute" class="route-view rainbow-page" hidden>
-        <div class="rainbow-page-header"><div><h1>Settings</h1><p class="muted">Project Nihility</p></div></div>
+      <section id="settingsRoute" class="route-view" hidden>
         <div class="settings-grid">
-          <article class="rainbow-settings-group"><h2 class="rainbow-section-title">Account</h2><button class="rainbow-list-card" data-route-link="profile"><span>◎</span><span><strong>Profile & account</strong><small>Profile, password, invites and sign out</small></span><b>›</b></button></article>
-          <article id="appearanceThemePanel" class="panel section-panel appearance-panel"><p class="eyebrow">Appearance</p><h3>Theme</h3><p class="muted appearance-copy">Choose the same appearance themes available in RainbowPK. This preference is stored in this browser.</p><div id="themeOptions" class="theme-options" role="radiogroup" aria-label="Nihility appearance theme"></div></article>
+          <article id="appearanceThemePanel" class="panel section-panel appearance-panel"><p class="eyebrow">Appearance</p><h3>Theme</h3><p class="muted appearance-copy">Choose a RainbowPK appearance theme. This preference is stored in this browser.</p><div id="themeOptions" class="theme-options" role="radiogroup" aria-label="Nihility appearance theme"></div></article>
           <article class="panel section-panel">
-            <p class="eyebrow">Integrations</p><h3>PluralKit</h3>
-            <p class="muted">Optional. Nihility keeps its own data after import.</p>
-            <div id="pkDisconnected">
-              <label>PluralKit token<input id="pkTokenInput" type="password" autocomplete="off" placeholder="Paste token from pk;token"></label>
-              <div class="security-note"><strong>Server protected</strong><p>The token is sent directly to Nihility's secure backend, encrypted there, and is not saved in this browser.</p></div>
-              <button id="connectPkButton" class="secondary-button">Connect PluralKit</button>
-            </div>
-            <div id="pkConnected" hidden>
-              <dl class="detail-list"><div><dt>System</dt><dd id="pkSystemName">Connected</dd></div><div><dt>System ID</dt><dd id="pkSystemId">...</dd></div></dl>
-              <label class="toggle-row"><span><strong>Share fronting updates</strong><small>New Nihility fronts are mirrored to PluralKit when every selected member has a PK link.</small></span><input id="shareFrontingToggle" type="checkbox" checked></label>
-              <div class="button-row"><button id="importPkButton" class="secondary-button">Import members + fronts from PK</button><button id="disconnectPkButton" class="text-button danger-text">Disconnect on this device</button></div>
-            </div>
+            <p class="eyebrow">Integrations</p><h3>PluralKit</h3><p class="muted">Optional. Nihility keeps its own data after import.</p>
+            <div id="pkDisconnected"><label>PluralKit token<input id="pkTokenInput" type="password" autocomplete="off" placeholder="Paste token from pk;token"></label><div class="security-note"><strong>Server protected</strong><p>The token is encrypted by Nihility's backend and is not saved in this browser.</p></div><button id="connectPkButton" class="secondary-button" type="button">Connect PluralKit</button></div>
+            <div id="pkConnected" hidden><dl class="detail-list"><div><dt>System</dt><dd id="pkSystemName">Connected</dd></div><div><dt>System ID</dt><dd id="pkSystemId">...</dd></div></dl><label class="toggle-row"><span><strong>Share fronting updates</strong><small>New Nihility fronts are mirrored to PluralKit when linked.</small></span><input id="shareFrontingToggle" type="checkbox" checked></label><div class="button-row"><button id="importPkButton" class="secondary-button" type="button">Import members + fronts from PK</button><button id="disconnectPkButton" class="text-button danger-text" type="button">Disconnect</button></div></div>
             <p id="pkMessage" class="form-message"></p>
           </article>
-
-          <article class="panel section-panel"><p class="eyebrow">Data ownership</p><h3>Nihility is primary</h3><div class="prose-stack"><p>Imported members become independent Nihility records. Re-importing does not overwrite existing Nihility copies.</p><p>Editing a Nihility member does not rewrite PluralKit or Tupperbox.</p><p>Front sharing is the only automatic external update currently supported.</p></div></article>
-          <article class="panel section-panel"><p class="eyebrow">Storage</p><h3>Supabase</h3><dl class="detail-list"><div><dt>Avatar upload</dt><dd>2 MB max</dd></div><div><dt>Banner upload</dt><dd>5 MB max</dd></div><div><dt>External links</dt><dd>Copied privately</dd></div></dl></article>
+          <article class="panel section-panel"><p class="eyebrow">Account</p><h3>Profile & access</h3><p class="muted">Manage your Nihility profile, password, invitations and sign out.</p><button class="secondary-button" type="button" data-route-link="profile">Open profile</button></article>
+          <article class="panel section-panel"><p class="eyebrow">Data ownership</p><h3>Nihility is primary</h3><div class="prose-stack"><p>Imported members become independent Nihility records.</p><p>Editing a Nihility member does not rewrite PluralKit.</p><p>Front sharing is the only automatic external update.</p></div></article>
         </div>
       </section>
 
@@ -158,30 +151,19 @@
           <article class="panel profile-card">
             <div class="profile-banner"></div>
             <div class="profile-main"><div id="profileAvatarPreview" class="system-avatar profile-avatar fallback-avatar">N</div><div><p class="eyebrow">Account profile</p><h3 id="profileHeading">Account</h3><p id="profileEmail" class="muted"></p></div></div>
-            <form id="profileForm" class="profile-form">
-              <label>Display name<input id="profileDisplayName" maxlength="100"></label>
-              <label>Avatar URL<input id="profileAvatarUrl" type="url" placeholder="https://..."></label>
-              <label>Or upload avatar<input id="profileAvatarFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label>
-              <button class="primary-button" type="submit">Save profile</button><p id="profileMessage" class="form-message"></p>
-            </form>
+            <form id="profileForm" class="profile-form"><label>Display name<input id="profileDisplayName" maxlength="100"></label><label>Avatar URL<input id="profileAvatarUrl" type="url" placeholder="https://..."></label><label>Or upload avatar<input id="profileAvatarFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label><button class="primary-button" type="submit">Save profile</button><p id="profileMessage" class="form-message"></p></form>
           </article>
-
-          <article id="invitePanel" class="panel section-panel" hidden>
-            <p class="eyebrow">Owner controls</p><h3>Invite another account</h3>
-            <p class="muted">Use this for your partner or another trusted account. Their Nihility data remains isolated from yours.</p>
-            <form id="inviteForm" class="stack"><label>Email<input id="inviteEmail" type="email" required placeholder="partner@example.com"></label><button class="secondary-button" type="submit">Create invite</button><p id="inviteMessage" class="form-message"></p></form>
-          </article>
-
-          <article class="panel section-panel"><p class="eyebrow">Session</p><h3 id="profileRole">Member</h3><form id="passwordForm" class="stack"><label>Set or change password<input id="newPasswordInput" type="password" autocomplete="new-password" minlength="8" required placeholder="At least 8 characters"></label><button class="secondary-button" type="submit">Save password</button><p id="passwordMessage" class="form-message"></p></form><button id="signOutButton" class="secondary-button danger-button">Sign out</button></article>
+          <article id="invitePanel" class="panel section-panel" hidden><p class="eyebrow">Owner controls</p><h3>Invite another account</h3><p class="muted">Invite another trusted account to this Nihility instance.</p><form id="inviteForm" class="stack"><label>Email<input id="inviteEmail" type="email" required placeholder="partner@example.com"></label><button class="secondary-button" type="submit">Create invite</button><p id="inviteMessage" class="form-message"></p></form></article>
+          <article class="panel section-panel"><p class="eyebrow">Session</p><h3 id="profileRole">Member</h3><form id="passwordForm" class="stack"><label>Set or change password<input id="newPasswordInput" type="password" autocomplete="new-password" minlength="8" required placeholder="At least 8 characters"></label><button class="secondary-button" type="submit">Save password</button><p id="passwordMessage" class="form-message"></p></form><button id="signOutButton" class="secondary-button danger-button" type="button">Sign out</button></article>
         </div>
       </section>
     </div>
 
-    <nav class="mobile-nav">
-      <button class="mobile-nav-item active" data-route="home"><span>⌂</span>Home</button>
-      <button class="mobile-nav-item" data-route="members"><span>♙</span>Members</button>
-      <button class="mobile-nav-item" data-route="history"><span>▤</span>History</button>
-      <button class="mobile-nav-item" data-route="settings"><span>⚙</span>Settings</button>
+    <nav class="mobile-nav" aria-label="Mobile navigation">
+      <button class="mobile-nav-item active" data-route="home" type="button"><span>⌂</span>Home</button>
+      <button class="mobile-nav-item" data-route="members" type="button"><span>𐀪</span>Members</button>
+      <button class="mobile-nav-item" data-route="history" type="button"><span>↻</span>History</button>
+      <button class="mobile-nav-item" data-route="settings" type="button"><span>⚙</span>Settings</button>
     </nav>
   </div>
 
@@ -209,6 +191,6 @@
 
   <script src="assets/js/config.js?v=2" defer></script>
   <script src="assets/js/api.js?v=8" defer></script>
-  <script src="assets/js/app.js?v=17" defer></script>
+  <script src="assets/js/app.js?v=18" defer></script>
 </body>
 </html>
