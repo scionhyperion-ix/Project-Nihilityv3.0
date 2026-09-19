@@ -15,6 +15,7 @@
     if(!response.ok)throw new Error(data?.message||data?.msg||data?.error_description||data?.error||response.statusText);return data;
   }
   async function sendMagicLink(email){const redirect=location.origin+location.pathname;return raw('/auth/v1/otp?redirect_to='+encodeURIComponent(redirect),{method:'POST',body:{email,create_user:true}})}
+  async function sendPasswordReset(email){const redirect=location.origin+location.pathname+'?reset=1';return raw('/auth/v1/recover?redirect_to='+encodeURIComponent(redirect),{method:'POST',body:{email}})}
   async function signInWithPassword(email,password){
     const data=await raw('/auth/v1/token?grant_type=password',{method:'POST',body:{email,password}});
     const s={access_token:data.access_token,refresh_token:data.refresh_token,expires_at:Date.now()+Number(data.expires_in||3600)*1000};
@@ -59,5 +60,5 @@
     return data;
   }
 
-  window.nihilityApi={configured,getSession,saveSession,sendMagicLink,signInWithPassword,setPassword,readSessionFromUrl,refresh,user,rest,rpc,upload,privateMediaUrl,deleteMedia,secure};
+  window.nihilityApi={configured,getSession,saveSession,sendMagicLink,sendPasswordReset,signInWithPassword,setPassword,readSessionFromUrl,refresh,user,rest,rpc,upload,privateMediaUrl,deleteMedia,secure};
 })();
