@@ -28,6 +28,7 @@ function setRoute(route){
   if(route==='profile')renderProfile();
 }
 function activeFront(){return state.fronts.find(f=>!f.ended_at)||null}
+function activeMembers(){return state.members.filter(m=>!m.archived_at)}
 function frontMembers(frontId){return state.frontMembers.filter(x=>x.front_id===frontId).map(x=>state.members.find(m=>m.id===x.member_id)).filter(Boolean)}
 
 async function bootstrapProfile(){
@@ -37,7 +38,7 @@ async function bootstrapProfile(){
 }
 async function loadData(){
   const data=await Promise.all([
-    nihilityApi.rest('members',{query:'select=*&archived_at=is.null&order=name.asc'}),
+    nihilityApi.rest('members',{query:'select=*&order=name.asc'}),
     nihilityApi.rest('fronts',{query:'select=*&order=started_at.desc&limit=100'}),
     nihilityApi.rest('front_members',{query:'select=*&order=joined_at.desc'}),
     nihilityApi.rest('external_integrations',{query:'provider=eq.pluralkit&select=*'})
@@ -67,10 +68,10 @@ function renderHome(){
   }
   $('#homeProfileName').textContent=state.profile?.display_name||state.user?.email||'Account';
   $('#homeIntegrationState').textContent=(state.integration&&nihilityApi.getPkToken())?'PluralKit connected':'Independent storage';
-  $('#homeMemberCount').textContent=String(state.members.length);$('#homeFrontCount').textContent=String(state.fronts.length);$('#homeShareState').textContent=(state.integration?.share_fronting_updates&&nihilityApi.getPkToken())?'On':'Off';
+  $('#homeMemberCount').textContent=String(activeMembers().length);$('#homeFrontCount').textContent=String(state.fronts.length);$('#homeShareState').textContent=(state.integration?.share_fronting_updates&&nihilityApi.getPkToken())?'On':'Off';
 
   const counts=new Map();state.frontMembers.forEach(x=>counts.set(x.member_id,(counts.get(x.member_id)||0)+1));
-  const frequent=[...state.members].sort((a,b)=>(counts.get(b.id)||0)-(counts.get(a.id)||0)).slice(0,8);
+  const frequent=[...activeMembers()].sort((a,b)=>(counts.get(b.id)||0)-(counts.get(a.id)||0)).slice(0,8);
   $('#frequentMembers').replaceChildren();
   frequent.forEach(m=>{const b=document.createElement('button');b.className='member-chip';b.append(avatarEl(m,'timeline-avatar'));const c=document.createElement('div');c.className='member-chip-copy';const s=document.createElement('strong');s.textContent=label(m);const sm=document.createElement('small');sm.textContent=(counts.get(m.id)||0)+' fronts';c.append(s,sm);b.append(c);b.onclick=()=>quickFront(m);$('#frequentMembers').append(b)});
 
@@ -79,7 +80,7 @@ function renderHome(){
 }
 function renderMembers(){
   const q=$('#memberSearch').value.trim().toLowerCase();
-  const list=state.members.filter(m=>[m.name,m.display_name,m.pronouns].filter(Boolean).some(v=>v.toLowerCase().includes(q)));
+  const list=activeMembers().filter(m=>[m.name,m.display_name,m.pronouns].filter(Boolean).some(v=>v.toLowerCase().includes(q)));
   $('#memberGrid').replaceChildren();$('#membersEmpty').hidden=list.length>0;
   list.forEach(m=>{const card=document.createElement('button');card.className='member-card';const top=document.createElement('div');top.className='member-card-top';top.append(avatarEl(m));const copy=document.createElement('div');copy.className='member-card-name';const h=document.createElement('h3');h.textContent=label(m);const p=document.createElement('p');p.textContent=m.pronouns||m.name;copy.append(h,p);top.append(copy);card.append(top);if(m.description){const d=document.createElement('p');d.className='member-card-desc';d.textContent=m.description;card.append(d)}const bar=document.createElement('span');bar.className='member-color-bar';bar.style.background=m.color?'#'+m.color:'var(--accent)';card.append(bar);card.onclick=()=>openMember(m);$('#memberGrid').append(card)});
 }
@@ -135,7 +136,7 @@ async function deleteMember(){
 
 function buildFrontPicker(selected=[]){
   const q=$('#frontMemberSearch').value.trim().toLowerCase(),set=new Set(selected);$('#frontMemberPicker').replaceChildren();
-  state.members.filter(m=>[m.name,m.display_name].filter(Boolean).some(v=>v.toLowerCase().includes(q))).forEach(m=>{const row=document.createElement('label');row.className='picker-row';row.append(avatarEl(m,'picker-avatar'));const c=document.createElement('span');c.className='picker-copy';const s=document.createElement('strong');s.textContent=label(m);const sm=document.createElement('small');sm.textContent=m.pk_id?'PK linked':'Nihility only';c.append(s,sm);const input=document.createElement('input');input.type='checkbox';input.value=m.id;input.checked=set.has(m.id);row.append(c,input);$('#frontMemberPicker').append(row)});
+  activeMembers().filter(m=>[m.name,m.display_name].filter(Boolean).some(v=>v.toLowerCase().includes(q))).forEach(m=>{const row=document.createElement('label');row.className='picker-row';row.append(avatarEl(m,'picker-avatar'));const c=document.createElement('span');c.className='picker-copy';const s=document.createElement('strong');s.textContent=label(m);const sm=document.createElement('small');sm.textContent=m.pk_id?'PK linked':'Nihility only';c.append(s,sm);const input=document.createElement('input');input.type='checkbox';input.value=m.id;input.checked=set.has(m.id);row.append(c,input);$('#frontMemberPicker').append(row)});
 }
 function openFront(mode='replace',pre=[]){$('input[name="frontMode"][value="'+mode+'"]').checked=true;$('#frontMemberSearch').value='';$('#frontError').hidden=true;$('#customFrontTimeEnabled').checked=false;$('#customFrontTimeRow').hidden=true;buildFrontPicker(pre);$('#frontDialog').showModal()}
 async function mirrorFrontToPk(memberIds,timestamp){
