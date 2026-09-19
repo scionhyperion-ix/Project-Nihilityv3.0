@@ -144,7 +144,7 @@
           <article class="panel section-panel">
             <p class="eyebrow">Integrations</p><h3>PluralKit</h3><p class="muted">Optional. Nihility keeps its own data after import.</p>
             <div id="pkDisconnected"><label>PluralKit token<input id="pkTokenInput" type="password" autocomplete="off" placeholder="Paste token from pk;token"></label><div class="security-note"><strong>Server protected</strong><p>The token is encrypted by Nihility's backend and is not saved in this browser.</p></div><button id="connectPkButton" class="secondary-button" type="button">Connect PluralKit</button></div>
-            <div id="pkConnected" hidden><dl class="detail-list"><div><dt>System</dt><dd id="pkSystemName">Connected</dd></div><div><dt>System ID</dt><dd id="pkSystemId">...</dd></div></dl><label class="toggle-row"><span><strong>Share fronting updates</strong><small>New Nihility fronts are mirrored to PluralKit when linked.</small></span><input id="shareFrontingToggle" type="checkbox" checked></label><div class="button-row"><button id="importPkButton" class="secondary-button" type="button">Import members + fronts from PK</button><button id="disconnectPkButton" class="text-button danger-text" type="button">Disconnect</button></div></div>
+            <div id="pkConnected" hidden><dl class="detail-list"><div><dt>System</dt><dd id="pkSystemName">Connected</dd></div><div><dt>System ID</dt><dd id="pkSystemId">...</dd></div></dl><label class="toggle-row"><span><strong>Share fronting updates</strong><small>New Nihility fronts are mirrored to PluralKit when linked.</small></span><input id="shareFrontingToggle" type="checkbox" checked></label><div class="button-row"><button id="importPkButton" class="secondary-button" type="button">Import system, groups, members + fronts</button><button id="disconnectPkButton" class="text-button danger-text" type="button">Disconnect</button></div></div>
             <p id="pkMessage" class="form-message"></p>
           </article>
           <article class="panel section-panel"><p class="eyebrow">Account</p><h3>Profile & access</h3><p class="muted">Manage your Nihility profile, password, invitations and sign out.</p><button class="secondary-button" type="button" data-route-link="profile">Open profile</button></article>
@@ -198,6 +198,6 @@
   <script src="assets/js/config.js?v=2" defer></script>
   <script src="assets/js/api.js?v=8" defer></script>
   <script src="assets/js/app.js?v=18" defer></script>
-  <script src="assets/js/rainbow-features.js?v=1" defer></script>
+  <script src="assets/js/rainbow-features.js?v=2" defer></script>
 </body>
 </html>

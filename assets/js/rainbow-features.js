@@ -11,6 +11,7 @@
 
   state.groups=Array.isArray(state.groups)?state.groups:[];
   state.memberGroups=Array.isArray(state.memberGroups)?state.memberGroups:[];
+  state.systemProfile=state.systemProfile||null;
   state.historyHasMore=false;
   state.historyDateFilter='';
   state.historyCalendarMonth=new Date(new Date().getFullYear(),new Date().getMonth(),1);
@@ -42,12 +43,14 @@
   const coreLoadData=loadData;
   loadData=async function loadDataWithRainbowFeatures(){
     await coreLoadData();
-    const [groups,links]=await Promise.all([
+    const [groups,links,settingsRows]=await Promise.all([
       nihilityApi.rest('groups',{query:'select=*&order=name.asc'}),
-      nihilityApi.rest('member_groups',{query:'select=*&order=created_at.asc'})
+      nihilityApi.rest('member_groups',{query:'select=*&order=created_at.asc'}),
+      nihilityApi.rest('app_settings',{query:'select=settings&user_id=eq.'+encodeURIComponent(state.user.id)+'&limit=1'})
     ]);
     state.groups=groups||[];
     state.memberGroups=links||[];
+    state.systemProfile=settingsRows?.[0]?.settings?.system_profile||null;
     state.historyHasMore=state.fronts.length>=100;
     refreshFeatureControls();
     renderAll();
@@ -409,8 +412,21 @@
     picker.addEventListener('change',update);document.querySelectorAll('input[name="frontMode"]').forEach(i=>i.addEventListener('change',()=>requestAnimationFrame(update)));new MutationObserver(()=>{if(dialog.open)requestAnimationFrame(update)}).observe(picker,{childList:true});
   }
 
+  function applyImportedSystemIdentity(){
+    const s=state.systemProfile;
+    if(!s)return;
+    const name=s.name||s.display_name;
+    if(!name)return;
+    const sidebarName=document.querySelector('#sidebarName');
+    const sidebarRole=document.querySelector('#sidebarRole');
+    const homeName=document.querySelector('#homeProfileName');
+    if(sidebarName)sidebarName.textContent=name;
+    if(sidebarRole)sidebarRole.textContent=s.id?('PK '+s.id):'Nihility system';
+    if(homeName)homeName.textContent=name;
+  }
+
   const coreRenderAll=renderAll;
-  renderAll=function renderAllWithFeatureParity(){coreRenderAll();renderGroups();renderTopFronter();refreshFeatureControls()};
+  renderAll=function renderAllWithFeatureParity(){coreRenderAll();renderGroups();renderTopFronter();refreshFeatureControls();applyImportedSystemIdentity()};
 
   function refreshFeatureControls(){
     installMemberToolbar();installMemberFields();installGroupsRoute();installHistoryTools();installMultiCofronter();refreshGroupOptions();refreshHistoryMembers();
@@ -423,7 +439,8 @@
     try{
       msg.textContent='Importing PluralKit groups and memberships...';
       const r=await nihilityApi.secure('pk_import_groups');
-      msg.textContent='Import complete. '+(r.added||0)+' groups added, '+(r.membershipsAdded||0)+' memberships linked. Existing Nihility copies were kept.';
+      const systemPart=r.systemName?(' System name imported as "'+r.systemName+'".'):'';
+      msg.textContent='Import complete. '+(r.added||0)+' groups added, '+(r.updated||0)+' linked groups refreshed, '+(r.membershipsAdded||0)+' memberships linked.'+systemPart+' Nihility now keeps these imported names locally.';
       await loadData();
     }catch(error){msg.textContent='Member/front import completed, but group import failed: '+error.message}
   }
