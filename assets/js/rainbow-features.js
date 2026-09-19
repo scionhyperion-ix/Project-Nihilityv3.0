@@ -321,12 +321,71 @@
   function ensureGroupDialog(){
     let dialog=document.querySelector('#groupsManagerDialog');if(dialog)return dialog;
     dialog=document.createElement('dialog');dialog.id='groupsManagerDialog';dialog.className='modal-dialog groups-manager-dialog';
-    dialog.innerHTML='<form id="groupsManagerForm" class="modal-card groups-manager-card"><div class="modal-heading"><div><p class="eyebrow">Nihility group</p><h3 id="groupsManagerTitle">Create group</h3></div><button class="icon-button groups-manager-close" type="button">×</button></div><input id="groupsManagerRef" type="hidden"><div class="form-grid two-col"><label>Name<input id="groupsManagerName" maxlength="100" required></label><label>Display name<input id="groupsManagerDisplayName" maxlength="100"></label><label>Color<input id="groupsManagerColor" maxlength="7" placeholder="#8b7cf6"></label></div><label>Description<textarea id="groupsManagerDescription" maxlength="1000" rows="4"></textarea></label><label class="dialog-search">Find members<input id="groupsMemberSearch" type="search" placeholder="Search members"></label><div id="groupsMemberPicker" class="front-member-picker groups-member-picker"></div><p id="groupsManagerError" class="form-error" hidden></p><div class="modal-footer modal-footer-split"><button id="deleteGroupButton" class="text-button danger-text" type="button">Delete group</button><div><button class="secondary-button groups-manager-close" type="button">Cancel</button><button class="primary-button" type="submit">Save group</button></div></div></form>';
+    dialog.innerHTML=`
+      <form id="groupsManagerForm" class="modal-card groups-manager-card">
+        <div class="modal-heading groups-manager-heading">
+          <div>
+            <p class="eyebrow">Nihility group</p>
+            <h3 id="groupsManagerTitle">Create group</h3>
+            <p class="muted groups-manager-subtitle">Edit the group profile, preview the banner, and choose members in one place.</p>
+          </div>
+          <button class="icon-button groups-manager-close" type="button" aria-label="Close">×</button>
+        </div>
+        <input id="groupsManagerRef" type="hidden">
+        <div class="groups-manager-layout">
+          <aside class="group-live-preview">
+            <div class="group-preview-card">
+              <div id="groupPreviewBanner" class="group-preview-banner"></div>
+              <div class="group-preview-content">
+                <img id="groupPreviewIconImage" class="group-preview-icon" alt="" hidden>
+                <div id="groupPreviewIconFallback" class="group-preview-icon fallback-avatar">G</div>
+                <div class="group-preview-copy">
+                  <strong id="groupPreviewName">Group name</strong>
+                  <span id="groupPreviewMemberCount">0 members</span>
+                  <div id="groupPreviewMembers" class="group-preview-members"></div>
+                </div>
+              </div>
+              <span id="groupPreviewColor" class="group-preview-color"></span>
+            </div>
+            <p class="group-preview-help">The group list will use this banner-style card, including member avatars and the group color bar.</p>
+          </aside>
+
+          <section class="groups-profile-fields">
+            <div class="groups-section-heading"><strong>Group profile</strong><small>Name, appearance and notes</small></div>
+            <div class="form-grid two-col groups-profile-grid">
+              <label>Name<input id="groupsManagerName" maxlength="100" required></label>
+              <label>Display name<input id="groupsManagerDisplayName" maxlength="100"></label>
+              <label>Color<input id="groupsManagerColor" maxlength="7" placeholder="#8b7cf6"></label>
+            </div>
+            <label class="groups-description-field">Description<textarea id="groupsManagerDescription" maxlength="1000" rows="4"></textarea></label>
+            <div class="groups-media-grid">
+              <label>Icon URL<input id="groupsManagerIconUrl" type="url" placeholder="https://..."></label>
+              <label>Banner URL<input id="groupsManagerBannerUrl" type="url" placeholder="https://..."></label>
+              <label>Upload icon<input id="groupsManagerIconFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label>
+              <label>Upload banner<input id="groupsManagerBannerFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label>
+            </div>
+          </section>
+
+          <section class="groups-members-editor">
+            <div class="groups-section-heading"><strong>Members</strong><small id="groupsSelectedCount">0 selected</small></div>
+            <label class="dialog-search groups-member-search">Find members<input id="groupsMemberSearch" type="search" placeholder="Search members"></label>
+            <div id="groupsMemberPicker" class="front-member-picker groups-member-picker"></div>
+          </section>
+        </div>
+        <p id="groupsManagerError" class="form-error" hidden></p>
+        <div class="modal-footer modal-footer-split groups-manager-footer">
+          <button id="deleteGroupButton" class="text-button danger-text" type="button">Delete group</button>
+          <div><button class="secondary-button groups-manager-close" type="button">Cancel</button><button class="primary-button" type="submit">Save group</button></div>
+        </div>
+      </form>`;
     document.body.append(dialog);
     dialog.querySelectorAll('.groups-manager-close').forEach(b=>b.onclick=()=>dialog.close());
     dialog.querySelector('#groupsManagerForm').onsubmit=saveGroup;
     dialog.querySelector('#deleteGroupButton').onclick=deleteGroup;
     dialog.querySelector('#groupsMemberSearch').oninput=renderGroupMemberPicker;
+    ['groupsManagerName','groupsManagerDisplayName','groupsManagerColor','groupsManagerDescription','groupsManagerIconUrl','groupsManagerBannerUrl']
+      .forEach(id=>dialog.querySelector('#'+id)?.addEventListener('input',updateGroupPreview));
+    ['groupsManagerIconFile','groupsManagerBannerFile'].forEach(id=>dialog.querySelector('#'+id)?.addEventListener('change',updateGroupPreview));
     return dialog;
   }
   let workingGroupMembers=new Set();
