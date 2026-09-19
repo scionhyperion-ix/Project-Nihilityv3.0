@@ -1,0 +1,241 @@
+/* Group member picker scrolling and current-member strip. */
+
+/* This file loads after groups-route.css, so keep the compact avatar rules here
+   too. That makes the fix resilient even when an older group-route stylesheet
+   is still present in a browser cache. */
+.fallback-avatar {
+  display: grid !important;
+  place-items: center !important;
+  box-sizing: border-box;
+  padding: 0 !important;
+  text-align: center !important;
+  line-height: 1 !important;
+  overflow: hidden;
+}
+
+.group-member-mini {
+  width: 34px !important;
+  height: 34px !important;
+  min-width: 34px !important;
+  min-height: 34px !important;
+  padding: 0 !important;
+  object-fit: cover !important;
+  object-position: 50% 50% !important;
+  image-rendering: auto;
+  box-sizing: border-box;
+}
+
+.group-member-mini.fallback-avatar {
+  font-size: .58rem;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+@media (min-width: 901px) {
+  .groups-manager-layout {
+    height: min(620px, calc(100dvh - 190px));
+    max-height: min(620px, calc(100dvh - 190px));
+  }
+
+  .groups-members-editor {
+    min-height: 0;
+    height: 100%;
+    grid-template-rows: auto auto auto minmax(0, 1fr) !important;
+    overflow: hidden;
+  }
+
+  .groups-member-picker {
+    min-height: 0 !important;
+    height: 100%;
+    max-height: 100% !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    touch-action: pan-y;
+    padding-right: 4px;
+  }
+}
+
+.groups-member-picker {
+  -webkit-overflow-scrolling: touch;
+}
+
+.groups-current-members {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--theme-surface-1) 72%, transparent);
+}
+
+.groups-current-members-heading {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.groups-current-members-heading > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.groups-current-members-heading strong {
+  font-size: .75rem;
+}
+
+.groups-current-members-heading small,
+#groupsCurrentMembersCount {
+  color: var(--muted);
+  font-size: .62rem;
+}
+
+#groupsCurrentMembersCount {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.groups-current-member-icons {
+  min-width: 0;
+  max-height: 96px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 1px;
+}
+
+.groups-current-member-button {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.groups-current-member-button:hover,
+.groups-current-member-button:focus-visible {
+  border-color: var(--line-strong);
+  background: var(--accent-soft);
+  outline: none;
+}
+
+.groups-current-member-avatar {
+  display: block;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0;
+  margin: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 11px;
+  object-fit: cover;
+  object-position: 50% 50%;
+  image-rendering: auto;
+}
+
+.groups-current-member-avatar.fallback-avatar {
+  display: grid !important;
+  place-items: center !important;
+  box-sizing: border-box;
+  padding: 0 !important;
+  margin: 0 !important;
+  line-height: 1 !important;
+  text-align: center !important;
+  vertical-align: middle;
+  overflow: hidden;
+  color: var(--text);
+  font-size: .68rem;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.groups-current-members-empty {
+  margin: 0;
+  font-size: .66rem;
+}
+
+@media (max-width: 900px) {
+  .groups-members-editor {
+    grid-template-rows: auto auto auto minmax(220px, 1fr) !important;
+  }
+
+  .groups-member-picker {
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    touch-action: pan-y;
+  }
+}
+
+@media (max-width: 760px) {
+  .group-member-mini {
+    width: 30px !important;
+    height: 30px !important;
+    min-width: 30px !important;
+    min-height: 30px !important;
+  }
+
+  .group-member-mini.fallback-avatar {
+    font-size: .54rem;
+  }
+
+  .groups-current-members {
+    gap: 7px;
+    margin-bottom: 8px;
+    padding: 8px;
+    border-radius: 10px;
+  }
+
+  .groups-current-members-heading small {
+    display: none;
+  }
+
+  .groups-current-member-icons {
+    max-height: none;
+    overflow-x: auto;
+    overflow-y: hidden;
+    flex-wrap: nowrap;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .groups-current-member-icons::-webkit-scrollbar {
+    display: none;
+  }
+
+  .groups-current-member-button {
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+  }
+
+  .groups-current-member-avatar {
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+    min-height: 38px;
+    border-radius: 10px;
+  }
+
+  .groups-current-member-avatar.fallback-avatar {
+    font-size: .65rem;
+  }
+}
