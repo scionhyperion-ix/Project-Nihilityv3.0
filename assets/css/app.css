@@ -74,3 +74,29 @@ body{background:var(--bg)}
 .toast{background:#202020}
 input,textarea{background:#151515}
 @media(max-width:900px){.mobile-nav{background:rgba(24,24,24,.97)}}
+
+
+/* Cohesive Rainbow-style navigation states */
+.nav-item{
+  min-height:42px;
+  color:#a9a9ad;
+  background:transparent;
+  border:1px solid transparent;
+}
+.nav-item span{color:#8f8f95}
+.nav-item:hover{
+  color:#dedde3;
+  background:rgba(255,255,255,.035);
+  border-color:transparent;
+}
+.nav-item.active{
+  color:#d8d0ff;
+  background:rgba(255,255,255,.055);
+  border-color:rgba(255,255,255,.045);
+}
+.nav-item.active span{color:var(--accent)}
+.mobile-nav-item.active{
+  color:#d8d0ff;
+  background:rgba(255,255,255,.055);
+}
+.mobile-nav-item.active span{color:var(--accent)}
