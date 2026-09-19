@@ -1,0 +1,52 @@
+.cofronter-multi-helper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 9px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--theme-surface-1) 72%, transparent);
+  color: var(--muted);
+  font-size: .7rem;
+}
+
+.cofronter-multi-helper strong {
+  flex: 0 0 auto;
+  color: var(--text);
+  font-size: .68rem;
+}
+
+#frontMemberPicker .picker-row.already-fronting {
+  opacity: .58;
+  cursor: default;
+}
+
+#frontMemberPicker .picker-row.already-fronting input {
+  cursor: default;
+}
+
+.already-fronting-badge {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 3px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-2);
+  font-size: .58rem;
+  font-weight: 750;
+}
+
+@media (max-width: 760px) {
+  .cofronter-multi-helper {
+    gap: 8px;
+    padding: 8px 9px;
+    font-size: .64rem;
+  }
+
+  .cofronter-multi-helper strong {
+    font-size: .62rem;
+  }
+}
