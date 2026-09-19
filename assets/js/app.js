@@ -44,6 +44,11 @@ async function loadData(){
     nihilityApi.rest('external_integrations',{query:'provider=eq.pluralkit&select=*'})
   ]);
   state.members=data[0]||[];state.fronts=data[1]||[];state.frontMembers=data[2]||[];state.integration=data[3]?.[0]||null;
+  await Promise.all(state.members.map(async m=>{
+    if(m.avatar_storage_path)m.avatar_url=await nihilityApi.privateMediaUrl('avatar',m.avatar_storage_path);
+    if(m.banner_storage_path)m.banner_url=await nihilityApi.privateMediaUrl('banner',m.banner_storage_path);
+  }));
+  if(state.profile?.avatar_storage_path)state.profile.avatar_url=await nihilityApi.privateMediaUrl('profile',state.profile.avatar_storage_path);
   renderAll();
 }
 function renderAll(){renderHeader();renderHome();renderMembers();renderHistory();renderSettings();renderProfile()}
@@ -118,7 +123,7 @@ async function saveMember(e){
     const id=$('#memberId').value,old=id?state.members.find(m=>m.id===id):null;
     au=await maybeUpload('avatar',$('#memberAvatarFile'));bu=await maybeUpload('banner',$('#memberBannerFile'));
     const ae=$('#memberAvatarUrl').value.trim(),be=$('#memberBannerUrl').value.trim(),c=hex($('#memberColor').value);
-    const body={user_id:state.user.id,name:$('#memberName').value.trim(),display_name:$('#memberDisplayName').value.trim()||null,pronouns:$('#memberPronouns').value.trim()||null,color:c?c.slice(1).toLowerCase():null,description:$('#memberDescription').value.trim()||null,avatar_url:au?.url||ae||old?.avatar_url||null,avatar_source:au?'supabase':(ae?'external':old?.avatar_source||null),avatar_storage_path:au?.path||(ae?null:old?.avatar_storage_path||null),banner_url:bu?.url||be||old?.banner_url||null,banner_source:bu?'supabase':(be?'external':old?.banner_source||null),banner_storage_path:bu?.path||(be?null:old?.banner_storage_path||null),pk_id:old?.pk_id||null,tupper_id:old?.tupper_id||null,archived_at:null};
+    const body={user_id:state.user.id,name:$('#memberName').value.trim(),display_name:$('#memberDisplayName').value.trim()||null,pronouns:$('#memberPronouns').value.trim()||null,color:c?c.slice(1).toLowerCase():null,description:$('#memberDescription').value.trim()||null,avatar_url:ae||(au?null:old?.avatar_url||null),avatar_source:au?'supabase':(ae?'external':old?.avatar_source||null),avatar_storage_path:au?.path||(ae?null:old?.avatar_storage_path||null),banner_url:be||(bu?null:old?.banner_url||null),banner_source:bu?'supabase':(be?'external':old?.banner_source||null),banner_storage_path:bu?.path||(be?null:old?.banner_storage_path||null),pk_id:old?.pk_id||null,tupper_id:old?.tupper_id||null,archived_at:null};
     if(!body.name)throw new Error('Name is required.');
     if(id)await nihilityApi.rest('members',{method:'PATCH',query:'id=eq.'+encodeURIComponent(id),body,prefer:'return=minimal'});else await nihilityApi.rest('members',{method:'POST',body,prefer:'return=minimal'});
     if(old?.avatar_storage_path&&old.avatar_storage_path!==body.avatar_storage_path)await safeDelete('avatar',old.avatar_storage_path);if(old?.banner_storage_path&&old.banner_storage_path!==body.banner_storage_path)await safeDelete('banner',old.banner_storage_path);
@@ -202,10 +207,10 @@ async function saveProfile(e){
   e.preventDefault();const msg=$('#profileMessage');msg.textContent='Saving...';let upload=null;
   try{
     const old=state.profile,external=$('#profileAvatarUrl').value.trim();upload=await maybeUpload('profile',$('#profileAvatarFile'));
-    const body={display_name:$('#profileDisplayName').value.trim()||null,avatar_url:upload?.url||external||old.avatar_url||null,avatar_storage_path:upload?.path||(external?null:old.avatar_storage_path||null)};
+    const body={display_name:$('#profileDisplayName').value.trim()||null,avatar_url:external||(upload?null:old.avatar_url||null),avatar_storage_path:upload?.path||(external?null:old.avatar_storage_path||null)};
     await nihilityApi.rest('profiles',{method:'PATCH',query:'user_id=eq.'+state.user.id,body,prefer:'return=minimal'});
     if(old.avatar_storage_path&&old.avatar_storage_path!==body.avatar_storage_path)await safeDelete('profile',old.avatar_storage_path);
-    state.profile={...state.profile,...body};msg.textContent='Profile saved.';renderProfile();
+    state.profile={...state.profile,...body};if(state.profile.avatar_storage_path)state.profile.avatar_url=await nihilityApi.privateMediaUrl('profile',state.profile.avatar_storage_path);msg.textContent='Profile saved.';renderProfile();
   }catch(error){if(upload?.path)await safeDelete('profile',upload.path);msg.textContent=error.message}
 }
 async function invite(e){
