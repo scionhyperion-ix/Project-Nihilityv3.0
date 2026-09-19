@@ -29,9 +29,22 @@
         <label>Password<input id="passwordInput" type="password" autocomplete="current-password" minlength="8" placeholder="Your password"></label>
         <button class="primary-button full-button" type="submit">Sign in</button>
         <button id="magicLinkButton" class="secondary-button full-button" type="button">Email me a magic link</button>
+        <button id="forgotPasswordButton" class="text-button" type="button">Forgot password?</button>
         <p id="loginMessage" class="form-message"></p>
       </form>
       <div class="security-note"><strong>Invite-only</strong><p>The first account becomes the owner. Additional accounts need an invite from the owner profile page.</p></div>
+    </section>
+  </main>
+
+  <main id="resetView" class="login-shell" hidden>
+    <section class="login-card">
+      <div class="brand-lockup brand-lockup-login"><div class="brand-mark">N</div><div><p class="eyebrow">Account recovery</p><h1>Set new password</h1></div></div>
+      <p class="login-intro">Choose a new password for your Nihility account.</p>
+      <form id="resetPasswordForm" class="login-form">
+        <label>New password<input id="resetPasswordInput" type="password" autocomplete="new-password" minlength="8" required placeholder="At least 8 characters"></label>
+        <button class="primary-button full-button" type="submit">Save new password</button>
+        <p id="resetPasswordMessage" class="form-message"></p>
+      </form>
     </section>
   </main>
 
@@ -183,7 +196,7 @@
   </dialog>
 
   <script src="assets/js/config.js?v=2" defer></script>
-  <script src="assets/js/api.js?v=7" defer></script>
-  <script src="assets/js/app.js?v=7" defer></script>
+  <script src="assets/js/api.js?v=8" defer></script>
+  <script src="assets/js/app.js?v=8" defer></script>
 </body>
 </html>

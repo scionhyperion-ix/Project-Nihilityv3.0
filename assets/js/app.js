@@ -250,12 +250,15 @@ async function boot(){
   localStorage.removeItem('nihility_pk_token');sessionStorage.removeItem('nihility_pk_token_session');
   if(!nihilityApi.configured()){setView('setup');return}
   nihilityApi.readSessionFromUrl();state.user=await nihilityApi.user();if(!state.user){setView('login');return}
+  if(new URLSearchParams(location.search).get('reset')==='1'){setView('reset');return}
   if(!await bootstrapProfile()){setView('denied');return}
   setView('app');await loadData();const requested=(location.hash||'#home').slice(1);setRoute(['home','members','history','settings','profile'].includes(requested)?requested:'home');
 }
 
 $('#loginForm').onsubmit=async e=>{e.preventDefault();const m=$('#loginMessage'),email=$('#emailInput').value.trim(),password=$('#passwordInput').value;if(!password){m.textContent='Enter your password, or use the magic-link button.';return}m.textContent='Signing in...';try{await nihilityApi.signInWithPassword(email,password);location.reload()}catch(error){m.textContent=error.message}};
 $('#magicLinkButton').onclick=async()=>{const m=$('#loginMessage'),email=$('#emailInput').value.trim();if(!email){m.textContent='Enter your email first.';return}m.textContent='Sending...';try{await nihilityApi.sendMagicLink(email);m.textContent='Check your email for the sign-in link.'}catch(error){m.textContent=error.message}};
+$('#forgotPasswordButton').onclick=async()=>{const m=$('#loginMessage'),email=$('#emailInput').value.trim();if(!email){m.textContent='Enter your email first.';return}m.textContent='Sending password reset...';try{await nihilityApi.sendPasswordReset(email);m.textContent='Check your email for the password reset link.'}catch(error){m.textContent=error.message}};
+$('#resetPasswordForm').onsubmit=async e=>{e.preventDefault();const m=$('#resetPasswordMessage'),password=$('#resetPasswordInput').value;m.textContent='Saving...';try{await nihilityApi.setPassword(password);m.textContent='Password saved. Redirecting...';history.replaceState(null,'',location.pathname);setTimeout(()=>location.reload(),600)}catch(error){m.textContent=error.message}};
 $('#passwordForm').onsubmit=async e=>{e.preventDefault();const m=$('#passwordMessage'),password=$('#newPasswordInput').value;m.textContent='Saving...';try{await nihilityApi.setPassword(password);$('#newPasswordInput').value='';m.textContent='Password saved. You can use it the next time you sign in.'}catch(error){m.textContent=error.message}};
 function signOut(){nihilityApi.saveSession(null);location.reload()}
 $('#signOutButton').onclick=signOut;$('#deniedSignOut').onclick=signOut;$('#sidebarProfileButton').onclick=()=>setRoute('profile');
