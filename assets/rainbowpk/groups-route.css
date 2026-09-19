@@ -1,0 +1,527 @@
+/* Dedicated Groups route and responsive group editor. */
+
+.groups-toolbar {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.groups-search {
+  width: min(520px, 100%);
+  max-width: 520px;
+}
+
+.group-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+}
+
+.group-card {
+  position: relative;
+  min-width: 0;
+  min-height: 124px;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(28,30,51,.84), rgba(20,22,39,.84));
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.group-card:hover {
+  transform: translateY(-1px);
+  border-color: var(--line-strong);
+  background: linear-gradient(180deg, rgba(34,36,61,.9), rgba(23,25,43,.9));
+}
+
+.group-card-banner {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-position: center;
+  background-size: cover;
+  opacity: .66;
+}
+
+.group-card-content {
+  position: relative;
+  z-index: 1;
+  min-height: 124px;
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 17px;
+  background: linear-gradient(90deg, rgba(15,16,29,.84), rgba(15,16,29,.35));
+}
+
+.group-card:not(.has-group-banner) .group-card-content {
+  background: transparent;
+}
+
+.group-card-icon {
+  width: 54px;
+  height: 54px;
+  border-radius: 16px;
+  object-fit: cover;
+  object-position: 50% 50%;
+  image-rendering: auto;
+  border: 1px solid var(--line-strong);
+}
+
+.group-card-icon.fallback-avatar {
+  display: grid !important;
+  place-items: center !important;
+  padding: 0 !important;
+  text-align: center !important;
+  line-height: 1 !important;
+  font-weight: 800;
+}
+
+.group-card-copy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.group-card-copy h3,
+.group-card-copy p,
+.group-card-copy small {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group-card-copy h3 {
+  font-size: 1rem;
+}
+
+.group-card-copy p,
+.group-card-copy small {
+  color: var(--muted);
+  font-size: .76rem;
+}
+
+.group-member-preview {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.group-member-mini,
+.group-member-more {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  min-height: 34px;
+  margin-left: -7px;
+  border: 2px solid var(--theme-surface-2, #171928);
+  border-radius: 10px;
+  box-sizing: border-box;
+}
+
+.group-member-mini {
+  display: block;
+  padding: 0;
+  object-fit: cover;
+  object-position: 50% 50%;
+  image-rendering: auto;
+}
+
+.group-member-mini.fallback-avatar {
+  display: grid !important;
+  place-items: center !important;
+  padding: 0 !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  text-align: center !important;
+  line-height: 1 !important;
+  font-size: .58rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  overflow: hidden;
+}
+
+.group-member-preview > :first-child {
+  margin-left: 0;
+}
+
+.group-member-more {
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: .6rem;
+  font-weight: 800;
+}
+
+.group-color-bar {
+  position: absolute;
+  z-index: 2;
+  inset: auto 14px 0;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  opacity: .9;
+}
+
+/* Groups own group management now. Keep the Members page focused. */
+#membersRoute .feature-select:has(#memberGroupFilter),
+#membersRoute #createGroupButton,
+#membersRoute .member-card-groups,
+#memberDialog .member-groups-field,
+#memberDialog #memberNewGroupButton {
+  display: none !important;
+}
+
+.groups-manager-dialog {
+  width: min(980px, calc(100vw - 28px));
+  max-height: calc(100dvh - 28px);
+}
+
+.groups-manager-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.groups-manager-heading {
+  margin: 0;
+  padding: 22px 24px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.groups-manager-subtitle {
+  margin: 6px 0 0;
+  font-size: .8rem;
+  line-height: 1.45;
+}
+
+.groups-manager-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(300px, .95fr);
+  min-height: 0;
+  max-height: min(620px, calc(100dvh - 190px));
+}
+
+.groups-profile-fields,
+.groups-members-editor {
+  min-width: 0;
+  padding: 22px 24px;
+}
+
+.groups-profile-fields {
+  overflow-y: auto;
+  border-right: 1px solid var(--line);
+}
+
+.groups-members-editor {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.groups-section-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.groups-section-heading strong {
+  font-size: .86rem;
+}
+
+.groups-section-heading small {
+  color: var(--muted);
+  font-size: .68rem;
+}
+
+.groups-profile-grid {
+  gap: 12px;
+}
+
+.groups-profile-grid label,
+.groups-description-field {
+  font-size: .78rem;
+}
+
+.groups-banner-field {
+  grid-column: 1 / -1;
+}
+
+.groups-description-field {
+  display: grid;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.groups-description-field textarea {
+  min-height: 110px;
+}
+
+.groups-member-search {
+  margin: 0 0 9px !important;
+}
+
+.groups-member-picker {
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+}
+
+.groups-manager-card > .form-error {
+  margin: 0 24px;
+}
+
+.groups-manager-footer {
+  margin: 0;
+  padding: 16px 24px 20px;
+  border-top: 1px solid var(--line);
+}
+
+@media (max-width: 900px) {
+  .mobile-nav {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  }
+
+  .mobile-nav-item {
+    min-width: 0;
+    padding-inline: 2px;
+    font-size: .63rem;
+  }
+
+  .groups-manager-layout {
+    grid-template-columns: 1fr;
+    max-height: calc(100dvh - 176px);
+    overflow-y: auto;
+  }
+
+  .groups-profile-fields {
+    overflow: visible;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .groups-members-editor {
+    min-height: 330px;
+    overflow: visible;
+  }
+
+  .groups-member-picker {
+    max-height: 280px;
+  }
+}
+
+@media (max-width: 760px) {
+  .groups-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .groups-search {
+    width: 100%;
+    max-width: none;
+  }
+
+  .groups-toolbar .primary-button {
+    min-height: 40px;
+    padding: 8px 11px;
+    white-space: nowrap;
+    font-size: .72rem;
+  }
+
+  .group-card-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .group-card,
+  .group-card-content {
+    min-height: 92px;
+  }
+
+  .group-card-content {
+    grid-template-columns: 44px minmax(0, 1fr) auto;
+    gap: 9px;
+    padding: 11px;
+  }
+
+  .group-card-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+  }
+
+  .group-card-copy h3 {
+    font-size: .86rem;
+  }
+
+  .group-card-copy p,
+  .group-card-copy small {
+    font-size: .66rem;
+  }
+
+  .group-member-mini,
+  .group-member-more {
+    width: 30px;
+    height: 30px;
+    min-width: 30px;
+    min-height: 30px;
+    border-radius: 9px;
+  }
+
+  .group-member-mini.fallback-avatar {
+    font-size: .54rem;
+  }
+
+  .groups-manager-dialog {
+    width: min(calc(100vw - 10px), 680px);
+    max-height: calc(100dvh - 10px);
+  }
+
+  .groups-manager-card {
+    max-height: calc(100dvh - 10px);
+    border-radius: 17px;
+  }
+
+  .groups-manager-heading {
+    padding: 12px 13px 10px;
+  }
+
+  .groups-manager-heading h3 {
+    font-size: 1rem;
+  }
+
+  .groups-manager-subtitle {
+    display: none;
+  }
+
+  .groups-manager-layout {
+    max-height: calc(100dvh - 132px);
+  }
+
+  .groups-profile-fields,
+  .groups-members-editor {
+    padding: 12px 13px;
+  }
+
+  .groups-profile-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px;
+  }
+
+  .groups-profile-grid label:first-child,
+  .groups-profile-grid label:nth-child(2),
+  .groups-banner-field {
+    grid-column: 1 / -1;
+  }
+
+  .groups-profile-grid input,
+  .groups-description-field textarea,
+  .groups-member-search input {
+    font-size: 16px;
+  }
+
+  .groups-description-field textarea {
+    min-height: 84px;
+  }
+
+  .groups-members-editor {
+    min-height: 270px;
+  }
+
+  .groups-member-picker {
+    max-height: 220px;
+  }
+
+  .groups-manager-card > .form-error {
+    margin-inline: 13px;
+  }
+
+  .groups-manager-footer {
+    padding: 10px 13px 12px;
+  }
+
+  .groups-manager-footer,
+  .groups-manager-footer > div {
+    gap: 7px;
+  }
+
+  .groups-manager-footer .primary-button,
+  .groups-manager-footer .secondary-button,
+  .groups-manager-footer .text-button {
+    min-height: 34px;
+    padding: 7px 10px;
+    font-size: .68rem;
+  }
+}
+
+@media (max-width: 390px) {
+  .mobile-nav-item {
+    font-size: .58rem;
+  }
+
+  .mobile-nav-item span {
+    font-size: .95rem;
+  }
+
+  .group-member-preview {
+    display: none;
+  }
+
+  .group-card-content {
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+
+  .groups-profile-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .groups-profile-grid label,
+  .groups-banner-field {
+    grid-column: 1 !important;
+  }
+
+  .groups-manager-footer {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .groups-manager-footer > div {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-height: 640px) and (max-width: 900px) {
+  .groups-manager-heading {
+    padding-block: 9px;
+  }
+
+  .groups-manager-layout {
+    max-height: calc(100dvh - 112px);
+  }
+
+  .groups-profile-fields,
+  .groups-members-editor {
+    padding-block: 9px;
+  }
+
+  .groups-description-field textarea {
+    min-height: 70px;
+  }
+
+  .groups-member-picker {
+    max-height: 170px;
+  }
+}
