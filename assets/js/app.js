@@ -37,7 +37,7 @@ async function bootstrapProfile(){
 }
 async function loadData(){
   const data=await Promise.all([
-    nihilityApi.rest('members',{query:'select=*&order=name.asc'}),
+    nihilityApi.rest('members',{query:'select=*&archived_at=is.null&order=name.asc'}),
     nihilityApi.rest('fronts',{query:'select=*&order=started_at.desc&limit=100'}),
     nihilityApi.rest('front_members',{query:'select=*&order=joined_at.desc'}),
     nihilityApi.rest('external_integrations',{query:'provider=eq.pluralkit&select=*'})
@@ -66,8 +66,8 @@ function renderHome(){
     members.forEach(m=>{const row=document.createElement('div');row.className='front-person';row.append(avatarEl(m,'timeline-avatar'));const copy=document.createElement('div');copy.className='front-person-copy';const s=document.createElement('strong');s.textContent=label(m);const sm=document.createElement('small');sm.textContent=m.pronouns||m.name;copy.append(s,sm);row.append(copy);$('#currentFrontMembers').append(row)});
   }
   $('#homeProfileName').textContent=state.profile?.display_name||state.user?.email||'Account';
-  $('#homeIntegrationState').textContent=state.integration?'PluralKit connected':'Independent storage';
-  $('#homeMemberCount').textContent=String(state.members.length);$('#homeFrontCount').textContent=String(state.fronts.length);$('#homeShareState').textContent=state.integration?.share_fronting_updates?'On':'Off';
+  $('#homeIntegrationState').textContent=(state.integration&&nihilityApi.getPkToken())?'PluralKit connected':'Independent storage';
+  $('#homeMemberCount').textContent=String(state.members.length);$('#homeFrontCount').textContent=String(state.fronts.length);$('#homeShareState').textContent=(state.integration?.share_fronting_updates&&nihilityApi.getPkToken())?'On':'Off';
 
   const counts=new Map();state.frontMembers.forEach(x=>counts.set(x.member_id,(counts.get(x.member_id)||0)+1));
   const frequent=[...state.members].sort((a,b)=>(counts.get(b.id)||0)-(counts.get(a.id)||0)).slice(0,8);
@@ -117,7 +117,7 @@ async function saveMember(e){
     const id=$('#memberId').value,old=id?state.members.find(m=>m.id===id):null;
     au=await maybeUpload('avatar',$('#memberAvatarFile'));bu=await maybeUpload('banner',$('#memberBannerFile'));
     const ae=$('#memberAvatarUrl').value.trim(),be=$('#memberBannerUrl').value.trim(),c=hex($('#memberColor').value);
-    const body={user_id:state.user.id,name:$('#memberName').value.trim(),display_name:$('#memberDisplayName').value.trim()||null,pronouns:$('#memberPronouns').value.trim()||null,color:c?c.slice(1).toLowerCase():null,description:$('#memberDescription').value.trim()||null,avatar_url:au?.url||ae||old?.avatar_url||null,avatar_source:au?'supabase':(ae?'external':old?.avatar_source||null),avatar_storage_path:au?.path||(ae?null:old?.avatar_storage_path||null),banner_url:bu?.url||be||old?.banner_url||null,banner_source:bu?'supabase':(be?'external':old?.banner_source||null),banner_storage_path:bu?.path||(be?null:old?.banner_storage_path||null),pk_id:old?.pk_id||null,tupper_id:old?.tupper_id||null};
+    const body={user_id:state.user.id,name:$('#memberName').value.trim(),display_name:$('#memberDisplayName').value.trim()||null,pronouns:$('#memberPronouns').value.trim()||null,color:c?c.slice(1).toLowerCase():null,description:$('#memberDescription').value.trim()||null,avatar_url:au?.url||ae||old?.avatar_url||null,avatar_source:au?'supabase':(ae?'external':old?.avatar_source||null),avatar_storage_path:au?.path||(ae?null:old?.avatar_storage_path||null),banner_url:bu?.url||be||old?.banner_url||null,banner_source:bu?'supabase':(be?'external':old?.banner_source||null),banner_storage_path:bu?.path||(be?null:old?.banner_storage_path||null),pk_id:old?.pk_id||null,tupper_id:old?.tupper_id||null,archived_at:null};
     if(!body.name)throw new Error('Name is required.');
     if(id)await nihilityApi.rest('members',{method:'PATCH',query:'id=eq.'+encodeURIComponent(id),body,prefer:'return=minimal'});else await nihilityApi.rest('members',{method:'POST',body,prefer:'return=minimal'});
     if(old?.avatar_storage_path&&old.avatar_storage_path!==body.avatar_storage_path)await safeDelete('avatar',old.avatar_storage_path);if(old?.banner_storage_path&&old.banner_storage_path!==body.banner_storage_path)await safeDelete('banner',old.banner_storage_path);
@@ -125,8 +125,12 @@ async function saveMember(e){
   }catch(error){if(au?.path)await safeDelete('avatar',au.path);if(bu?.path)await safeDelete('banner',bu.path);err.textContent=error.message;err.hidden=false}
 }
 async function deleteMember(){
-  const id=$('#memberId').value;if(!id||!confirm('Delete this Nihility member?'))return;const old=state.members.find(m=>m.id===id);
-  await nihilityApi.rest('members',{method:'DELETE',query:'id=eq.'+encodeURIComponent(id),prefer:'return=minimal'});await safeDelete('avatar',old?.avatar_storage_path);await safeDelete('banner',old?.banner_storage_path);$('#memberDialog').close();toast('Member deleted');await loadData();
+  const id=$('#memberId').value;
+  if(!id||!confirm('Archive this Nihility member? Their historical front records will be kept.'))return;
+  await nihilityApi.rest('members',{method:'PATCH',query:'id=eq.'+encodeURIComponent(id),body:{archived_at:new Date().toISOString()},prefer:'return=minimal'});
+  $('#memberDialog').close();
+  toast('Member archived','Historical front records were preserved.');
+  await loadData();
 }
 
 function buildFrontPicker(selected=[]){
@@ -169,16 +173,27 @@ async function connectPk(){
     message.textContent='Connected. Front sharing is on by default.';await loadData();
   }catch(error){nihilityApi.clearPkToken();message.textContent=error.message}
 }
-function disconnectPk(){nihilityApi.clearPkToken();$('#pkTokenInput').value='';$('#pkMessage').textContent='PluralKit disconnected on this device.';renderSettings()}
+async function disconnectPk(){
+  nihilityApi.clearPkToken();
+  $('#pkTokenInput').value='';
+  if(state.integration){
+    await nihilityApi.rest('external_integrations',{method:'PATCH',query:'provider=eq.pluralkit',body:{share_fronting_updates:false},prefer:'return=minimal'});
+    state.integration.share_fronting_updates=false;
+  }
+  $('#pkMessage').textContent='PluralKit disconnected on this device.';
+  renderSettings();
+  renderHome();
+}
 async function toggleShare(){if(!state.integration)return;const value=$('#shareFrontingToggle').checked;await nihilityApi.rest('external_integrations',{method:'PATCH',query:'provider=eq.pluralkit',body:{share_fronting_updates:value},prefer:'return=minimal'});state.integration.share_fronting_updates=value;renderHome();toast('Front sharing '+(value?'enabled':'disabled'))}
 async function importPk(){
   const message=$('#pkMessage');message.textContent='Importing members...';
   try{
     const members=await nihilityApi.pk('/systems/@me/members');
-    const rows=(members||[]).map(m=>({user_id:state.user.id,name:m.name||m.display_name||m.id,display_name:m.display_name||null,pronouns:m.pronouns||null,color:m.color||null,description:m.description||null,birthday:m.birthday||null,avatar_url:m.avatar_url||null,avatar_source:m.avatar_url?'external':null,banner_url:m.banner||null,banner_source:m.banner?'external':null,pk_id:m.id,metadata:{pk_uuid:m.uuid||null}}));
-    if(rows.length)await nihilityApi.rest('members',{method:'POST',query:'on_conflict=user_id,pk_id',body:rows,prefer:'resolution=merge-duplicates,return=minimal'});
-    await nihilityApi.rest('imports',{method:'POST',body:{user_id:state.user.id,source:'pluralkit',summary:{members:rows.length}},prefer:'return=minimal'});
-    message.textContent='Imported '+rows.length+' members. Nihility now owns its copy.';await loadData();
+    const existingPk=new Set(state.members.map(m=>m.pk_id).filter(Boolean));
+    const rows=(members||[]).filter(m=>!existingPk.has(m.id)).map(m=>({user_id:state.user.id,name:m.name||m.display_name||m.id,display_name:m.display_name||null,pronouns:m.pronouns||null,color:m.color||null,description:m.description||null,birthday:m.birthday||null,avatar_url:m.avatar_url||null,avatar_source:m.avatar_url?'external':null,banner_url:m.banner||null,banner_source:m.banner?'external':null,pk_id:m.id,metadata:{pk_uuid:m.uuid||null},archived_at:null}));
+    if(rows.length)await nihilityApi.rest('members',{method:'POST',body:rows,prefer:'return=minimal'});
+    await nihilityApi.rest('imports',{method:'POST',body:{user_id:state.user.id,source:'pluralkit',summary:{members_added:rows.length,members_skipped:(members||[]).length-rows.length}},prefer:'return=minimal'});
+    message.textContent='Imported '+rows.length+' new members. Existing Nihility copies were left unchanged.';await loadData();
   }catch(error){message.textContent=error.message}
 }
 
@@ -192,7 +207,18 @@ async function saveProfile(e){
     state.profile={...state.profile,...body};msg.textContent='Profile saved.';renderProfile();
   }catch(error){if(upload?.path)await safeDelete('profile',upload.path);msg.textContent=error.message}
 }
-async function invite(e){e.preventDefault();const msg=$('#inviteMessage');msg.textContent='Creating invite...';try{await nihilityApi.rest('account_invites',{method:'POST',body:{email:$('#inviteEmail').value.trim().toLowerCase(),invited_by:state.user.id},prefer:'return=minimal'});msg.textContent='Invite created. They can now sign in with that email.';$('#inviteForm').reset()}catch(error){msg.textContent=error.message}}
+async function invite(e){
+  e.preventDefault();
+  const msg=$('#inviteMessage');
+  const email=$('#inviteEmail').value.trim().toLowerCase();
+  msg.textContent='Creating invite...';
+  try{
+    await nihilityApi.rest('account_invites',{method:'DELETE',query:'email=eq.'+encodeURIComponent(email),prefer:'return=minimal'});
+    await nihilityApi.rest('account_invites',{method:'POST',body:{email,invited_by:state.user.id},prefer:'return=minimal'});
+    msg.textContent='Invite created. They can now sign in with that email.';
+    $('#inviteForm').reset();
+  }catch(error){msg.textContent=error.message}
+}
 
 async function boot(){
   if(!nihilityApi.configured()){setView('setup');return}
