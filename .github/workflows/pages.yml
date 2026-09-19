@@ -27,12 +27,9 @@ jobs:
           enablement: true
       - name: Build Pages artifact
         run: |
-          mkdir -p _site/assets/css _site/assets/js
+          mkdir -p _site
           cp index.html _site/
-          cp assets/css/app.css _site/assets/css/
-          cp assets/js/app.js _site/assets/js/
-          cp assets/js/api.js _site/assets/js/
-          cp assets/js/config.js _site/assets/js/
+          cp -R assets _site/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
