@@ -46,10 +46,19 @@ async function loadData(){
   ]);
   state.members=data[0]||[];state.fronts=data[1]||[];state.frontMembers=data[2]||[];state.integration=data[3]?.[0]||null;state.pkConnected=Boolean(data[4]?.connected);
   await Promise.all(state.members.map(async m=>{
-    if(m.avatar_storage_path)m.avatar_url=await nihilityApi.privateMediaUrl('avatar',m.avatar_storage_path);
-    if(m.banner_storage_path)m.banner_url=await nihilityApi.privateMediaUrl('banner',m.banner_storage_path);
+    if(m.avatar_storage_path){
+      try{m.avatar_url=await nihilityApi.privateMediaUrl('avatar',m.avatar_storage_path)}
+      catch(error){console.warn('Unable to load member avatar',m.id,error);m.avatar_url=null}
+    }
+    if(m.banner_storage_path){
+      try{m.banner_url=await nihilityApi.privateMediaUrl('banner',m.banner_storage_path)}
+      catch(error){console.warn('Unable to load member banner',m.id,error);m.banner_url=null}
+    }
   }));
-  if(state.profile?.avatar_storage_path)state.profile.avatar_url=await nihilityApi.privateMediaUrl('profile',state.profile.avatar_storage_path);
+  if(state.profile?.avatar_storage_path){
+    try{state.profile.avatar_url=await nihilityApi.privateMediaUrl('profile',state.profile.avatar_storage_path)}
+    catch(error){console.warn('Unable to load profile avatar',error);state.profile.avatar_url=null}
+  }
   renderAll();
 }
 function renderAll(){renderHeader();renderHome();renderMembers();renderHistory();renderSettings();renderProfile()}
