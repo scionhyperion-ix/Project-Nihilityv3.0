@@ -1,7 +1,7 @@
 'use strict';
 (function(){
   const cfg=window.NIHILITY_CONFIG||{};
-  const SESSION_KEY='nihility_supabase_session',PK_LOCAL='nihility_pk_token',PK_SESSION='nihility_pk_token_session';
+  const SESSION_KEY='nihility_supabase_session';
   const BUCKETS={avatar:'nihility-avatars',banner:'nihility-banners',profile:'nihility-profile-avatars'};
   const configured=()=>Boolean(cfg.SUPABASE_URL&&cfg.SUPABASE_ANON_KEY);
   const getSession=()=>{try{return JSON.parse(sessionStorage.getItem(SESSION_KEY)||'null')}catch{return null}};
@@ -36,9 +36,22 @@
     return URL.createObjectURL(blob);
   }
   async function deleteMedia(kind,path){if(!path)return;const bucket=BUCKETS[kind];if(!bucket)return;const s=await refresh();if(!s?.access_token)return;const r=await fetch(cfg.SUPABASE_URL+'/storage/v1/object/'+encodeURIComponent(bucket)+'/'+encPath(path),{method:'DELETE',headers:{apikey:cfg.SUPABASE_ANON_KEY,Authorization:'Bearer '+s.access_token}});if(!r.ok&&r.status!==404)throw new Error('Unable to delete stored media.')}
-  function getPkToken(){return localStorage.getItem(PK_LOCAL)||sessionStorage.getItem(PK_SESSION)||''}
-  function savePkToken(token,persistent){localStorage.removeItem(PK_LOCAL);sessionStorage.removeItem(PK_SESSION);if(persistent)localStorage.setItem(PK_LOCAL,token);else sessionStorage.setItem(PK_SESSION,token)}
-  function clearPkToken(){localStorage.removeItem(PK_LOCAL);sessionStorage.removeItem(PK_SESSION)}
-  async function pk(path,{method='GET',body}={}){const token=getPkToken();if(!token)throw new Error('PluralKit is not connected on this device.');const r=await fetch('https://api.pluralkit.me/v2'+path,{method,headers:{Authorization:token,'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});const text=await r.text();let data=null;try{data=text?JSON.parse(text):null}catch{data=text}if(!r.ok)throw new Error(data?.message||data?.error||'PluralKit request failed.');return data}
-  window.nihilityApi={configured,getSession,saveSession,sendMagicLink,readSessionFromUrl,refresh,user,rest,rpc,upload,privateMediaUrl,deleteMedia,getPkToken,savePkToken,clearPkToken,pk};
+  async function secure(action,payload={}){
+    const s=await refresh();
+    if(!s?.access_token)throw new Error('You are signed out.');
+    const r=await fetch(cfg.SUPABASE_URL+'/functions/v1/nihility-secure',{
+      method:'POST',
+      headers:{
+        apikey:cfg.SUPABASE_ANON_KEY,
+        Authorization:'Bearer '+s.access_token,
+        'Content-Type':'application/json'
+      },
+      body:JSON.stringify({action,...payload})
+    });
+    const data=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(data?.error||data?.message||'Secure request failed.');
+    return data;
+  }
+
+  window.nihilityApi={configured,getSession,saveSession,sendMagicLink,readSessionFromUrl,refresh,user,rest,rpc,upload,privateMediaUrl,deleteMedia,secure};
 })();
