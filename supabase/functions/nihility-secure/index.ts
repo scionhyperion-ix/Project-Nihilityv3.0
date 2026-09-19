@@ -242,7 +242,7 @@ async function actionImportPkGroups(user:any){
   }
 
   let metadataUpdated=0;
-  const localByPk=new Map((localMembers||[]).filter((m:any)=>m.pk_id).map((m:any)=>[String(m.pk_id),m]));
+  const localByPk=new Map<string,any>((localMembers||[]).filter((m:any)=>m.pk_id).map((m:any)=>[String(m.pk_id),m]));
   for(const pm of pkMembers||[]){
     const local=localByPk.get(String(pm.id));
     if(!local)continue;
