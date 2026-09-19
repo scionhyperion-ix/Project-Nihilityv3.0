@@ -124,7 +124,7 @@
             <p id="pkMessage" class="form-message"></p>
           </article>
 
-          <article class="panel section-panel"><p class="eyebrow">Data ownership</p><h3>Nihility is primary</h3><div class="prose-stack"><p>Imported members become independent Nihility records.</p><p>Editing a Nihility member does not rewrite PluralKit or Tupperbox.</p><p>Front sharing is the only automatic external update currently supported.</p></div></article>
+          <article class="panel section-panel"><p class="eyebrow">Data ownership</p><h3>Nihility is primary</h3><div class="prose-stack"><p>Imported members become independent Nihility records. Re-importing does not overwrite existing Nihility copies.</p><p>Editing a Nihility member does not rewrite PluralKit or Tupperbox.</p><p>Front sharing is the only automatic external update currently supported.</p></div></article>
           <article class="panel section-panel"><p class="eyebrow">Storage</p><h3>Supabase</h3><dl class="detail-list"><div><dt>Avatar upload</dt><dd>2 MB max</dd></div><div><dt>Banner upload</dt><dd>5 MB max</dd></div><div><dt>External links</dt><dd>Stored as URLs</dd></div></dl></article>
         </div>
       </section>
@@ -166,7 +166,7 @@
       <label>Description<textarea id="memberDescription" maxlength="4000" rows="5"></textarea></label>
       <div class="media-section"><div><p class="eyebrow">Profile picture</p><label>External URL<input id="memberAvatarUrl" type="url"></label><label>Or upload<input id="memberAvatarFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label><small>Maximum 2 MB.</small></div><div><p class="eyebrow">Banner</p><label>External URL<input id="memberBannerUrl" type="url"></label><label>Or upload<input id="memberBannerFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label><small>Maximum 5 MB.</small></div></div>
       <p id="memberError" class="form-error" hidden></p>
-      <div class="modal-footer modal-footer-split"><button id="deleteMemberButton" class="text-button danger-text" type="button" hidden>Delete</button><div><button id="cancelMemberButton" class="secondary-button" type="button">Cancel</button><button class="primary-button" type="submit">Save member</button></div></div>
+      <div class="modal-footer modal-footer-split"><button id="deleteMemberButton" class="text-button danger-text" type="button" hidden>Archive</button><div><button id="cancelMemberButton" class="secondary-button" type="button">Cancel</button><button class="primary-button" type="submit">Save member</button></div></div>
     </form>
   </dialog>
 
