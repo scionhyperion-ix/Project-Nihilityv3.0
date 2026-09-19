@@ -1,0 +1,165 @@
+/* Additional Rainbow appearance themes and brighter prismatic treatment. */
+
+:root[data-theme="rainbow"] {
+  --bg: #120d18;
+  --panel: rgba(39, 27, 43, .94);
+  --text: #fff7fd;
+  --muted: #c1aec0;
+  --accent: #e58bb6;
+  --accent-2: #bca7f1;
+  --accent-soft: rgba(229, 139, 182, .17);
+  --theme-surface-1: #302233;
+  --theme-surface-2: #211922;
+  --theme-surface-hover: #3b2940;
+  --theme-input: #19121c;
+  --theme-glow-1: rgba(224, 102, 165, .24);
+  --theme-glow-2: rgba(105, 146, 230, .20);
+  --theme-button-1: #ea91b7;
+  --theme-button-2: #83b6e8;
+  --theme-button-text: #160f19;
+  --theme-banner-1: rgba(222, 104, 164, .45);
+  --theme-banner-2: rgba(107, 156, 226, .31);
+}
+
+:root[data-theme="cherry"] {
+  --bg: #15090d;
+  --panel: rgba(47, 20, 28, .93);
+  --text: #fff5f6;
+  --muted: #c4a3a8;
+  --accent: #e76f86;
+  --accent-2: #ffabb8;
+  --accent-soft: rgba(231, 111, 134, .15);
+  --theme-surface-1: #351821;
+  --theme-surface-2: #251017;
+  --theme-surface-hover: #421e29;
+  --theme-input: #1b0b10;
+  --theme-glow-1: rgba(206, 58, 88, .22);
+  --theme-glow-2: rgba(239, 102, 123, .11);
+  --theme-button-1: #ee8799;
+  --theme-button-2: #cf526d;
+  --theme-button-text: #18090e;
+  --theme-banner-1: rgba(211, 69, 96, .44);
+  --theme-banner-2: rgba(244, 126, 144, .20);
+}
+
+:root[data-theme="sunset"] {
+  --bg: #160d0b;
+  --panel: rgba(48, 28, 24, .93);
+  --text: #fff7f1;
+  --muted: #c5aa9e;
+  --accent: #ed936f;
+  --accent-2: #ffc09d;
+  --accent-soft: rgba(237, 147, 111, .15);
+  --theme-surface-1: #36211d;
+  --theme-surface-2: #261612;
+  --theme-surface-hover: #442921;
+  --theme-input: #1b0f0d;
+  --theme-glow-1: rgba(218, 93, 63, .21);
+  --theme-glow-2: rgba(238, 150, 84, .12);
+  --theme-button-1: #f0a17d;
+  --theme-button-2: #dc7658;
+  --theme-button-text: #180c09;
+  --theme-banner-1: rgba(222, 105, 72, .43);
+  --theme-banner-2: rgba(244, 169, 105, .20);
+}
+
+:root[data-theme="lagoon"] {
+  --bg: #061316;
+  --panel: rgba(15, 40, 43, .93);
+  --text: #f1fcfb;
+  --muted: #9fbdbb;
+  --accent: #5bc9c1;
+  --accent-2: #91e4dc;
+  --accent-soft: rgba(91, 201, 193, .14);
+  --theme-surface-1: #102c2f;
+  --theme-surface-2: #0a1f22;
+  --theme-surface-hover: #17383b;
+  --theme-input: #081719;
+  --theme-glow-1: rgba(45, 169, 165, .20);
+  --theme-glow-2: rgba(79, 199, 211, .11);
+  --theme-button-1: #76d8cf;
+  --theme-button-2: #48afa9;
+  --theme-button-text: #061312;
+  --theme-banner-1: rgba(55, 178, 171, .41);
+  --theme-banner-2: rgba(99, 214, 207, .19);
+}
+
+:root[data-theme="iris"] {
+  --bg: #0b0b18;
+  --panel: rgba(27, 27, 53, .94);
+  --text: #f7f6ff;
+  --muted: #aaaac7;
+  --accent: #8793ed;
+  --accent-2: #b6bdfb;
+  --accent-soft: rgba(135, 147, 237, .15);
+  --theme-surface-1: #202142;
+  --theme-surface-2: #16172f;
+  --theme-surface-hover: #292b53;
+  --theme-input: #101124;
+  --theme-glow-1: rgba(89, 99, 205, .22);
+  --theme-glow-2: rgba(155, 128, 225, .11);
+  --theme-button-1: #9da6f4;
+  --theme-button-2: #727fdc;
+  --theme-button-text: #0c0d19;
+  --theme-banner-1: rgba(106, 116, 218, .43);
+  --theme-banner-2: rgba(160, 145, 238, .19);
+}
+
+/* Rainbow is deliberately more colorful than the single-hue themes, while
+   keeping dark surfaces so the rest of Rainbow's visual language stays intact. */
+:root[data-theme="rainbow"] body {
+  background:
+    radial-gradient(circle at 8% 9%, rgba(234, 92, 157, .25), transparent 25rem),
+    radial-gradient(circle at 42% 2%, rgba(178, 113, 226, .16), transparent 24rem),
+    radial-gradient(circle at 91% 13%, rgba(88, 153, 232, .23), transparent 27rem),
+    radial-gradient(circle at 82% 89%, rgba(69, 181, 164, .15), transparent 26rem),
+    radial-gradient(circle at 16% 92%, rgba(221, 167, 76, .11), transparent 24rem),
+    var(--bg);
+}
+
+:root[data-theme="rainbow"] .primary-button {
+  background: linear-gradient(112deg,
+    #eb8eaf 0%,
+    #c58ee9 27%,
+    #82a8ed 53%,
+    #70c4b8 78%,
+    #dfb76c 100%);
+}
+
+:root[data-theme="rainbow"] .fallback-avatar {
+  background: linear-gradient(135deg,
+    rgba(233, 121, 170, .52),
+    rgba(167, 125, 226, .43) 33%,
+    rgba(102, 161, 226, .40) 60%,
+    rgba(92, 190, 169, .34));
+}
+
+:root[data-theme="rainbow"] .system-banner,
+:root[data-theme="rainbow"] .member-preview-banner-fallback {
+  background:
+    radial-gradient(circle at 13% 27%, rgba(235, 103, 164, .39), transparent 36%),
+    radial-gradient(circle at 47% 12%, rgba(178, 115, 226, .27), transparent 34%),
+    radial-gradient(circle at 84% 24%, rgba(91, 155, 230, .36), transparent 40%),
+    linear-gradient(118deg, rgba(141, 73, 118, .55), rgba(86, 81, 143, .46), rgba(55, 120, 118, .37));
+}
+
+:root[data-theme="rainbow"] .theme-option.selected {
+  border-color: rgba(226, 139, 190, .72);
+  background: linear-gradient(120deg, rgba(229, 139, 182, .15), rgba(113, 161, 224, .11));
+}
+
+.theme-swatch-rainbow {
+  background: linear-gradient(110deg, #ec8aaa, #c98fe7 27%, #7ea8ed 53%, #69c2b6 77%, #dfb469) !important;
+}
+
+.theme-swatch-cherry { background: linear-gradient(135deg, #ee8799, #b93f5a); }
+.theme-swatch-sunset { background: linear-gradient(135deg, #f0a17d, #c85f45); }
+.theme-swatch-lagoon { background: linear-gradient(135deg, #76d8cf, #319994); }
+.theme-swatch-iris { background: linear-gradient(135deg, #9da6f4, #626fc9); }
+
+/* Ten themes settle into five columns on wide screens and two neat rows. */
+@media (min-width: 1180px) {
+  .theme-options {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
