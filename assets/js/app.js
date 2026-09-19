@@ -17,7 +17,7 @@ function relative(ts){if(!ts)return'';const d=Date.now()-new Date(ts).getTime(),
 function duration(ts){if(!ts)return'--';const sec=Math.max(0,Math.floor((Date.now()-new Date(ts).getTime())/1000)),h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60);return h?(h+'h '+m+'m'):(m+'m')}
 function avatarEl(item,cls='member-card-avatar'){if(item?.avatar_url){const img=document.createElement('img');img.className=cls;img.src=item.avatar_url;img.alt='';return img}const d=document.createElement('div');d.className=cls+' fallback-avatar';d.textContent=initial(label(item));return d}
 
-function setView(name){$('#setupView').hidden=name!=='setup';$('#loginView').hidden=name!=='login';$('#deniedView').hidden=name!=='denied';$('#appView').hidden=name!=='app'}
+function setView(name){$('#setupView').hidden=name!=='setup';$('#loginView').hidden=name!=='login';$('#resetView').hidden=name!=='reset';$('#deniedView').hidden=name!=='denied';$('#appView').hidden=name!=='app'}
 function setRoute(route){
   state.route=route;
   const meta={home:['Overview','Home'],members:['System directory','Members'],history:['Front tracking','Front history'],settings:['Connection and privacy','Settings'],profile:['Account','Profile']};
