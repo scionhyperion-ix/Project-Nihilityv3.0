@@ -27,7 +27,13 @@
     if(!path)return null;
     const bucket=BUCKETS[kind];if(!bucket)throw new Error('Unknown media type.');
     const s=await refresh();if(!s?.access_token)throw new Error('You are signed out.');
-    return cfg.SUPABASE_URL+'/storage/v1/object/authenticated/'+encodeURIComponent(bucket)+'/'+encPath(path)+'?token='+encodeURIComponent(s.access_token);
+    const response=await fetch(
+      cfg.SUPABASE_URL+'/storage/v1/object/authenticated/'+encodeURIComponent(bucket)+'/'+encPath(path),
+      {headers:{apikey:cfg.SUPABASE_ANON_KEY,Authorization:'Bearer '+s.access_token}}
+    );
+    if(!response.ok)throw new Error('Unable to load private media.');
+    const blob=await response.blob();
+    return URL.createObjectURL(blob);
   }
   async function deleteMedia(kind,path){if(!path)return;const bucket=BUCKETS[kind];if(!bucket)return;const s=await refresh();if(!s?.access_token)return;const r=await fetch(cfg.SUPABASE_URL+'/storage/v1/object/'+encodeURIComponent(bucket)+'/'+encPath(path),{method:'DELETE',headers:{apikey:cfg.SUPABASE_ANON_KEY,Authorization:'Bearer '+s.access_token}});if(!r.ok&&r.status!==404)throw new Error('Unable to delete stored media.')}
   function getPkToken(){return localStorage.getItem(PK_LOCAL)||sessionStorage.getItem(PK_SESSION)||''}
