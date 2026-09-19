@@ -1,0 +1,178 @@
+/* Mobile-only Connected System redesign */
+@media (max-width: 760px) {
+  #homeRoute .system-summary-panel {
+    overflow: hidden;
+    min-height: 0 !important;
+    padding-bottom: 12px;
+  }
+
+  #homeRoute .system-summary-panel .system-banner {
+    height: 82px !important;
+    background-position: center;
+  }
+
+  /* Simple profile row below the banner. */
+  #homeRoute .system-summary-panel .system-summary-content {
+    position: static !important;
+    display: grid !important;
+    grid-template-columns: 52px minmax(0, 1fr);
+    align-items: center;
+    gap: 11px;
+    margin: 0 !important;
+    padding: 12px 14px 11px !important;
+    transform: none !important;
+  }
+
+  #homeRoute .system-summary-panel .system-avatar.large {
+    width: 52px !important;
+    height: 52px !important;
+    min-width: 52px;
+    border-radius: 15px !important;
+    align-self: center;
+  }
+
+  #homeRoute .system-summary-panel .system-summary-content > div:last-child {
+    min-width: 0;
+    padding: 0 !important;
+  }
+
+  #homeRoute .system-summary-panel .system-summary-content .eyebrow {
+    margin: 0 0 3px;
+    font-size: .58rem;
+    line-height: 1.15;
+  }
+
+  #homeRoute .system-summary-panel .system-summary-content h3 {
+    margin: 0;
+    max-width: 100%;
+    font-size: .96rem !important;
+    line-height: 1.18;
+    overflow-wrap: anywhere;
+  }
+
+  #homeRoute .system-summary-panel .system-summary-content .muted {
+    margin: 4px 0 0;
+    font-size: .68rem !important;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+
+  /* Mobile stats become three compact tiles instead of one segmented strip. */
+  #homeRoute .system-summary-panel .stats-row {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    margin: 0 !important;
+    padding: 0 12px 10px;
+    border-top: 0 !important;
+  }
+
+  #homeRoute .system-summary-panel .stats-row > div {
+    min-width: 0;
+    padding: 9px 4px !important;
+    border: 1px solid var(--line) !important;
+    border-radius: 11px;
+    background: color-mix(in srgb, var(--theme-surface-1) 68%, transparent);
+    text-align: center;
+  }
+
+  #homeRoute .system-summary-panel .stats-row > div + div {
+    border-left: 1px solid var(--line) !important;
+  }
+
+  #homeRoute .system-summary-panel .stats-row strong,
+  #homeRoute .system-summary-panel .stats-row span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  #homeRoute .system-summary-panel .stats-row strong {
+    font-size: .84rem !important;
+    line-height: 1.15;
+  }
+
+  #homeRoute .system-summary-panel .stats-row span {
+    margin-top: 2px;
+    font-size: .56rem !important;
+    line-height: 1.15;
+    white-space: nowrap;
+  }
+
+  /* Top fronter becomes a compact final section. */
+  #homeRoute .system-summary-panel .top-fronter-section {
+    margin: 0 12px !important;
+    padding: 10px 11px !important;
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--theme-surface-1) 68%, transparent);
+  }
+
+  #homeRoute .system-summary-panel .top-fronter-eyebrow {
+    margin: 0 0 7px;
+    font-size: .57rem;
+  }
+
+  #homeRoute .system-summary-panel .top-fronter-row {
+    gap: 9px;
+  }
+
+  #homeRoute .system-summary-panel .top-fronter-avatar {
+    width: 38px !important;
+    height: 38px !important;
+    flex-basis: 38px !important;
+    border-radius: 10px !important;
+  }
+
+  #homeRoute .system-summary-panel .top-fronter-copy {
+    gap: 2px;
+  }
+
+  #homeRoute .system-summary-panel .top-fronter-copy strong {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    font-size: .76rem;
+    line-height: 1.2;
+  }
+
+  #homeRoute .system-summary-panel .top-fronter-copy span {
+    font-size: .63rem;
+    line-height: 1.2;
+  }
+}
+
+@media (max-width: 390px) {
+  #homeRoute .system-summary-panel .system-banner {
+    height: 74px !important;
+  }
+
+  #homeRoute .system-summary-panel .system-summary-content {
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: 9px;
+    padding: 10px 11px !important;
+  }
+
+  #homeRoute .system-summary-panel .system-avatar.large {
+    width: 48px !important;
+    height: 48px !important;
+    min-width: 48px;
+    border-radius: 14px !important;
+  }
+
+  #homeRoute .system-summary-panel .system-summary-content h3 {
+    font-size: .9rem !important;
+  }
+
+  #homeRoute .system-summary-panel .stats-row {
+    gap: 5px;
+    padding-inline: 10px;
+  }
+
+  #homeRoute .system-summary-panel .stats-row > div {
+    padding: 8px 3px !important;
+  }
+
+  #homeRoute .system-summary-panel .top-fronter-section {
+    margin-inline: 10px !important;
+  }
+}

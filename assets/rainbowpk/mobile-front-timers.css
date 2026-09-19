@@ -1,0 +1,88 @@
+/* Mobile-only current front timer alignment */
+@media (max-width: 760px) {
+  .current-front-members .front-person {
+    display: grid !important;
+    grid-template-columns: 38px minmax(0, 1fr);
+    align-items: center;
+  }
+
+  .current-front-members .front-person > .member-chip-avatar,
+  .current-front-members .front-person > img {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: center;
+  }
+
+  .current-front-members .front-person-copy {
+    grid-column: 2;
+    min-width: 0;
+    width: 100%;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    column-gap: 10px;
+    row-gap: 2px;
+    align-items: center;
+  }
+
+  .current-front-members .front-person-copy > strong {
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .current-front-members .front-person-copy > small {
+    grid-column: 1;
+    grid-row: 2;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .current-front-members .front-member-timing {
+    grid-column: 2;
+    grid-row: 1 / 3;
+    margin: 0 !important;
+    display: grid !important;
+    justify-items: end;
+    align-content: center;
+    gap: 4px;
+    flex-wrap: nowrap !important;
+  }
+
+  .current-front-members .front-member-timer {
+    min-width: 78px;
+    width: 78px;
+    justify-content: center;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  .current-front-members .front-member-since {
+    max-width: 100px;
+    text-align: right;
+    line-height: 1.25;
+    white-space: normal;
+  }
+}
+
+@media (max-width: 390px) {
+  .current-front-members .front-person-copy {
+    column-gap: 7px;
+  }
+
+  .current-front-members .front-member-timer {
+    min-width: 72px;
+    width: 72px;
+    font-size: .64rem;
+  }
+
+  .current-front-members .front-member-since {
+    max-width: 86px;
+    font-size: .61rem;
+  }
+}

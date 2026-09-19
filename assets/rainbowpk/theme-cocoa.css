@@ -1,0 +1,48 @@
+/* Cocoa appearance theme, a warm neutral alternative to violet Iris. */
+
+:root[data-theme="cocoa"] {
+  --bg: #100c0b;
+  --panel: rgba(39, 30, 27, .94);
+  --text: #fbf5ef;
+  --muted: #b8a79c;
+  --accent: #c89b7c;
+  --accent-2: #e1c5ae;
+  --accent-soft: rgba(200, 155, 124, .14);
+  --theme-surface-1: #2c211e;
+  --theme-surface-2: #1f1715;
+  --theme-surface-hover: #382925;
+  --theme-input: #17100f;
+  --theme-glow-1: rgba(151, 96, 70, .19);
+  --theme-glow-2: rgba(188, 144, 112, .10);
+  --theme-button-1: #d5aa8b;
+  --theme-button-2: #ae795d;
+  --theme-button-text: #140d0b;
+  --theme-banner-1: rgba(154, 94, 70, .41);
+  --theme-banner-2: rgba(215, 171, 135, .18);
+}
+
+:root[data-theme="cocoa"] body {
+  background:
+    radial-gradient(circle at 10% 9%, rgba(155, 94, 68, .19), transparent 28rem),
+    radial-gradient(circle at 88% 12%, rgba(201, 157, 122, .10), transparent 30rem),
+    var(--bg);
+}
+
+:root[data-theme="cocoa"] .primary-button {
+  background: linear-gradient(135deg, #d7ad8f, #ad785c);
+}
+
+:root[data-theme="cocoa"] .fallback-avatar {
+  background: linear-gradient(135deg, rgba(195, 142, 107, .38), rgba(230, 198, 172, .18));
+}
+
+:root[data-theme="cocoa"] .system-banner,
+:root[data-theme="cocoa"] .member-preview-banner-fallback {
+  background:
+    radial-gradient(circle at 20% 28%, rgba(211, 157, 120, .24), transparent 40%),
+    linear-gradient(135deg, rgba(125, 74, 57, .44), rgba(77, 51, 44, .36));
+}
+
+.theme-swatch-cocoa {
+  background: linear-gradient(135deg, #d7ad8f, #9e654e) !important;
+}

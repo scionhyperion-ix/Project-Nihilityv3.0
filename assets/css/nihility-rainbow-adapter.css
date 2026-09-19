@@ -1,0 +1,38 @@
+/* Nihility-only pieces layered on top of the unmodified RainbowPK web CSS. */
+.form-message{min-height:1.2em;color:var(--muted);font-size:.84rem}
+.form-message:empty{display:none}
+.sidebar-account{width:100%;color:inherit;background:transparent;border:0;border-top:1px solid var(--line);cursor:pointer;text-align:left}
+.profile-layout{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(300px,.65fr);gap:18px}
+.profile-card{overflow:hidden}
+.profile-banner{height:150px;background:radial-gradient(circle at 18% 25%,var(--theme-banner-2),transparent 35%),linear-gradient(135deg,var(--theme-banner-1),var(--theme-surface-2))}
+.profile-main{display:flex;gap:16px;align-items:center;padding:0 24px;transform:translateY(-34px)}
+.profile-avatar{width:86px;height:86px;border-radius:24px;border:4px solid var(--theme-surface-2)}
+.profile-form{display:grid;gap:14px;padding:0 24px 24px;margin-top:-12px}
+.toggle-row{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:14px 0;border-top:1px solid var(--line)}
+.toggle-row span{display:grid;gap:3px}.toggle-row small{color:var(--muted);font-weight:450}.toggle-row input{width:20px;height:20px;accent-color:var(--accent)}
+.button-row{display:flex;gap:10px;flex-wrap:wrap}
+.stack{display:grid;gap:13px}
+.media-section{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+.media-section>div{padding:14px;border:1px solid var(--line);border-radius:14px;display:grid;gap:10px}
+.color-row{display:grid;grid-template-columns:48px 1fr;gap:8px}.color-row input[type=color]{padding:3px}
+.theme-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
+.theme-option{position:relative;min-width:0;padding:11px;display:grid;grid-template-columns:48px minmax(0,1fr) auto;gap:10px;align-items:center;color:var(--text);text-align:left;border:1px solid var(--line);border-radius:14px;background:color-mix(in srgb,var(--theme-surface-1) 72%,transparent);cursor:pointer}
+.theme-option:hover{transform:translateY(-1px);border-color:var(--line-strong);background:var(--theme-surface-hover)}
+.theme-option.selected{border-color:color-mix(in srgb,var(--accent) 62%,white 6%);background:var(--accent-soft)}
+.theme-swatch{width:48px;height:38px;border-radius:11px;border:1px solid rgba(255,255,255,.12)}
+.theme-option-copy{min-width:0;display:grid;gap:3px}.theme-option-copy strong{font-size:.85rem}.theme-option-copy small{color:var(--muted);font-size:.71rem}
+.theme-check{width:23px;height:23px;display:grid;place-items:center;border-radius:999px;color:transparent;background:rgba(255,255,255,.04);border:1px solid var(--line);font-size:.75rem;font-weight:900}
+.theme-option.selected .theme-check{color:var(--theme-button-text);background:var(--accent);border-color:transparent}
+.theme-swatch-twilight{background:linear-gradient(135deg,#ad9cff,#7768db)}
+.theme-swatch-rainbow{background:linear-gradient(110deg,#ec8aaa,#c98fe7 27%,#7ea8ed 53%,#69c2b6 77%,#dfb469)}
+.theme-swatch-ocean{background:linear-gradient(135deg,#75caf8,#348fc9)}
+.theme-swatch-rose{background:linear-gradient(135deg,#f2a0c2,#c75d8e)}
+.theme-swatch-forest{background:linear-gradient(135deg,#83deb4,#429b73)}
+.theme-swatch-amber{background:linear-gradient(135deg,#efc277,#bd7f31)}
+.theme-swatch-cherry{background:linear-gradient(135deg,#ee8799,#b93f5a)}
+.theme-swatch-sunset{background:linear-gradient(135deg,#f0a17d,#c85f45)}
+.theme-swatch-lagoon{background:linear-gradient(135deg,#76d8cf,#319994)}
+.theme-swatch-cocoa{background:linear-gradient(135deg,#d7ad8f,#9e654e)}
+@media(max-width:900px){.profile-layout{grid-template-columns:1fr}}
+@media(max-width:760px){.media-section{grid-template-columns:1fr}.theme-options{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:450px){.theme-options{grid-template-columns:1fr}}

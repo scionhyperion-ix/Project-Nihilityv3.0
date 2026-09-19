@@ -1,0 +1,64 @@
+/* Keep the active appearance theme fixed to the viewport, not the route height.
+   Long routes such as Members can be many screens tall, so percentage-based
+   gradient positions on the app shell itself would drift as content grows. */
+
+#appView.app-shell {
+  position: relative;
+  isolation: isolate;
+  background: var(--bg) !important;
+  background-color: var(--bg) !important;
+}
+
+#appView.app-shell::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 12vw 8vh, var(--theme-glow-1), transparent 28rem),
+    radial-gradient(circle at 88vw 12vh, var(--theme-glow-2), transparent 30rem),
+    var(--bg);
+}
+
+/* Rainbow keeps a fuller prismatic canvas, but every glow is anchored with
+   viewport units so 5 members and 594 members produce the same visible color. */
+:root[data-theme="rainbow"] #appView.app-shell::before {
+  background:
+    radial-gradient(circle at 8vw 9vh, rgba(234, 92, 157, .25), transparent 25rem),
+    radial-gradient(circle at 42vw 2vh, rgba(178, 113, 226, .16), transparent 24rem),
+    radial-gradient(circle at 91vw 13vh, rgba(88, 153, 232, .23), transparent 27rem),
+    radial-gradient(circle at 82vw 89vh, rgba(69, 181, 164, .15), transparent 26rem),
+    radial-gradient(circle at 16vw 92vh, rgba(221, 167, 76, .11), transparent 24rem),
+    var(--bg);
+}
+
+/* Keep app content above the fixed theme canvas without changing the sidebar's
+   sticky positioning or the mobile nav's own positioning rules. */
+#appView > .main-column {
+  position: relative;
+  z-index: 1;
+}
+
+#appView > .sidebar {
+  z-index: 10;
+}
+
+#appView > .mobile-nav {
+  z-index: 20;
+}
+
+#appView > .sidebar,
+#appView > .main-column,
+#appView .topbar {
+  background-color: transparent !important;
+}
+
+/* Members must never paint a route-wide canvas of its own. */
+#appView #membersRoute {
+  background: transparent !important;
+  background-color: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
