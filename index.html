@@ -18,6 +18,7 @@
   <link rel="stylesheet" href="assets/rainbowpk/member-color-picker.css?v=1">
   <link rel="stylesheet" href="assets/rainbowpk/app-theme-shell.css?v=1">
   <link rel="stylesheet" href="assets/css/nihility-rainbow-adapter.css?v=1">
+  <link rel="stylesheet" href="assets/css/nihility-editors.css?v=1">
   <link rel="stylesheet" href="assets/rainbowpk/member-sort.css?v=1">
   <link rel="stylesheet" href="assets/rainbowpk/member-view-menu.css?v=1">
   <link rel="stylesheet" href="assets/rainbowpk/groups-route.css?v=1">
@@ -173,15 +174,98 @@
     </nav>
   </div>
 
-  <dialog id="memberDialog" class="modal-dialog">
-    <form id="memberForm" class="modal-card">
-      <div class="modal-heading"><div><p class="eyebrow">Member</p><h3 id="memberDialogTitle">New member</h3></div><button id="closeMemberDialog" class="icon-button" type="button">×</button></div>
+  <dialog id="memberDialog" class="modal-dialog member-editor-dialog">
+    <form id="memberForm" class="modal-card member-editor-card">
+      <div class="modal-heading member-editor-heading">
+        <div>
+          <p class="eyebrow">Nihility member</p>
+          <h3 id="memberDialogTitle">Edit member</h3>
+          <p class="muted member-editor-subtitle">Edit the profile with a live preview. Changes stay in Nihility unless you explicitly use PluralKit sharing features.</p>
+        </div>
+        <button id="closeMemberDialog" class="icon-button" type="button" aria-label="Close">×</button>
+      </div>
+
       <input id="memberId" type="hidden">
-      <div class="form-grid two-col"><label>Name<input id="memberName" maxlength="100" required></label><label>Display name<input id="memberDisplayName" maxlength="100"></label><label>Pronouns<input id="memberPronouns" maxlength="100"></label><label>Color<div class="color-row"><input id="memberColorPicker" type="color" value="#8b7cf6"><input id="memberColor" maxlength="7" placeholder="#8B7CF6"></div></label></div>
-      <label>Description<textarea id="memberDescription" maxlength="4000" rows="5"></textarea></label>
-      <div class="media-section"><div><p class="eyebrow">Profile picture</p><label>External URL<input id="memberAvatarUrl" type="url"></label><label>Or upload<input id="memberAvatarFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label><small>Maximum 2 MB.</small></div><div><p class="eyebrow">Banner</p><label>External URL<input id="memberBannerUrl" type="url"></label><label>Or upload<input id="memberBannerFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label><small>Maximum 5 MB.</small></div></div>
-      <p id="memberError" class="form-error" hidden></p>
-      <div class="modal-footer modal-footer-split"><button id="deleteMemberButton" class="text-button danger-text" type="button" hidden>Archive</button><div><button id="cancelMemberButton" class="secondary-button" type="button">Cancel</button><button class="primary-button" type="submit">Save member</button></div></div>
+
+      <div class="member-editor-layout">
+        <aside class="member-live-preview" aria-label="Member profile preview">
+          <div class="member-preview-banner">
+            <img id="memberPreviewBanner" alt="" hidden>
+            <div id="memberPreviewBannerFallback" class="member-preview-banner-fallback"></div>
+          </div>
+
+          <div class="member-preview-body">
+            <div class="member-preview-avatar-wrap">
+              <img id="memberPreviewAvatar" class="member-preview-avatar" alt="" hidden>
+              <div id="memberPreviewAvatarFallback" class="member-preview-avatar fallback-avatar">M</div>
+            </div>
+            <div id="memberPreviewColor" class="member-preview-color"></div>
+            <h4 id="memberPreviewName">Member name</h4>
+            <p id="memberPreviewSubname" class="member-preview-subname">Nihility member</p>
+            <p id="memberPreviewPronouns" class="member-preview-pronouns"></p>
+            <p id="memberPreviewBirthday" class="member-preview-birthday"></p>
+            <p id="memberPreviewDescription" class="member-preview-description">No description yet.</p>
+          </div>
+
+          <div class="member-preview-hint">
+            <strong>Private media supported</strong>
+            <span>Upload an image or paste an HTTPS link. Nihility copies external images into private storage.</span>
+          </div>
+        </aside>
+
+        <section class="member-editor-fields">
+          <div id="memberFieldsStage">
+            <div class="editor-section-heading">
+              <span>Profile details</span>
+              <small>Name, display identity, birthday and member color.</small>
+            </div>
+
+            <div class="form-grid two-col">
+              <label>Name<input id="memberName" maxlength="100" required></label>
+              <label>Display name<input id="memberDisplayName" maxlength="100"></label>
+              <label>Pronouns<input id="memberPronouns" maxlength="100"></label>
+              <label>Birthday<input id="memberBirthday" type="date"></label>
+              <label class="member-color-field">Color
+                <div class="member-color-control">
+                  <input id="memberColorPicker" class="member-color-picker" type="color" value="#8b7cf6" aria-label="Member color picker">
+                  <input id="memberColor" class="member-color-hex" maxlength="7" placeholder="#8B7CF6">
+                </div>
+              </label>
+            </div>
+
+            <div class="editor-section-heading media-heading">
+              <span>Profile images</span>
+              <small>Choose an upload or paste a link for each image.</small>
+            </div>
+
+            <div class="member-media-editor">
+              <section class="member-media-card">
+                <div><strong>Profile picture</strong><small>Square images work best.</small></div>
+                <label>External URL<input id="memberAvatarUrl" type="url" placeholder="https://..."></label>
+                <label class="file-drop-field">Upload image<input id="memberAvatarFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label>
+                <small>Maximum 2 MB.</small>
+              </section>
+              <section class="member-media-card">
+                <div><strong>Banner</strong><small>Wide images work best.</small></div>
+                <label>External URL<input id="memberBannerUrl" type="url" placeholder="https://..."></label>
+                <label class="file-drop-field">Upload image<input id="memberBannerFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label>
+                <small>Maximum 5 MB.</small>
+              </section>
+            </div>
+
+            <label class="description-field">Description<textarea id="memberDescription" maxlength="4000" rows="6"></textarea></label>
+          </div>
+
+          <p id="memberError" class="form-error" hidden></p>
+          <div class="modal-footer modal-footer-split member-editor-footer">
+            <button id="deleteMemberButton" class="text-button danger-text" type="button" hidden>Archive</button>
+            <div>
+              <button id="cancelMemberButton" class="secondary-button" type="button">Cancel</button>
+              <button class="primary-button" type="submit">Save member</button>
+            </div>
+          </div>
+        </section>
+      </div>
     </form>
   </dialog>
 
@@ -198,6 +282,6 @@
   <script src="assets/js/config.js?v=2" defer></script>
   <script src="assets/js/api.js?v=8" defer></script>
   <script src="assets/js/app.js?v=18" defer></script>
-  <script src="assets/js/rainbow-features.js?v=2" defer></script>
+  <script src="assets/js/rainbow-features.js?v=3" defer></script>
 </body>
 </html>
