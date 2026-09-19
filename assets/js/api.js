@@ -15,6 +15,12 @@
     if(!response.ok)throw new Error(data?.message||data?.msg||data?.error_description||data?.error||response.statusText);return data;
   }
   async function sendMagicLink(email){const redirect=location.origin+location.pathname;return raw('/auth/v1/otp?redirect_to='+encodeURIComponent(redirect),{method:'POST',body:{email,create_user:true}})}
+  async function signInWithPassword(email,password){
+    const data=await raw('/auth/v1/token?grant_type=password',{method:'POST',body:{email,password}});
+    const s={access_token:data.access_token,refresh_token:data.refresh_token,expires_at:Date.now()+Number(data.expires_in||3600)*1000};
+    saveSession(s);return data.user||null;
+  }
+  async function setPassword(password){return raw('/auth/v1/user',{method:'PUT',body:{password}})}
   function readSessionFromUrl(){const p=new URLSearchParams(location.hash.replace(/^#/,'')),access_token=p.get('access_token');if(!access_token)return null;const s={access_token,refresh_token:p.get('refresh_token'),expires_at:Date.now()+Number(p.get('expires_in')||3600)*1000};saveSession(s);history.replaceState(null,'',location.pathname+location.search);return s}
   async function refresh(){let s=getSession();if(!s)return null;if(!s.expires_at||s.expires_at-Date.now()>60000)return s;if(!s.refresh_token)return s;const r=await fetch(cfg.SUPABASE_URL+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{apikey:cfg.SUPABASE_ANON_KEY,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:s.refresh_token})});if(!r.ok){saveSession(null);return null}const d=await r.json();s={access_token:d.access_token,refresh_token:d.refresh_token||s.refresh_token,expires_at:Date.now()+Number(d.expires_in||3600)*1000};saveSession(s);return s}
   async function user(){const s=await refresh();if(!s)return null;try{return await raw('/auth/v1/user')}catch{saveSession(null);return null}}
@@ -53,5 +59,5 @@
     return data;
   }
 
-  window.nihilityApi={configured,getSession,saveSession,sendMagicLink,readSessionFromUrl,refresh,user,rest,rpc,upload,privateMediaUrl,deleteMedia,secure};
+  window.nihilityApi={configured,getSession,saveSession,sendMagicLink,signInWithPassword,setPassword,readSessionFromUrl,refresh,user,rest,rpc,upload,privateMediaUrl,deleteMedia,secure};
 })();

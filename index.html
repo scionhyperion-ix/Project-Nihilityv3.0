@@ -26,7 +26,9 @@
       <p class="login-intro">Nihility owns its own member and fronting data. External integrations are optional.</p>
       <form id="loginForm" class="login-form">
         <label>Email<input id="emailInput" type="email" autocomplete="email" required placeholder="you@example.com"></label>
-        <button class="primary-button full-button" type="submit">Send magic link</button>
+        <label>Password<input id="passwordInput" type="password" autocomplete="current-password" minlength="8" placeholder="Your password"></label>
+        <button class="primary-button full-button" type="submit">Sign in</button>
+        <button id="magicLinkButton" class="secondary-button full-button" type="button">Email me a magic link</button>
         <p id="loginMessage" class="form-message"></p>
       </form>
       <div class="security-note"><strong>Invite-only</strong><p>The first account becomes the owner. Additional accounts need an invite from the owner profile page.</p></div>
@@ -148,7 +150,7 @@
             <form id="inviteForm" class="stack"><label>Email<input id="inviteEmail" type="email" required placeholder="partner@example.com"></label><button class="secondary-button" type="submit">Create invite</button><p id="inviteMessage" class="form-message"></p></form>
           </article>
 
-          <article class="panel section-panel"><p class="eyebrow">Session</p><h3 id="profileRole">Member</h3><button id="signOutButton" class="secondary-button danger-button">Sign out</button></article>
+          <article class="panel section-panel"><p class="eyebrow">Session</p><h3 id="profileRole">Member</h3><form id="passwordForm" class="stack"><label>Set or change password<input id="newPasswordInput" type="password" autocomplete="new-password" minlength="8" required placeholder="At least 8 characters"></label><button class="secondary-button" type="submit">Save password</button><p id="passwordMessage" class="form-message"></p></form><button id="signOutButton" class="secondary-button danger-button">Sign out</button></article>
         </div>
       </section>
     </div>
@@ -181,7 +183,7 @@
   </dialog>
 
   <script src="assets/js/config.js?v=2" defer></script>
-  <script src="assets/js/api.js?v=6" defer></script>
-  <script src="assets/js/app.js?v=6" defer></script>
+  <script src="assets/js/api.js?v=7" defer></script>
+  <script src="assets/js/app.js?v=7" defer></script>
 </body>
 </html>
