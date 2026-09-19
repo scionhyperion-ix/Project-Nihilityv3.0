@@ -843,3 +843,146 @@ textarea:focus {
 @media(max-width:900px){.profile-layout{grid-template-columns:1fr}.profile-card{grid-row:auto}}
 @media(max-width:760px){.rainbow-quick-section{padding:19px}.media-section{grid-template-columns:1fr}.theme-options{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:450px){.theme-options{grid-template-columns:1fr}}
+
+
+/* Desktop must match RainbowPK web, not the older Flutter/mobile port. */
+@media (min-width: 901px) {
+  #appView.app-shell {
+    display: grid !important;
+    grid-template-columns: 250px minmax(0, 1fr) !important;
+    min-height: 100vh;
+  }
+
+  #appView > .sidebar {
+    display: flex !important;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    padding: 24px 18px;
+  }
+
+  #appView .topbar {
+    display: flex !important;
+    height: 104px;
+    position: static;
+  }
+
+  #appView > .main-column {
+    width: auto !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 34px 60px !important;
+  }
+
+  #appView > .mobile-nav {
+    display: none !important;
+  }
+
+  #appView .hero-grid {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1.05fr) minmax(320px, .95fr) !important;
+    gap: 18px !important;
+  }
+
+  #appView .current-front-panel {
+    min-height: 340px !important;
+    padding: 26px !important;
+    margin-bottom: 0 !important;
+  }
+
+  #appView .current-front-panel > .panel-heading {
+    display: flex !important;
+  }
+
+  #appView .current-front-members {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 14px !important;
+    padding: 28px 0 24px !important;
+  }
+
+  #appView .front-person {
+    padding: 10px 13px 10px 10px !important;
+    border: 1px solid var(--line) !important;
+    border-radius: 16px !important;
+    background: rgba(255,255,255,.045) !important;
+  }
+
+  #appView .member-chip-grid {
+    height: auto !important;
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)) !important;
+    gap: 10px !important;
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+
+  #appView .member-chip {
+    width: 100% !important;
+    min-height: 0 !important;
+    padding: 10px !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 11px !important;
+    background: rgba(255,255,255,.035) !important;
+    border: 1px solid var(--line) !important;
+    border-radius: 14px !important;
+  }
+
+  #appView .member-chip .timeline-avatar {
+    width: 44px !important;
+    height: 44px !important;
+    border-radius: 13px !important;
+  }
+
+  #appView .member-chip-copy {
+    width: auto !important;
+  }
+
+  #appView .member-chip-copy strong {
+    font-size: inherit !important;
+    font-weight: 700 !important;
+  }
+
+  #appView .member-chip-copy small {
+    display: block !important;
+  }
+
+  #appView .member-card-grid {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)) !important;
+    gap: 14px !important;
+    border-top: 0 !important;
+  }
+
+  #appView .member-card {
+    width: auto !important;
+    display: block !important;
+    padding: 17px !important;
+    border: 1px solid var(--line) !important;
+    border-radius: 18px !important;
+    background: linear-gradient(180deg,var(--theme-surface-1),var(--theme-surface-2)) !important;
+  }
+
+  #appView .member-card-desc,
+  #appView .member-color-bar {
+    display: block !important;
+  }
+
+  #appView .settings-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 18px !important;
+  }
+
+  #appView .settings-grid .panel {
+    border: 1px solid var(--line) !important;
+    padding: 24px !important;
+    background: linear-gradient(180deg,var(--theme-surface-1),var(--theme-surface-2)) !important;
+  }
+
+  #appView .settings-grid .appearance-panel {
+    grid-column: 1 / -1 !important;
+  }
+}
