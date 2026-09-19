@@ -217,12 +217,102 @@ async function actionImportPk(user:any,body:any){
         pronouns:m.pronouns||null,color:m.color||null,description:m.description||null,birthday:m.birthday||null,
         avatar_url:null,avatar_source:avatarPath?"supabase":null,avatar_storage_path:avatarPath,
         banner_url:null,banner_source:bannerPath?"supabase":null,banner_storage_path:bannerPath,
-        pk_id:m.id,metadata:{pk_uuid:m.uuid||null},archived_at:null
+        pk_id:m.id,metadata:{pk_uuid:m.uuid||null,proxy_tags:Array.isArray(m.proxy_tags)?m.proxy_tags:[],keep_proxy:Boolean(m.keep_proxy)},archived_at:null
       })
     });
     added++;
   }
   return {total:(all||[]).length,offset,processed:batch.length,added,skipped,mediaCopied,nextOffset:offset+batch.length<(all||[]).length?offset+batch.length:null};
+}
+async function actionImportPkGroups(user:any){
+  const token=await getSecret(user.id);
+  const [pkGroups,pkMembers]=await Promise.all([
+    pk(token,"/systems/@me/groups?with_members=true"),
+    pk(token,"/systems/@me/members")
+  ]);
+
+  const localMembers=await admin("/rest/v1/members?user_id=eq."+encodeURIComponent(user.id)+"&select=id,pk_id,metadata");
+  const localGroups=await admin("/rest/v1/groups?user_id=eq."+encodeURIComponent(user.id)+"&select=id,pk_id,metadata");
+  const existingLinks=await admin("/rest/v1/member_groups?user_id=eq."+encodeURIComponent(user.id)+"&select=member_id,group_id");
+
+  const memberMap=new Map<string,string>();
+  for(const row of localMembers||[]){
+    if(row.pk_id)memberMap.set(String(row.pk_id),row.id);
+    if(row.metadata?.pk_uuid)memberMap.set(String(row.metadata.pk_uuid),row.id);
+  }
+
+  let metadataUpdated=0;
+  const localByPk=new Map((localMembers||[]).filter((m:any)=>m.pk_id).map((m:any)=>[String(m.pk_id),m]));
+  for(const pm of pkMembers||[]){
+    const local=localByPk.get(String(pm.id));
+    if(!local)continue;
+    const metadata={...(local.metadata||{})};
+    let changed=false;
+    if(metadata.pk_uuid==null&&pm.uuid){metadata.pk_uuid=pm.uuid;changed=true}
+    if(metadata.proxy_tags==null&&Array.isArray(pm.proxy_tags)){metadata.proxy_tags=pm.proxy_tags;changed=true}
+    if(metadata.keep_proxy==null&&typeof pm.keep_proxy==="boolean"){metadata.keep_proxy=pm.keep_proxy;changed=true}
+    if(changed){
+      await admin("/rest/v1/members?id=eq."+encodeURIComponent(local.id),{
+        method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({metadata})
+      });
+      metadataUpdated++;
+    }
+  }
+
+  const groupByPk=new Map<string,any>();
+  for(const row of localGroups||[]){
+    if(row.pk_id)groupByPk.set(String(row.pk_id),row);
+    if(row.metadata?.pk_uuid)groupByPk.set(String(row.metadata.pk_uuid),row);
+  }
+
+  const linkSet=new Set((existingLinks||[]).map((x:any)=>String(x.member_id)+":"+String(x.group_id)));
+  let added=0,skipped=0,membershipsAdded=0,unresolved=0;
+
+  for(const g of pkGroups||[]){
+    let local=groupByPk.get(String(g.id))||(g.uuid?groupByPk.get(String(g.uuid)):null);
+    if(!local){
+      const created=await admin("/rest/v1/groups",{
+        method:"POST",headers:{Prefer:"return=representation"},
+        body:JSON.stringify({
+          user_id:user.id,
+          name:g.name||g.display_name||g.id,
+          display_name:g.display_name||null,
+          description:g.description||null,
+          color:g.color||null,
+          icon_url:null,
+          icon_source:null,
+          pk_id:g.id,
+          metadata:{pk_uuid:g.uuid||null,pk_icon_url:g.icon||null,pk_banner_url:g.banner||null}
+        })
+      });
+      local=created?.[0];
+      if(local){
+        added++;
+        groupByPk.set(String(g.id),local);
+        if(g.uuid)groupByPk.set(String(g.uuid),local);
+      }
+    }else{
+      skipped++;
+    }
+    if(!local?.id)continue;
+
+    const refs=Array.isArray(g.members)?g.members:[];
+    for(const ref of refs){
+      const key=typeof ref==="string"?ref:(ref?.id||ref?.uuid||"");
+      const memberId=memberMap.get(String(key));
+      if(!memberId){unresolved++;continue}
+      const linkKey=String(memberId)+":"+String(local.id);
+      if(linkSet.has(linkKey))continue;
+      await admin("/rest/v1/member_groups",{
+        method:"POST",headers:{Prefer:"return=minimal"},
+        body:JSON.stringify({user_id:user.id,member_id:memberId,group_id:local.id})
+      });
+      linkSet.add(linkKey);
+      membershipsAdded++;
+    }
+  }
+
+  return {total:(pkGroups||[]).length,added,skipped,membershipsAdded,unresolved,metadataUpdated};
 }
 async function actionImportPkFronts(user:any,body:any){
   const token=await getSecret(user.id);
@@ -282,6 +372,7 @@ Deno.serve(async(req)=>{
     else if(action==="pk_disconnect")result=await actionDisconnect(user);
     else if(action==="pk_mirror_front")result=await actionMirror(user,body);
     else if(action==="pk_import")result=await actionImportPk(user,body);
+    else if(action==="pk_import_groups")result=await actionImportPkGroups(user);
     else if(action==="pk_import_fronts")result=await actionImportPkFronts(user,body);
     else if(action==="import_media")result=await actionImportMedia(user,body);
     else return json({error:"Unknown action"},400,origin);
