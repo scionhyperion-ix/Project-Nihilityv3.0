@@ -188,3 +188,59 @@ dialog{padding:0}.modal-card{border-radius:18px;padding:20px}.modal-header{margi
 .login-card .security-note p{margin:4px 0 0;font-size:.76rem;line-height:1.4;color:var(--muted)}
 .login-card .login-form{margin-bottom:0}
 .login-card #loginMessage:empty{display:none}
+
+/* Project Rainbow exact-family port. Web/auth/PK remain Nihility-specific. */
+:root{--rainbow-width:720px}
+#appView.app-shell{display:block;min-height:100dvh;background:var(--bg)}
+.sidebar,.topbar{display:none!important}
+.main-column{max-width:var(--rainbow-width);margin:0 auto;padding:0 18px 118px}
+.route-view.rainbow-page{padding-top:14px}
+.rainbow-page-header{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:26px}
+.rainbow-page-header h1{margin:0;font-size:27px;line-height:1.15;font-weight:700;letter-spacing:-.7px}
+.rainbow-page-header p{margin:5px 0 0;font-size:14px;line-height:1.45}
+.rainbow-header-actions{display:flex;gap:4px}
+.rainbow-header-action,.rainbow-page-header .icon-button{width:42px;height:42px;min-height:42px;border-radius:50%;font-size:22px;background:var(--surface-raised);border:1px solid var(--line)}
+.rainbow-section-title{margin:0 0 10px;font-size:16px;line-height:1.3;font-weight:600;letter-spacing:0}
+.hero-grid{display:block}.current-front-panel{min-height:0;padding:8px;border-radius:16px;margin-bottom:28px}
+.current-front-panel>.panel-heading{display:none}
+.current-front-members{display:grid;gap:0}
+.front-person{padding:10px 6px;background:transparent;border:0;border-radius:14px}
+.front-person+.front-person{border-top:1px solid var(--line);border-radius:0}
+.front-person .timeline-avatar{width:46px;height:46px;border-radius:14px}
+.current-front-panel .panel-actions{padding:8px 6px 6px;margin-top:0;border-top:1px solid var(--line)}
+.current-front-panel .panel-actions .secondary-button{background:transparent;border:0}
+.rainbow-hidden-dashboard{display:none!important}
+.rainbow-quick-section{margin:0 0 6px}
+.rainbow-section-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.rainbow-section-heading .rainbow-section-title{margin:0}
+.rainbow-section-heading p{margin:2px 0 0}
+.member-chip-grid{height:102px;display:flex;gap:8px;overflow-x:auto;padding:0;scroll-snap-type:x proximity}
+.member-chip{flex:0 0 72px;width:72px;min-height:100px;padding:0;background:transparent!important;border:0!important;display:flex;flex-direction:column;align-items:center;gap:6px;box-shadow:none}
+.member-chip .timeline-avatar{width:60px;height:60px;border-radius:16px}
+.member-chip-copy{width:72px}.member-chip-copy strong{font-size:12px;font-weight:500}.member-chip-copy small{display:none}
+.member-chip.fronting .member-chip-copy strong{font-weight:700}
+.rainbow-search-row{margin-bottom:10px}.rainbow-search-row .primary-button{display:none}
+.member-card-grid{display:block;border-top:1px solid var(--line)}
+.member-card{width:100%;display:flex;align-items:center;position:relative;padding:10px 4px;border:0;border-bottom:1px solid var(--line);border-radius:0;background:transparent;text-align:left}
+.member-card-top{display:flex;align-items:center;flex:1;min-width:0}.member-card-avatar{width:46px;height:46px;border-radius:14px;margin-right:12px}
+.member-card-name h3{font-size:16px;margin:0}.member-card-name p{margin:3px 0 0;font-size:14px;color:var(--muted)}
+.member-card-desc,.member-color-bar{display:none!important}
+.member-card::after{content:'›';font-size:24px;color:var(--muted);padding-left:10px}
+.historyRoute{}.history-list{border-top:1px solid var(--line)}.history-row{padding:13px 4px;border-bottom:1px solid var(--line)}
+.settings-grid{display:block}.settings-grid>article{margin-bottom:22px}
+.settings-grid .panel,.rainbow-settings-group{border:0;background:transparent;padding:0;box-shadow:none}
+.settings-grid .panel>h3{margin:0 0 9px;font-size:16px}
+.theme-options{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--panel);gap:0}
+.theme-options .radio-card{border:0;border-radius:0;background:transparent;padding:14px}
+.theme-options .radio-card+.radio-card{border-top:1px solid var(--line)}
+.rainbow-list-card{width:100%;display:grid;grid-template-columns:28px 1fr auto;align-items:center;gap:10px;padding:14px;border:1px solid var(--line);border-radius:16px;background:var(--panel);color:var(--text);text-align:left}
+.rainbow-list-card strong,.rainbow-list-card small{display:block}.rainbow-list-card small{margin-top:3px;color:var(--muted);font-weight:400}.rainbow-list-card b{font-size:22px;color:var(--muted)}
+.mobile-nav{display:flex!important;position:fixed;z-index:30;left:50%;right:auto;transform:translateX(-50%);bottom:12px;width:min(calc(100% - 28px),692px);height:70px;padding:7px 6px;border-radius:23px;background:rgba(34,34,34,.97);box-shadow:0 9px 24px rgba(0,0,0,.24);border:1px solid var(--line)}
+.mobile-nav-item{flex:1;border:0;background:transparent;color:var(--muted);border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px;font-weight:500}
+.mobile-nav-item span{font-size:21px;line-height:1}.mobile-nav-item.active{background:rgba(255,255,255,.11);color:var(--text);font-weight:700}
+:root[data-theme="light"] .mobile-nav{background:rgba(255,255,255,.97);box-shadow:0 9px 24px rgba(0,0,0,.08)}
+:root[data-theme="light"] .mobile-nav-item.active{background:rgba(47,47,47,.065)}
+.modal-dialog{width:min(100% - 20px,680px);max-height:92dvh;border-radius:24px}
+.modal-card{border-radius:24px}
+@media(min-width:901px){.main-column{padding-top:14px}.mobile-nav{display:flex!important}}
+@media(max-width:620px){.main-column{padding:0 18px 112px}.route-view.rainbow-page{padding-top:14px}.rainbow-search-row{display:flex}.mobile-nav{width:calc(100% - 28px)}}
