@@ -36,3 +36,61 @@
 @media(max-width:900px){.profile-layout{grid-template-columns:1fr}}
 @media(max-width:760px){.media-section{grid-template-columns:1fr}.theme-options{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:450px){.theme-options{grid-template-columns:1fr}}
+
+
+/* Initial loading gate prevents empty/default app state from flashing on screen. */
+.app-loading-view{
+  min-height:100dvh;
+  display:grid;
+  place-items:center;
+  padding:24px;
+  background:
+    radial-gradient(circle at 24% 20%,color-mix(in srgb,var(--accent) 13%,transparent),transparent 34%),
+    radial-gradient(circle at 82% 82%,color-mix(in srgb,var(--theme-button-2) 10%,transparent),transparent 35%),
+    var(--bg);
+}
+.app-loading-view[hidden]{display:none!important}
+.app-loading-card{
+  width:min(360px,100%);
+  display:grid;
+  grid-template-columns:54px minmax(0,1fr);
+  gap:14px;
+  align-items:center;
+  padding:18px;
+  border:1px solid var(--line);
+  border-radius:18px;
+  background:color-mix(in srgb,var(--theme-surface-2) 92%,transparent);
+  box-shadow:0 18px 56px rgba(0,0,0,.2);
+}
+.app-loading-mark{
+  width:54px;height:54px;border-radius:16px;
+  display:grid;place-items:center;
+  font-size:1.05rem;font-weight:900;
+  color:var(--theme-button-text);
+  background:linear-gradient(135deg,var(--theme-button-1),var(--theme-button-2));
+}
+.app-loading-copy{min-width:0;display:grid;gap:4px}
+.app-loading-copy strong{font-size:.96rem}
+.app-loading-copy span{color:var(--muted);font-size:.76rem;line-height:1.4}
+.app-loading-track{
+  grid-column:1/-1;
+  height:4px;
+  overflow:hidden;
+  border-radius:999px;
+  background:color-mix(in srgb,var(--text) 8%,transparent);
+}
+.app-loading-track span{
+  display:block;
+  width:38%;
+  height:100%;
+  border-radius:inherit;
+  background:linear-gradient(90deg,var(--theme-button-1),var(--theme-button-2));
+  animation:nihility-loading-slide 1.05s ease-in-out infinite;
+}
+@keyframes nihility-loading-slide{
+  0%{transform:translateX(-110%)}
+  100%{transform:translateX(300%)}
+}
+@media(prefers-reduced-motion:reduce){
+  .app-loading-track span{animation:none;width:100%;opacity:.7}
+}
