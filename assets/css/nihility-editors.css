@@ -356,3 +356,27 @@
   .member-editor-fields{padding:14px 14px 0}
   .member-editor-fields>.member-editor-footer{margin:14px -14px 0;padding:10px 14px 12px}
 }
+
+
+/* Respect native hidden state inside editor previews.
+   Author display rules were overriding [hidden], causing both the real avatar
+   and its fallback to render at the same time. */
+.member-editor-dialog [hidden],
+.groups-manager-dialog [hidden]{
+  display:none!important;
+}
+#memberPreviewAvatar:not([hidden]){
+  display:block;
+}
+#memberPreviewAvatarFallback:not([hidden]){
+  display:grid;
+}
+#memberPreviewBanner:not([hidden]){
+  display:block;
+}
+#groupPreviewIconImage:not([hidden]){
+  display:block;
+}
+#groupPreviewIconFallback:not([hidden]){
+  display:grid;
+}
