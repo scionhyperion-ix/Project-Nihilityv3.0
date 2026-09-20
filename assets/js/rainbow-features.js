@@ -71,10 +71,12 @@
       const s=state.systemProfile;
       const avatarPath=s.avatar_storage_path||null;
       const bannerPath=s.banner_storage_path||null;
-      s.avatar_display_url=s.avatar_url||null;
-      s.banner_display_url=s.banner||s.banner_url||null;
-      if(avatarPath){try{s.avatar_display_url=await nihilityApi.privateMediaUrl('avatar',avatarPath)}catch(error){console.warn('Unable to load system avatar',error)}}
-      if(bannerPath){try{s.banner_display_url=await nihilityApi.privateMediaUrl('banner',bannerPath)}catch(error){console.warn('Unable to load system banner',error)}}
+      const liveAvatar=liveSystem?.system?.avatar_url||null;
+      const liveBanner=liveSystem?.system?.banner||null;
+      s.avatar_display_url=liveAvatar||s.avatar_url||null;
+      s.banner_display_url=liveBanner||s.banner||s.banner_url||null;
+      if(!s.avatar_display_url&&avatarPath){try{s.avatar_display_url=await nihilityApi.privateMediaUrl('avatar',avatarPath)}catch(error){console.warn('Unable to load system avatar',error)}}
+      if(!s.banner_display_url&&bannerPath){try{s.banner_display_url=await nihilityApi.privateMediaUrl('banner',bannerPath)}catch(error){console.warn('Unable to load system banner',error)}}
     }
     state.historyHasMore=state.fronts.length>=100;
     refreshFeatureControls();
