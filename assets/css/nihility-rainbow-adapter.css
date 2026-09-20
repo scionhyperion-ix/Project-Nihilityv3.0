@@ -94,3 +94,31 @@
 @media(prefers-reduced-motion:reduce){
   .app-loading-track span{animation:none;width:100%;opacity:.7}
 }
+
+
+.profile-banner{
+  background-position:center;
+  background-size:cover;
+}
+.profile-banner.has-profile-banner{
+  background-position:center;
+  background-size:cover;
+}
+.profile-media-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+}
+.profile-media-grid>section{
+  display:grid;
+  gap:9px;
+  padding:13px;
+  border:1px solid var(--line);
+  border-radius:14px;
+  background:color-mix(in srgb,var(--theme-surface-1) 72%,transparent);
+}
+.profile-media-grid>section>strong{font-size:.8rem}
+.profile-media-grid label{display:grid;gap:6px}
+@media(max-width:700px){
+  .profile-media-grid{grid-template-columns:1fr}
+}
