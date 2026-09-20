@@ -369,6 +369,17 @@
               <span id="groupPreviewColor" class="group-preview-color"></span>
             </div>
             <p class="group-preview-help">The group list will use this banner-style card, including member avatars and the group color bar.</p>
+
+            <section class="groups-members-editor groups-members-under-preview">
+              <div class="groups-section-heading">
+                <strong>Members</strong>
+                <small id="groupsSelectedCount">0 selected</small>
+              </div>
+              <label class="dialog-search groups-member-search">Find members
+                <input id="groupsMemberSearch" type="search" placeholder="Search members" autocomplete="off">
+              </label>
+              <div id="groupsMemberPicker" class="front-member-picker groups-member-picker"></div>
+            </section>
           </aside>
 
           <section class="groups-profile-fields">
@@ -387,11 +398,6 @@
             </div>
           </section>
 
-          <section class="groups-members-editor">
-            <div class="groups-section-heading"><strong>Members</strong><small id="groupsSelectedCount">0 selected</small></div>
-            <label class="dialog-search groups-member-search">Find members<input id="groupsMemberSearch" type="search" placeholder="Search members"></label>
-            <div id="groupsMemberPicker" class="front-member-picker groups-member-picker"></div>
-          </section>
         </div>
         <p id="groupsManagerError" class="form-error" hidden></p>
         <div class="modal-footer modal-footer-split groups-manager-footer">
@@ -453,7 +459,11 @@
     if(banner)banner.style.backgroundImage=bannerUrl?'url("'+bannerUrl.replaceAll('"','%22')+'")':'';
   }
   function renderGroupMemberPicker(){
-    const box=document.querySelector('#groupsMemberPicker');if(!box)return;box.replaceChildren();
+    const box=document.querySelector('#groupsMemberPicker');if(!box)return;
+    box.querySelectorAll('input[type="checkbox"]').forEach(input=>{
+      input.checked?workingGroupMembers.add(input.value):workingGroupMembers.delete(input.value);
+    });
+    box.replaceChildren();
     const q=(document.querySelector('#groupsMemberSearch')?.value||'').trim().toLowerCase();
     sortedMembers(activeMembers().filter(m=>!q||[m.name,m.display_name,m.pronouns].filter(Boolean).some(v=>String(v).toLowerCase().includes(q)))).forEach(m=>{
       const row=document.createElement('label');row.className='picker-row';row.append(avatarEl(m,'picker-avatar'));
