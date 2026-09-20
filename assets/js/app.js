@@ -94,7 +94,7 @@ function renderAll(){renderHeader();renderHome();renderMembers();renderHistory()
 function renderHeader(){
   const name=state.profile?.display_name||state.user?.email||'Account';
   $('#sidebarName').textContent=name;$('#sidebarRole').textContent=state.profile?.role||'member';
-  ['#sidebarAvatar','#homeProfileAvatar','#profileAvatarPreview'].forEach(sel=>{
+  ['#sidebarAvatar','#profileAvatarPreview'].forEach(sel=>{
     const box=$(sel);box.replaceChildren();
     if(state.profile?.avatar_url){const img=document.createElement('img');img.src=state.profile.avatar_url;img.alt='';box.append(img)}
     else box.textContent=initial(name);
@@ -111,9 +111,30 @@ function renderHome(){
     $('#currentFrontHeading').textContent=members.length===1?label(members[0]):(members.length+' co-fronters');$('#frontDuration').textContent=duration(front.started_at);
     members.forEach(m=>{const row=document.createElement('div');row.className='front-person';row.append(avatarEl(m,'timeline-avatar'));const copy=document.createElement('div');copy.className='front-person-copy';const s=document.createElement('strong');s.textContent=label(m);const sm=document.createElement('small');sm.textContent=m.pronouns||m.name;copy.append(s,sm);row.append(copy);$('#currentFrontMembers').append(row)});
   }
-  $('#homeProfileName').textContent=state.profile?.display_name||state.user?.email||'Account';
-  $('#homeIntegrationState').textContent=(state.integration&&state.pkConnected)?'PluralKit connected':'Independent storage';
-  $('#homeMemberCount').textContent=String(activeMembers().length);$('#homeFrontCount').textContent=String(state.fronts.length);$('#homeShareState').textContent=(state.integration?.share_fronting_updates&&state.pkConnected)?'On':'Off';
+  const system=state.systemProfile||{};
+  const systemName=system.name||system.display_name||state.integration?.external_system_name||'Nihility system';
+  const systemId=system.id||state.integration?.external_system_id||'...';
+  $('#homeProfileName').textContent=systemName;
+  $('#homeIntegrationState').textContent=system.pronouns||((state.integration&&state.pkConnected)?'PluralKit system':'Independent system');
+  $('#homeMemberCount').textContent=String(activeMembers().length);
+  $('#homeFrontCount').textContent=String(state.fronts.length);
+  $('#homeShareState').textContent=systemId;
+
+  const systemAvatar=$('#homeProfileAvatar');
+  systemAvatar.replaceChildren();
+  systemAvatar.className='system-avatar large';
+  if(system.avatar_display_url){
+    const img=document.createElement('img');img.src=system.avatar_display_url;img.alt='';
+    img.onerror=()=>{systemAvatar.replaceChildren();systemAvatar.className='system-avatar large fallback-avatar';systemAvatar.textContent=initial(systemName)};
+    systemAvatar.append(img);
+  }else{
+    systemAvatar.classList.add('fallback-avatar');systemAvatar.textContent=initial(systemName);
+  }
+  const systemBanner=document.querySelector('.system-summary-panel .system-banner');
+  if(systemBanner){
+    const bannerUrl=system.banner_display_url||'';
+    systemBanner.style.backgroundImage=bannerUrl?'url("'+bannerUrl.replaceAll('"','%22')+'")':'';
+  }
 
   const counts=new Map();state.frontMembers.forEach(x=>counts.set(x.member_id,(counts.get(x.member_id)||0)+1));
   const frequent=[...activeMembers()].sort((a,b)=>(counts.get(b.id)||0)-(counts.get(a.id)||0)).slice(0,8);
