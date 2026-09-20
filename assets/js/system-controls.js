@@ -177,6 +177,10 @@
     error.hidden=true;button.disabled=true;button.textContent='Saving...';
     try{
       const result=await nihilityApi.secure('pk_update_system',{system});
+      if(window.nihilitySystemLiveCache){
+        window.nihilitySystemLiveCache.value={system:result.system||system};
+        window.nihilitySystemLiveCache.at=Date.now();
+      }
       state.systemProfile={...(state.systemProfile||{}),...(result.system||system)};
       state.systemProfile.avatar_display_url=state.systemProfile.avatar_url||state.systemProfile.avatar_display_url||null;
       state.systemProfile.banner_display_url=state.systemProfile.banner||state.systemProfile.banner_display_url||null;
