@@ -115,10 +115,14 @@ async function hydrateHomeMedia(){
   const ids=new Set();
   const front=activeFront();
   if(front)frontMembers(front.id).forEach(m=>ids.add(m.id));
-  for(const link of state.frontMembers){
-    if(ids.size>=16)break;
-    if(link.member_id)ids.add(link.member_id);
-  }
+
+  const counts=new Map();
+  state.frontMembers.forEach(link=>counts.set(link.member_id,(counts.get(link.member_id)||0)+1));
+  [...counts.entries()]
+    .sort((a,b)=>b[1]-a[1])
+    .slice(0,8)
+    .forEach(([memberId])=>ids.add(memberId));
+
   const priority=[...ids].map(id=>state.members.find(m=>m.id===id)).filter(Boolean);
   const jobs=priority.map(member=>hydrateMemberMedia(member));
   if(state.profile?.avatar_storage_path&&!state.profile.avatar_url){
