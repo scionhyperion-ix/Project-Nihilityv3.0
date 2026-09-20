@@ -234,6 +234,12 @@ async function actionImportPkGroups(user:any){
 
   const settingsRows=await admin("/rest/v1/app_settings?user_id=eq."+encodeURIComponent(user.id)+"&select=settings&limit=1");
   const existingSettings=settingsRows?.[0]?.settings||{};
+  let systemAvatarPath=existingSettings?.system_profile?.avatar_storage_path||null;
+  let systemBannerPath=existingSettings?.system_profile?.banner_storage_path||null;
+  const systemAvatarUrl=pkSystem?.avatar_url||null;
+  const systemBannerUrl=pkSystem?.banner||pkSystem?.banner_url||null;
+  if(!systemAvatarPath&&systemAvatarUrl){try{systemAvatarPath=await storeImage(user.id,"avatar",systemAvatarUrl)}catch{}}
+  if(!systemBannerPath&&systemBannerUrl){try{systemBannerPath=await storeImage(user.id,"banner",systemBannerUrl)}catch{}}
   const importedSystem={
     id:pkSystem?.id||null,
     uuid:pkSystem?.uuid||null,
@@ -242,7 +248,11 @@ async function actionImportPkGroups(user:any){
     description:pkSystem?.description||null,
     tag:pkSystem?.tag||null,
     pronouns:pkSystem?.pronouns||null,
-    color:pkSystem?.color||null
+    color:pkSystem?.color||null,
+    avatar_url:systemAvatarUrl,
+    banner:systemBannerUrl,
+    avatar_storage_path:systemAvatarPath,
+    banner_storage_path:systemBannerPath
   };
   const mergedSettings={...existingSettings,system_profile:importedSystem,system_name:importedSystem.name||importedSystem.display_name||null};
   await admin("/rest/v1/app_settings?on_conflict=user_id",{
