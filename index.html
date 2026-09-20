@@ -17,7 +17,7 @@
   <link rel="stylesheet" href="assets/rainbowpk/site-features.css?v=1">
   <link rel="stylesheet" href="assets/rainbowpk/member-color-picker.css?v=1">
   <link rel="stylesheet" href="assets/rainbowpk/app-theme-shell.css?v=1">
-  <link rel="stylesheet" href="assets/css/nihility-rainbow-adapter.css?v=2">
+  <link rel="stylesheet" href="assets/css/nihility-rainbow-adapter.css?v=3">
   <link rel="stylesheet" href="assets/css/nihility-editors.css?v=7">
   <link rel="stylesheet" href="assets/rainbowpk/member-sort.css?v=1">
   <link rel="stylesheet" href="assets/rainbowpk/member-view-menu.css?v=1">
@@ -168,9 +168,25 @@
       <section id="profileRoute" class="route-view" hidden>
         <div class="profile-layout">
           <article class="panel profile-card">
-            <div class="profile-banner"></div>
+            <div id="profileBannerPreview" class="profile-banner"></div>
             <div class="profile-main"><div id="profileAvatarPreview" class="system-avatar profile-avatar fallback-avatar">N</div><div><p class="eyebrow">Account profile</p><h3 id="profileHeading">Account</h3><p id="profileEmail" class="muted"></p></div></div>
-            <form id="profileForm" class="profile-form"><label>Display name<input id="profileDisplayName" maxlength="100"></label><label>Avatar URL<input id="profileAvatarUrl" type="url" placeholder="https://..."></label><label>Or upload avatar<input id="profileAvatarFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label><button class="primary-button" type="submit">Save profile</button><p id="profileMessage" class="form-message"></p></form>
+            <form id="profileForm" class="profile-form">
+              <label>Display name<input id="profileDisplayName" maxlength="100"></label>
+              <div class="profile-media-grid">
+                <section>
+                  <strong>Profile picture</strong>
+                  <label>Avatar URL<input id="profileAvatarUrl" type="url" placeholder="https://..."></label>
+                  <label>Upload avatar<input id="profileAvatarFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label>
+                </section>
+                <section>
+                  <strong>Banner</strong>
+                  <label>Banner URL<input id="profileBannerUrl" type="url" placeholder="https://..."></label>
+                  <label>Upload banner<input id="profileBannerFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label>
+                </section>
+              </div>
+              <button class="primary-button" type="submit">Save profile</button>
+              <p id="profileMessage" class="form-message"></p>
+            </form>
           </article>
           <article id="invitePanel" class="panel section-panel" hidden><p class="eyebrow">Owner controls</p><h3>Invite another account</h3><p class="muted">Invite another trusted account to this Nihility instance.</p><form id="inviteForm" class="stack"><label>Email<input id="inviteEmail" type="email" required placeholder="partner@example.com"></label><button class="secondary-button" type="submit">Create invite</button><p id="inviteMessage" class="form-message"></p></form></article>
           <article class="panel section-panel"><p class="eyebrow">Session</p><h3 id="profileRole">Member</h3><form id="passwordForm" class="stack"><label>Set or change password<input id="newPasswordInput" type="password" autocomplete="new-password" minlength="8" required placeholder="At least 8 characters"></label><button class="secondary-button" type="submit">Save password</button><p id="passwordMessage" class="form-message"></p></form><button id="signOutButton" class="secondary-button danger-button" type="button">Sign out</button></article>
@@ -293,7 +309,7 @@
 
   <script src="assets/js/config.js?v=2" defer></script>
   <script src="assets/js/api.js?v=10" defer></script>
-  <script src="assets/js/app.js?v=21" defer></script>
+  <script src="assets/js/app.js?v=22" defer></script>
   <script src="assets/js/rainbow-features.js?v=11" defer></script>
   <script src="assets/js/system-controls.js?v=2" defer></script>
 </body>
