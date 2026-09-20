@@ -699,5 +699,24 @@
   }
   document.querySelector('#importPkButton').onclick=importPkWithGroups;
 
+  function installBackdropClose(dialog){
+    if(!dialog||dialog.dataset.backdropClose==='true')return;
+    dialog.dataset.backdropClose='true';
+    let startedOnBackdrop=false;
+    dialog.addEventListener('pointerdown',event=>{startedOnBackdrop=event.target===dialog});
+    dialog.addEventListener('pointerup',event=>{
+      if(startedOnBackdrop&&event.target===dialog&&dialog.open)dialog.close();
+      startedOnBackdrop=false;
+    });
+    dialog.addEventListener('pointercancel',()=>{startedOnBackdrop=false});
+  }
+  installBackdropClose(document.querySelector('#memberDialog'));
+  const originalEnsureGroupDialog=ensureGroupDialog;
+  ensureGroupDialog=function ensureGroupDialogWithBackdrop(){
+    const dialog=originalEnsureGroupDialog();
+    installBackdropClose(dialog);
+    return dialog;
+  };
+
   refreshFeatureControls();
 })();
