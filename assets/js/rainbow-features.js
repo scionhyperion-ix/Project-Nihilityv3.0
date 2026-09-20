@@ -41,13 +41,19 @@
   }
 
   const coreLoadData=loadData;
+  window.nihilitySystemLiveCache=window.nihilitySystemLiveCache||{value:null,at:0};
   loadData=async function loadDataWithRainbowFeatures(){
     await coreLoadData();
+    const systemCache=window.nihilitySystemLiveCache;
+    const shouldRefreshSystem=state.pkConnected&&(!systemCache.value||(Date.now()-systemCache.at)>=30000);
+    const liveSystemPromise=shouldRefreshSystem
+      ?nihilityApi.secure('pk_get_system').then(result=>{systemCache.value=result;systemCache.at=Date.now();return result}).catch(error=>{console.warn('Unable to refresh PK system profile',error);return systemCache.value})
+      :Promise.resolve(state.pkConnected?systemCache.value:null);
     const [groups,links,settingsRows,liveSystem]=await Promise.all([
       nihilityApi.rest('groups',{query:'select=*&order=name.asc'}),
       nihilityApi.rest('member_groups',{query:'select=*&order=created_at.asc'}),
       nihilityApi.rest('app_settings',{query:'select=settings&user_id=eq.'+encodeURIComponent(state.user.id)+'&limit=1'}),
-      state.pkConnected?nihilityApi.secure('pk_get_system').catch(error=>{console.warn('Unable to refresh PK system profile',error);return null}):Promise.resolve(null)
+      liveSystemPromise
     ]);
     state.groups=groups||[];
     state.memberGroups=links||[];

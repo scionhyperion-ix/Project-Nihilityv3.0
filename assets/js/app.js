@@ -329,5 +329,33 @@ $('#frontForm').onsubmit=saveFront;$('#closeFrontDialog').onclick=$('#cancelFron
 $('#connectPkButton').onclick=connectPk;$('#disconnectPkButton').onclick=disconnectPk;$('#shareFrontingToggle').onchange=toggleShare;$('#importPkButton').onclick=importPk;
 document.querySelectorAll('input[name="themeMode"]').forEach(i=>i.onchange=()=>applyTheme(i.value));
 $('#profileForm').onsubmit=saveProfile;$('#inviteForm').onsubmit=invite;
+const AUTO_REFRESH_MS=15000;
+let autoRefreshBusy=false;
+let lastAutoRefreshAt=0;
+
+async function autoRefreshData({force=false}={}){
+  if(autoRefreshBusy||!state.user||document.hidden||!navigator.onLine)return;
+  if($('#appView')?.hidden)return;
+  if(document.querySelector('dialog[open]'))return;
+  if(state.route==='settings'||state.route==='profile')return;
+  const now=Date.now();
+  if(!force&&now-lastAutoRefreshAt<AUTO_REFRESH_MS-500)return;
+  autoRefreshBusy=true;
+  try{
+    await loadData();
+    lastAutoRefreshAt=Date.now();
+  }catch(error){
+    console.warn('Automatic refresh failed',error);
+  }finally{
+    autoRefreshBusy=false;
+  }
+}
+
+setInterval(()=>{void autoRefreshData()},AUTO_REFRESH_MS);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)void autoRefreshData({force:true})});
+window.addEventListener('focus',()=>{if(Date.now()-lastAutoRefreshAt>5000)void autoRefreshData({force:true})});
+window.addEventListener('online',()=>void autoRefreshData({force:true}));
+$('#refreshButton').title='Nihility also refreshes automatically every 15 seconds';
+
 setInterval(()=>{const f=activeFront();if(f)$('#frontDuration').textContent=duration(f.started_at)},60000);
-boot().catch(error=>{console.error(error);toast('Unable to start Nihility',error.message,'error')});
+boot().then(()=>{lastAutoRefreshAt=Date.now()}).catch(error=>{console.error(error);toast('Unable to start Nihility',error.message,'error')});
