@@ -224,6 +224,77 @@ async function actionImportPk(user:any,body:any){
   }
   return {total:(all||[]).length,offset,processed:batch.length,added,skipped,mediaCopied,nextOffset:offset+batch.length<(all||[]).length?offset+batch.length:null};
 }
+function sanitizePkSystem(system:any){
+  return {
+    id:system?.id||null,
+    uuid:system?.uuid||null,
+    name:system?.name||null,
+    description:system?.description||null,
+    tag:system?.tag||null,
+    pronouns:system?.pronouns||null,
+    color:system?.color||null,
+    avatar_url:system?.avatar_url||null,
+    banner:system?.banner||system?.banner_url||null
+  };
+}
+
+async function saveLocalSystemProfile(user:any,system:any,{copyMedia=false}={}){
+  const settingsRows=await admin("/rest/v1/app_settings?user_id=eq."+encodeURIComponent(user.id)+"&select=settings&limit=1");
+  const existingSettings=settingsRows?.[0]?.settings||{};
+  const old=existingSettings?.system_profile||{};
+  let avatarPath=old.avatar_storage_path||null;
+  let bannerPath=old.banner_storage_path||null;
+  if(copyMedia&&system.avatar_url){
+    try{avatarPath=await storeImage(user.id,"avatar",system.avatar_url)}catch{}
+  }
+  if(copyMedia&&system.banner){
+    try{bannerPath=await storeImage(user.id,"banner",system.banner)}catch{}
+  }
+  const profile={...old,...system,avatar_storage_path:avatarPath,banner_storage_path:bannerPath};
+  const mergedSettings={...existingSettings,system_profile:profile,system_name:profile.name||null};
+  await admin("/rest/v1/app_settings?on_conflict=user_id",{
+    method:"POST",
+    headers:{Prefer:"resolution=merge-duplicates,return=minimal"},
+    body:JSON.stringify({user_id:user.id,settings:mergedSettings})
+  });
+  return profile;
+}
+
+async function actionGetPkSystem(user:any){
+  const token=await getSecret(user.id);
+  const system=sanitizePkSystem(await pk(token,"/systems/@me"));
+  return {system};
+}
+
+async function actionUpdatePkSystem(user:any,body:any){
+  const token=await getSecret(user.id);
+  const input=body?.system||{};
+  const payload:any={};
+  const textFields=["name","description","tag","pronouns","avatar_url","banner"];
+  for(const key of textFields){
+    if(Object.prototype.hasOwnProperty.call(input,key)){
+      const value=input[key];
+      payload[key]=value==null||String(value).trim()===""?null:String(value).trim();
+    }
+  }
+  if(Object.prototype.hasOwnProperty.call(input,"color")){
+    const color=String(input.color||"").trim().replace(/^#/,"");
+    if(color&&!/^[0-9a-fA-F]{6}$/.test(color))throw new Error("Color must be a 6-character hex color");
+    payload.color=color||null;
+  }
+  if(payload.avatar_url&&!/^https:\/\//i.test(payload.avatar_url))throw new Error("Avatar must use HTTPS");
+  if(payload.banner&&!/^https:\/\//i.test(payload.banner))throw new Error("Banner must use HTTPS");
+  await pk(token,"/systems/@me",{method:"PATCH",body:JSON.stringify(payload)});
+  const updated=sanitizePkSystem(await pk(token,"/systems/@me"));
+  const local=await saveLocalSystemProfile(user,updated,{copyMedia:true});
+  await admin("/rest/v1/external_integrations?user_id=eq."+encodeURIComponent(user.id)+"&provider=eq.pluralkit",{
+    method:"PATCH",
+    headers:{Prefer:"return=minimal"},
+    body:JSON.stringify({external_system_id:updated.id,external_system_name:updated.name||updated.id||"PluralKit system"})
+  });
+  return {system:{...updated,avatar_storage_path:local.avatar_storage_path||null,banner_storage_path:local.banner_storage_path||null}};
+}
+
 async function actionImportPkGroups(user:any){
   const token=await getSecret(user.id);
   const [pkSystem,pkGroups,pkMembers]=await Promise.all([
@@ -431,6 +502,8 @@ Deno.serve(async(req)=>{
     else if(action==="pk_mirror_front")result=await actionMirror(user,body);
     else if(action==="pk_import")result=await actionImportPk(user,body);
     else if(action==="pk_import_groups")result=await actionImportPkGroups(user);
+    else if(action==="pk_get_system")result=await actionGetPkSystem(user);
+    else if(action==="pk_update_system")result=await actionUpdatePkSystem(user,body);
     else if(action==="pk_import_fronts")result=await actionImportPkFronts(user,body);
     else if(action==="import_media")result=await actionImportMedia(user,body);
     else return json({error:"Unknown action"},400,origin);
