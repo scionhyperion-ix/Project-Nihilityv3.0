@@ -415,8 +415,9 @@ async function boot(){
   if(!await bootstrapProfile()){setView('denied');return}
   setView('loading');
   await loadData();
-  const requested=(location.hash||'#home').slice(1);
-  setRoute(['home','members','groups','history','settings','profile'].includes(requested)?requested:'home');
+  // A full browser refresh always returns to Home instead of restoring the
+  // previous route from the URL hash. In-app navigation still works normally.
+  setRoute('home');
   setView('app');
 }
 
