@@ -30,9 +30,13 @@
   function extFor(file){return({'image/png':'png','image/jpeg':'jpg','image/webp':'webp','image/gif':'gif'})[file.type]||'bin'}
   function encPath(path){return String(path).split('/').map(encodeURIComponent).join('/')}
   async function upload(kind,file){const bucket=BUCKETS[kind];if(!bucket)throw new Error('Unknown media type.');const s=await refresh();if(!s?.access_token)throw new Error('You are signed out.');const u=await user();if(!u?.id)throw new Error('Unable to resolve your account.');const path=u.id+'/'+crypto.randomUUID()+'.'+extFor(file);const r=await fetch(cfg.SUPABASE_URL+'/storage/v1/object/'+encodeURIComponent(bucket)+'/'+encPath(path),{method:'POST',headers:{apikey:cfg.SUPABASE_ANON_KEY,Authorization:'Bearer '+s.access_token,'Content-Type':file.type,'x-upsert':'false'},body:file});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d?.message||d?.error||'Upload failed.');return{path,url:await privateMediaUrl(kind,path),source:'supabase'}}
+  const privateMediaCache=new Map();
   async function privateMediaUrl(kind,path){
     if(!path)return null;
     const bucket=BUCKETS[kind];if(!bucket)throw new Error('Unknown media type.');
+    const cacheKey=bucket+':'+path;
+    if(privateMediaCache.has(cacheKey))return privateMediaCache.get(cacheKey);
+    if(!path)return null;
     const s=await refresh();if(!s?.access_token)throw new Error('You are signed out.');
     const response=await fetch(
       cfg.SUPABASE_URL+'/storage/v1/object/authenticated/'+encodeURIComponent(bucket)+'/'+encPath(path),
@@ -40,9 +44,11 @@
     );
     if(!response.ok)throw new Error('Unable to load private media.');
     const blob=await response.blob();
-    return URL.createObjectURL(blob);
+    const objectUrl=URL.createObjectURL(blob);
+    privateMediaCache.set(cacheKey,objectUrl);
+    return objectUrl;
   }
-  async function deleteMedia(kind,path){if(!path)return;const bucket=BUCKETS[kind];if(!bucket)return;const s=await refresh();if(!s?.access_token)return;const r=await fetch(cfg.SUPABASE_URL+'/storage/v1/object/'+encodeURIComponent(bucket)+'/'+encPath(path),{method:'DELETE',headers:{apikey:cfg.SUPABASE_ANON_KEY,Authorization:'Bearer '+s.access_token}});if(!r.ok&&r.status!==404)throw new Error('Unable to delete stored media.')}
+  async function deleteMedia(kind,path){if(!path)return;const bucket=BUCKETS[kind];if(!bucket)return;const cacheKey=bucket+':'+path;const cached=privateMediaCache.get(cacheKey);if(cached){URL.revokeObjectURL(cached);privateMediaCache.delete(cacheKey)}const s=await refresh();if(!s?.access_token)return;const r=await fetch(cfg.SUPABASE_URL+'/storage/v1/object/'+encodeURIComponent(bucket)+'/'+encPath(path),{method:'DELETE',headers:{apikey:cfg.SUPABASE_ANON_KEY,Authorization:'Bearer '+s.access_token}});if(!r.ok&&r.status!==404)throw new Error('Unable to delete stored media.')}
   async function secure(action,payload={}){
     const s=await refresh();
     if(!s?.access_token)throw new Error('You are signed out.');
