@@ -218,3 +218,141 @@
   .groups-media-grid .wide{grid-column:1}
   .groups-manager-footer{padding:10px 14px 12px}
 }
+
+
+/* Member editor polish: calmer layout, no avatar/text overlap, sticky actions. */
+.member-editor-dialog{
+  width:min(980px,calc(100vw - 40px));
+  max-height:88dvh;
+}
+.member-editor-card{
+  max-height:88dvh;
+  border-radius:22px;
+}
+.member-editor-heading{
+  flex:0 0 auto;
+  padding:17px 20px 14px;
+  background:color-mix(in srgb,var(--theme-surface-2) 94%,transparent);
+}
+.member-editor-heading h3{font-size:1.15rem}
+.member-editor-subtitle{
+  max-width:620px;
+  margin-top:4px;
+  font-size:.72rem;
+}
+.member-editor-layout{
+  grid-template-columns:300px minmax(0,1fr);
+  max-height:calc(88dvh - 86px);
+}
+.member-live-preview{
+  overflow:hidden;
+}
+.member-preview-banner{height:138px}
+.member-preview-body{
+  position:relative;
+  padding:58px 20px 20px;
+}
+.member-preview-avatar-wrap{
+  position:absolute;
+  top:-44px;
+  left:20px;
+  width:82px;
+  height:82px;
+  margin:0;
+  z-index:3;
+}
+.member-preview-avatar,
+.member-preview-avatar.fallback-avatar,
+#memberPreviewAvatarFallback{
+  width:82px;
+  height:82px;
+  border-radius:22px;
+}
+.member-preview-color{
+  width:38px;
+  height:4px;
+  margin:0 0 11px;
+}
+.member-preview-body h4{
+  margin:0;
+  max-width:100%;
+  font-size:1.08rem;
+  line-height:1.25;
+  overflow-wrap:anywhere;
+}
+.member-preview-subname,
+.member-preview-pronouns,
+.member-preview-birthday{font-size:.73rem}
+.member-preview-description{
+  margin-top:13px;
+  font-size:.76rem;
+  line-height:1.45;
+}
+.member-preview-hint{
+  margin:0 16px 16px;
+  padding:10px 11px;
+}
+.member-editor-fields{
+  padding:18px 20px 0;
+  overflow-y:auto;
+  scrollbar-gutter:stable;
+}
+.member-editor-fields>.member-editor-footer{
+  position:sticky;
+  bottom:0;
+  z-index:5;
+  margin:18px -20px 0;
+  padding:13px 20px 15px;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--theme-surface-2) 92%,transparent),var(--theme-surface-2) 26%);
+  backdrop-filter:blur(10px);
+}
+.member-editor-fields .form-grid.two-col{
+  gap:10px 12px;
+}
+.member-editor-fields input,
+.member-editor-fields textarea{
+  min-height:38px;
+}
+.editor-section-heading{margin-bottom:10px}
+.media-heading{
+  margin-top:18px;
+  padding-top:15px;
+}
+.member-media-editor{gap:9px}
+.member-media-card{
+  padding:11px;
+  gap:8px;
+  border-radius:12px;
+}
+.member-media-card input{min-height:36px}
+.description-field{margin-top:14px}
+.description-field textarea{min-height:112px}
+.member-proxy-section.member-proxy-visible,
+.member-proxy-section{
+  margin-top:14px;
+  padding:12px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:color-mix(in srgb,var(--theme-surface-1) 72%,transparent);
+}
+
+/* Dialog backdrop is intentionally clickable, so cursor reflects it. */
+.member-editor-dialog::backdrop,
+.groups-manager-dialog::backdrop{
+  cursor:pointer;
+}
+.member-editor-card,
+.groups-manager-card{
+  cursor:default;
+}
+
+@media(max-width:760px){
+  .member-editor-dialog{width:min(calc(100vw - 10px),680px);max-height:calc(100dvh - 10px)}
+  .member-editor-card{max-height:calc(100dvh - 10px)}
+  .member-editor-layout{max-height:calc(100dvh - 76px)}
+  .member-preview-body{padding:50px 16px 16px}
+  .member-preview-avatar-wrap{top:-36px;left:16px;width:68px;height:68px}
+  .member-preview-avatar,.member-preview-avatar.fallback-avatar,#memberPreviewAvatarFallback{width:68px;height:68px;border-radius:18px}
+  .member-editor-fields{padding:14px 14px 0}
+  .member-editor-fields>.member-editor-footer{margin:14px -14px 0;padding:10px 14px 12px}
+}
