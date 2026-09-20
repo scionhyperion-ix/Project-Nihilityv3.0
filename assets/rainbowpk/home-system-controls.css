@@ -1,0 +1,315 @@
+/* Home current-front viewport and connected-system editor. */
+
+.current-front-members[data-front-scroll="true"] {
+  max-height: var(--front-list-limit, none);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-content: stretch;
+  padding-right: 8px;
+}
+
+.current-front-members[data-front-scroll="true"] > .front-person {
+  flex: 0 0 auto;
+  width: 100%;
+  min-width: 0;
+}
+
+.system-summary-panel {
+  position: relative;
+  padding-bottom: 62px;
+}
+
+.system-edit-button {
+  position: absolute;
+  z-index: 5;
+  right: 20px;
+  bottom: 18px;
+  top: auto;
+  min-height: 34px;
+  padding: 7px 11px;
+  border-color: var(--line-strong);
+  background: color-mix(in srgb, var(--theme-surface-1) 84%, transparent);
+  box-shadow: none;
+  backdrop-filter: blur(12px);
+  font-size: .72rem;
+}
+
+.system-edit-button:hover {
+  background: var(--theme-surface-hover);
+}
+
+.system-editor-dialog {
+  width: min(820px, calc(100vw - 28px));
+  max-height: calc(100dvh - 28px);
+}
+
+.system-editor-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.system-editor-heading {
+  margin: 0;
+  padding: 22px 24px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.system-editor-subtitle {
+  margin: 6px 0 0;
+  max-width: 560px;
+  font-size: .78rem;
+  line-height: 1.45;
+}
+
+.system-editor-body {
+  min-height: 0;
+  max-height: calc(100dvh - 190px);
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.system-editor-preview {
+  min-width: 0;
+  border-right: 1px solid var(--line);
+  background: color-mix(in srgb, var(--theme-surface-2) 82%, transparent);
+}
+
+.system-editor-preview-banner {
+  height: 122px;
+  background:
+    radial-gradient(circle at 20% 30%, rgba(155, 140, 255, .34), transparent 44%),
+    linear-gradient(135deg, rgba(89, 64, 159, .45), rgba(41, 99, 137, .35));
+  background-position: center;
+  background-size: cover;
+}
+
+.system-editor-preview-content {
+  min-width: 0;
+  padding: 0 18px 20px;
+}
+
+.system-editor-avatar-wrap {
+  width: 74px;
+  height: 74px;
+  margin-top: -37px;
+  position: relative;
+  z-index: 2;
+}
+
+.system-editor-preview-avatar {
+  width: 74px;
+  height: 74px;
+  border: 4px solid var(--theme-surface-2, #171928);
+  border-radius: 21px;
+  background: var(--theme-surface-2, #171928);
+  object-fit: cover;
+  object-position: center;
+}
+
+.system-editor-preview-avatar.fallback-avatar {
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.system-editor-color-preview {
+  width: 38px;
+  height: 4px;
+  margin: 14px 0 10px 18px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.system-editor-preview-content > strong {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 1rem;
+}
+
+.system-editor-preview-content > span {
+  display: block;
+  margin-top: 4px;
+  font-size: .72rem;
+  overflow-wrap: anywhere;
+}
+
+.system-editor-preview-content > p {
+  margin: 14px 0 0;
+  font-size: .72rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.system-editor-fields {
+  min-width: 0;
+  padding: 20px 22px;
+}
+
+.system-editor-grid {
+  gap: 11px;
+}
+
+.system-editor-grid label,
+.system-editor-description {
+  font-size: .76rem;
+}
+
+.system-editor-wide {
+  grid-column: 1 / -1;
+}
+
+.system-editor-description {
+  display: grid;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.system-editor-description textarea {
+  min-height: 116px;
+}
+
+.system-editor-footer {
+  margin: 0;
+  padding: 14px 22px 18px;
+  border-top: 1px solid var(--line);
+}
+
+@media (max-width: 760px) {
+  .current-front-members[data-front-scroll="true"] {
+    padding-right: 5px;
+  }
+
+  #homeRoute .system-summary-panel {
+    padding-bottom: 54px !important;
+  }
+
+  .system-edit-button {
+    right: 12px;
+    bottom: 12px;
+    top: auto;
+    min-height: 30px;
+    padding: 5px 9px;
+    border-radius: 9px;
+    font-size: .62rem;
+  }
+
+  .system-editor-dialog {
+    width: min(680px, calc(100vw - 10px));
+    max-height: calc(100dvh - 10px);
+  }
+
+  .system-editor-heading {
+    padding: 12px 13px 10px;
+  }
+
+  .system-editor-heading h3 {
+    font-size: 1rem;
+  }
+
+  .system-editor-subtitle {
+    display: none;
+  }
+
+  .system-editor-body {
+    max-height: calc(100dvh - 126px);
+    grid-template-columns: 1fr;
+  }
+
+  .system-editor-preview {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .system-editor-preview-banner {
+    height: 78px;
+  }
+
+  .system-editor-preview-content {
+    min-height: 76px;
+    padding: 0 13px 12px 82px;
+    position: relative;
+  }
+
+  .system-editor-avatar-wrap {
+    position: absolute;
+    left: 13px;
+    top: 0;
+    width: 58px;
+    height: 58px;
+    margin-top: -29px;
+  }
+
+  .system-editor-preview-avatar {
+    width: 58px;
+    height: 58px;
+    border-radius: 17px;
+  }
+
+  .system-editor-color-preview {
+    width: 28px;
+    margin: 10px 0 7px;
+  }
+
+  .system-editor-preview-content > p {
+    display: none;
+  }
+
+  .system-editor-fields {
+    padding: 12px 13px;
+  }
+
+  .system-editor-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px;
+  }
+
+  .system-editor-grid input,
+  .system-editor-description textarea {
+    font-size: 16px;
+  }
+
+  .system-editor-description textarea {
+    min-height: 90px;
+  }
+
+  .system-editor-footer {
+    padding: 10px 13px 12px;
+  }
+}
+
+@media (max-width: 430px) {
+  .system-editor-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .system-editor-wide {
+    grid-column: 1;
+  }
+}
+
+
+/* Nihility system media containers. */
+.system-avatar > img{
+  width:100%;
+  height:100%;
+  display:block;
+  object-fit:cover;
+  object-position:center;
+}
+.system-editor-dialog [hidden]{
+  display:none!important;
+}
+.system-editor-preview-avatar:not([hidden]){
+  display:block;
+}
+.system-editor-avatar-wrap .fallback-avatar:not([hidden]){
+  display:grid;
+}

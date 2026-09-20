@@ -43,10 +43,11 @@
   const coreLoadData=loadData;
   loadData=async function loadDataWithRainbowFeatures(){
     await coreLoadData();
-    const [groups,links,settingsRows]=await Promise.all([
+    const [groups,links,settingsRows,liveSystem]=await Promise.all([
       nihilityApi.rest('groups',{query:'select=*&order=name.asc'}),
       nihilityApi.rest('member_groups',{query:'select=*&order=created_at.asc'}),
-      nihilityApi.rest('app_settings',{query:'select=settings&user_id=eq.'+encodeURIComponent(state.user.id)+'&limit=1'})
+      nihilityApi.rest('app_settings',{query:'select=settings&user_id=eq.'+encodeURIComponent(state.user.id)+'&limit=1'}),
+      state.pkConnected?nihilityApi.secure('pk_get_system').catch(error=>{console.warn('Unable to refresh PK system profile',error);return null}):Promise.resolve(null)
     ]);
     state.groups=groups||[];
     state.memberGroups=links||[];
@@ -64,15 +65,18 @@
         catch(error){console.warn('Unable to load group banner',g.id,error);g.banner_display_url=pkBannerUrl}
       }else g.banner_display_url=pkBannerUrl;
     }));
-    state.systemProfile=settingsRows?.[0]?.settings?.system_profile||null;
+    const storedSystem=settingsRows?.[0]?.settings?.system_profile||null;
+    state.systemProfile=liveSystem?.system?{...(storedSystem||{}),...liveSystem.system}:storedSystem;
     if(state.systemProfile){
       const s=state.systemProfile;
       const avatarPath=s.avatar_storage_path||null;
       const bannerPath=s.banner_storage_path||null;
-      s.avatar_display_url=s.avatar_url||null;
-      s.banner_display_url=s.banner||s.banner_url||null;
-      if(avatarPath){try{s.avatar_display_url=await nihilityApi.privateMediaUrl('avatar',avatarPath)}catch(error){console.warn('Unable to load system avatar',error)}}
-      if(bannerPath){try{s.banner_display_url=await nihilityApi.privateMediaUrl('banner',bannerPath)}catch(error){console.warn('Unable to load system banner',error)}}
+      const liveAvatar=liveSystem?.system?.avatar_url||null;
+      const liveBanner=liveSystem?.system?.banner||null;
+      s.avatar_display_url=liveAvatar||s.avatar_url||null;
+      s.banner_display_url=liveBanner||s.banner||s.banner_url||null;
+      if(!s.avatar_display_url&&avatarPath){try{s.avatar_display_url=await nihilityApi.privateMediaUrl('avatar',avatarPath)}catch(error){console.warn('Unable to load system avatar',error)}}
+      if(!s.banner_display_url&&bannerPath){try{s.banner_display_url=await nihilityApi.privateMediaUrl('banner',bannerPath)}catch(error){console.warn('Unable to load system banner',error)}}
     }
     state.historyHasMore=state.fronts.length>=100;
     refreshFeatureControls();
