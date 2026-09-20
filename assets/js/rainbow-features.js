@@ -65,6 +65,15 @@
       }else g.banner_display_url=pkBannerUrl;
     }));
     state.systemProfile=settingsRows?.[0]?.settings?.system_profile||null;
+    if(state.systemProfile){
+      const s=state.systemProfile;
+      const avatarPath=s.avatar_storage_path||null;
+      const bannerPath=s.banner_storage_path||null;
+      s.avatar_display_url=s.avatar_url||null;
+      s.banner_display_url=s.banner||s.banner_url||null;
+      if(avatarPath){try{s.avatar_display_url=await nihilityApi.privateMediaUrl('avatar',avatarPath)}catch(error){console.warn('Unable to load system avatar',error)}}
+      if(bannerPath){try{s.banner_display_url=await nihilityApi.privateMediaUrl('banner',bannerPath)}catch(error){console.warn('Unable to load system banner',error)}}
+    }
     state.historyHasMore=state.fronts.length>=100;
     refreshFeatureControls();
     renderAll();
@@ -672,11 +681,7 @@
     if(!s)return;
     const name=s.name||s.display_name;
     if(!name)return;
-    const sidebarName=document.querySelector('#sidebarName');
-    const sidebarRole=document.querySelector('#sidebarRole');
     const homeName=document.querySelector('#homeProfileName');
-    if(sidebarName)sidebarName.textContent=name;
-    if(sidebarRole)sidebarRole.textContent=s.id?('PK '+s.id):'Nihility system';
     if(homeName)homeName.textContent=name;
   }
 
