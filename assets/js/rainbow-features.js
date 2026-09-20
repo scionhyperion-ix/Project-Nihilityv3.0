@@ -42,18 +42,29 @@
 
   const coreLoadData=loadData;
   window.nihilitySystemLiveCache=window.nihilitySystemLiveCache||{value:null,at:0};
+
+  function applySystemMedia(system,liveSystem=null){
+    if(!system)return;
+    const live=liveSystem?.system||null;
+    system.avatar_display_url=live?.avatar_url||system.avatar_url||null;
+    system.banner_display_url=live?.banner||system.banner||system.banner_url||null;
+  }
+
   loadData=async function loadDataWithRainbowFeatures(){
     const systemCache=window.nihilitySystemLiveCache;
     const groupPromise=nihilityApi.rest('groups',{query:'select=*&order=name.asc'});
     const linkPromise=nihilityApi.rest('member_groups',{query:'select=*&order=created_at.asc'});
     const settingsPromise=nihilityApi.rest('app_settings',{query:'select=settings&user_id=eq.'+encodeURIComponent(state.user.id)+'&limit=1'});
+
     const shouldRefreshSystem=!systemCache.value||(Date.now()-systemCache.at)>=30000;
     const liveSystemPromise=shouldRefreshSystem
-      ?nihilityApi.secure('pk_get_system').then(result=>{systemCache.value=result;systemCache.at=Date.now();return result}).catch(error=>{console.warn('Unable to refresh PK system profile',error);return systemCache.value})
+      ?nihilityApi.secure('pk_get_system')
+        .then(result=>{systemCache.value=result;systemCache.at=Date.now();return result})
+        .catch(error=>{console.warn('Unable to refresh PK system profile',error);return systemCache.value})
       :Promise.resolve(systemCache.value);
 
     await coreLoadData();
-    const [groups,links,settingsRows,liveSystem]=await Promise.all([groupPromise,linkPromise,settingsPromise,liveSystemPromise]);
+    const [groups,links,settingsRows]=await Promise.all([groupPromise,linkPromise,settingsPromise]);
 
     state.groups=groups||[];
     state.memberGroups=links||[];
@@ -61,22 +72,28 @@
       g.icon_display_url=g.metadata?.pk_icon_url||null;
       g.banner_display_url=g.metadata?.pk_banner_url||null;
     });
+
     const storedSystem=settingsRows?.[0]?.settings?.system_profile||null;
-    state.systemProfile=liveSystem?.system?{...(storedSystem||{}),...liveSystem.system}:storedSystem;
-    if(state.systemProfile){
-      const s=state.systemProfile;
-      const avatarPath=s.avatar_storage_path||null;
-      const bannerPath=s.banner_storage_path||null;
-      const liveAvatar=liveSystem?.system?.avatar_url||null;
-      const liveBanner=liveSystem?.system?.banner||null;
-      s.avatar_display_url=liveAvatar||s.avatar_url||null;
-      s.banner_display_url=liveBanner||s.banner||s.banner_url||null;
-      if(!s.avatar_display_url&&avatarPath){try{s.avatar_display_url=await nihilityApi.privateMediaUrl('avatar',avatarPath)}catch(error){console.warn('Unable to load system avatar',error)}}
-      if(!s.banner_display_url&&bannerPath){try{s.banner_display_url=await nihilityApi.privateMediaUrl('banner',bannerPath)}catch(error){console.warn('Unable to load system banner',error)}}
-    }
+    state.systemProfile=storedSystem?{...storedSystem}:null;
+    applySystemMedia(state.systemProfile);
+
     state.historyHasMore=state.fronts.length>=100;
     refreshFeatureControls();
     renderAll();
+
+    void liveSystemPromise.then(async liveSystem=>{
+      if(!liveSystem?.system||!state.pkConnected)return;
+      state.systemProfile={...(state.systemProfile||{}),...liveSystem.system};
+      applySystemMedia(state.systemProfile,liveSystem);
+      if(!state.systemProfile.avatar_display_url&&state.systemProfile.avatar_storage_path){
+        try{state.systemProfile.avatar_display_url=await nihilityApi.privateMediaUrl('avatar',state.systemProfile.avatar_storage_path)}catch(error){console.warn('Unable to load system avatar',error)}
+      }
+      if(!state.systemProfile.banner_display_url&&state.systemProfile.banner_storage_path){
+        try{state.systemProfile.banner_display_url=await nihilityApi.privateMediaUrl('banner',state.systemProfile.banner_storage_path)}catch(error){console.warn('Unable to load system banner',error)}
+      }
+      renderHome();
+      applyImportedSystemIdentity();
+    });
   };
 
   function installMemberToolbar(){
