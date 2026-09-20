@@ -218,7 +218,20 @@ function renderSettings(){
 }
 function renderProfile(){
   if(!state.profile)return;
-  $('#profileHeading').textContent=state.profile.display_name||state.user.email;$('#profileEmail').textContent=state.user.email||'';$('#profileDisplayName').value=state.profile.display_name||'';$('#profileAvatarUrl').value=state.profile.avatar_storage_path?'':(state.profile.avatar_url||'');$('#profileRole').textContent=state.profile.role==='owner'?'Owner':'Member';$('#invitePanel').hidden=state.profile.role!=='owner';renderHeader();
+  $('#profileHeading').textContent=state.profile.display_name||state.user.email;
+  $('#profileEmail').textContent=state.user.email||'';
+  $('#profileDisplayName').value=state.profile.display_name||'';
+  $('#profileAvatarUrl').value=state.profile.avatar_storage_path?'':(state.profile.avatar_url||'');
+  $('#profileBannerUrl').value=state.profile.banner_storage_path?'':(state.profile.banner_url||'');
+  $('#profileRole').textContent=state.profile.role==='owner'?'Owner':'Member';
+  $('#invitePanel').hidden=state.profile.role!=='owner';
+  const banner=$('#profileBannerPreview');
+  if(banner){
+    const url=state.profile.banner_url||'';
+    banner.style.backgroundImage=url?'linear-gradient(rgba(10,11,20,.08),rgba(10,11,20,.18)), url("'+url.replaceAll('"','%22')+'")':'';
+    banner.classList.toggle('has-profile-banner',Boolean(url));
+  }
+  renderHeader();
 }
 
 function resetMemberForm(){$('#memberForm').reset();$('#memberId').value='';$('#memberColorPicker').value='#8b7cf6';$('#memberError').hidden=true;$('#deleteMemberButton').hidden=true}
@@ -339,15 +352,35 @@ async function importPk(){
 }
 
 async function saveProfile(e){
-  e.preventDefault();const msg=$('#profileMessage');msg.textContent='Saving...';let upload=null;
+  e.preventDefault();const msg=$('#profileMessage');msg.textContent='Saving...';let avatarUpload=null,bannerUpload=null;
   try{
-    const old=state.profile,external=$('#profileAvatarUrl').value.trim();upload=await maybeUpload('profile',$('#profileAvatarFile'));
-    const importedPath=!upload&&external?await importExternalMedia('profile',external):null;
-    const body={display_name:$('#profileDisplayName').value.trim()||null,avatar_url:null,avatar_storage_path:upload?.path||importedPath||old.avatar_storage_path||null};
+    const old=state.profile;
+    const avatarExternal=$('#profileAvatarUrl').value.trim();
+    const bannerExternal=$('#profileBannerUrl').value.trim();
+    avatarUpload=await maybeUpload('profile',$('#profileAvatarFile'));
+    bannerUpload=await maybeUpload('banner',$('#profileBannerFile'));
+    const importedAvatarPath=!avatarUpload&&avatarExternal?await importExternalMedia('profile',avatarExternal):null;
+    const importedBannerPath=!bannerUpload&&bannerExternal?await importExternalMedia('banner',bannerExternal):null;
+    const body={
+      display_name:$('#profileDisplayName').value.trim()||null,
+      avatar_url:null,
+      avatar_storage_path:avatarUpload?.path||importedAvatarPath||old.avatar_storage_path||null,
+      banner_url:null,
+      banner_storage_path:bannerUpload?.path||importedBannerPath||old.banner_storage_path||null
+    };
     await nihilityApi.rest('profiles',{method:'PATCH',query:'user_id=eq.'+state.user.id,body,prefer:'return=minimal'});
     if(old.avatar_storage_path&&old.avatar_storage_path!==body.avatar_storage_path)await safeDelete('profile',old.avatar_storage_path);
-    state.profile={...state.profile,...body};if(state.profile.avatar_storage_path)state.profile.avatar_url=await nihilityApi.privateMediaUrl('profile',state.profile.avatar_storage_path);msg.textContent='Profile saved.';renderProfile();
-  }catch(error){if(upload?.path)await safeDelete('profile',upload.path);msg.textContent=error.message}
+    if(old.banner_storage_path&&old.banner_storage_path!==body.banner_storage_path)await safeDelete('banner',old.banner_storage_path);
+    state.profile={...state.profile,...body};
+    if(state.profile.avatar_storage_path)state.profile.avatar_url=await nihilityApi.privateMediaUrl('profile',state.profile.avatar_storage_path);
+    if(state.profile.banner_storage_path)state.profile.banner_url=await nihilityApi.privateMediaUrl('banner',state.profile.banner_storage_path);
+    $('#profileAvatarFile').value='';$('#profileBannerFile').value='';
+    msg.textContent='Profile saved.';renderProfile();
+  }catch(error){
+    if(avatarUpload?.path)await safeDelete('profile',avatarUpload.path);
+    if(bannerUpload?.path)await safeDelete('banner',bannerUpload.path);
+    msg.textContent=error.message
+  }
 }
 async function invite(e){
   e.preventDefault();
