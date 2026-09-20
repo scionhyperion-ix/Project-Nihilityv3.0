@@ -380,3 +380,21 @@
 #groupPreviewIconFallback:not([hidden]){
   display:grid;
 }
+
+
+/* Keep page background fixed while editor dialogs are open. */
+body:has(dialog[open]){
+  overflow:hidden;
+  overscroll-behavior:none;
+}
+.member-editor-dialog[open],
+.groups-manager-dialog[open]{
+  overscroll-behavior:contain;
+}
+.member-editor-fields,
+.member-live-preview,
+.groups-profile-fields,
+.groups-members-editor,
+.groups-member-picker{
+  overscroll-behavior:contain;
+}
