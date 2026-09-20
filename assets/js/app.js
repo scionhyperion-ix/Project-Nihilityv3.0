@@ -44,9 +44,37 @@ function initial(v){return String(v||'N').trim().charAt(0).toUpperCase()||'N'}
 function fmt(ts){return ts?new Date(ts).toLocaleString():'Unknown'}
 function relative(ts){if(!ts)return'';const d=Date.now()-new Date(ts).getTime(),mins=Math.floor(d/60000);if(mins<1)return'now';if(mins<60)return mins+'m ago';const hrs=Math.floor(mins/60);if(hrs<24)return hrs+'h ago';return Math.floor(hrs/24)+'d ago'}
 function duration(ts){if(!ts)return'--';const sec=Math.max(0,Math.floor((Date.now()-new Date(ts).getTime())/1000)),h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60);return h?(h+'h '+m+'m'):(m+'m')}
-function avatarEl(item,cls='member-card-avatar'){if(item?.avatar_url){const img=document.createElement('img');img.className=cls;img.src=item.avatar_url;img.alt='';return img}const d=document.createElement('div');d.className=cls+' fallback-avatar';d.textContent=initial(label(item));return d}
+let memberMediaObserver=null;
+function ensureMemberMediaObserver(){
+  if(memberMediaObserver||!('IntersectionObserver' in window))return memberMediaObserver;
+  memberMediaObserver=new IntersectionObserver(entries=>{
+    entries.forEach(entry=>{
+      if(!entry.isIntersecting)return;
+      const el=entry.target;memberMediaObserver.unobserve(el);
+      const member=state.members.find(m=>m.id===el.dataset.memberMediaId);
+      if(!member)return;
+      void hydrateMemberMedia(member).then(()=>{
+        if(!member.avatar_url||!el.isConnected)return;
+        const img=document.createElement('img');
+        img.className=el.className.replace(/\s*fallback-avatar\b/,'');
+        img.src=member.avatar_url;img.alt='';
+        el.replaceWith(img);
+      });
+    });
+  },{rootMargin:'320px 0px'});
+  return memberMediaObserver;
+}
+function avatarEl(item,cls='member-card-avatar'){
+  if(item?.avatar_url){const img=document.createElement('img');img.className=cls;img.src=item.avatar_url;img.alt='';return img}
+  const d=document.createElement('div');d.className=cls+' fallback-avatar';d.textContent=initial(label(item));
+  if(item?.id&&item?.avatar_storage_path){
+    d.dataset.memberMediaId=item.id;
+    requestAnimationFrame(()=>{if(d.isConnected)ensureMemberMediaObserver()?.observe(d)});
+  }
+  return d
+}
 
-function setView(name){$('#setupView').hidden=name!=='setup';$('#loginView').hidden=name!=='login';$('#resetView').hidden=name!=='reset';$('#deniedView').hidden=name!=='denied';$('#appView').hidden=name!=='app'}
+function setView(name){$('#loadingView').hidden=name!=='loading';$('#setupView').hidden=name!=='setup';$('#loginView').hidden=name!=='login';$('#resetView').hidden=name!=='reset';$('#deniedView').hidden=name!=='denied';$('#appView').hidden=name!=='app'}
 function setRoute(route){
   state.route=route;
   const meta={home:['Overview','Home'],members:['System directory','Members'],history:['Front tracking','Front history'],settings:['Connection and privacy','Settings'],profile:['Account','Profile']};
@@ -65,30 +93,59 @@ async function bootstrapProfile(){
   state.profile=rows?.[0]||null;
   return Boolean(state.profile);
 }
+async function hydrateMemberMedia(member,{banner=false}={}){
+  if(!member)return member;
+  const jobs=[];
+  if(member.avatar_storage_path&&!member.avatar_url){
+    jobs.push(nihilityApi.privateMediaUrl('avatar',member.avatar_storage_path)
+      .then(url=>{member.avatar_url=url})
+      .catch(error=>{console.warn('Unable to load member avatar',member.id,error)}));
+  }
+  if(banner&&member.banner_storage_path&&!member.banner_url){
+    jobs.push(nihilityApi.privateMediaUrl('banner',member.banner_storage_path)
+      .then(url=>{member.banner_url=url})
+      .catch(error=>{console.warn('Unable to load member banner',member.id,error)}));
+  }
+  if(jobs.length)await Promise.all(jobs);
+  return member;
+}
+window.nihilityHydrateMemberMedia=hydrateMemberMedia;
+
+async function hydrateHomeMedia(){
+  const ids=new Set();
+  const front=activeFront();
+  if(front)frontMembers(front.id).forEach(m=>ids.add(m.id));
+
+  const counts=new Map();
+  state.frontMembers.forEach(link=>counts.set(link.member_id,(counts.get(link.member_id)||0)+1));
+  [...counts.entries()]
+    .sort((a,b)=>b[1]-a[1])
+    .slice(0,8)
+    .forEach(([memberId])=>ids.add(memberId));
+
+  const priority=[...ids].map(id=>state.members.find(m=>m.id===id)).filter(Boolean);
+  const jobs=priority.map(member=>hydrateMemberMedia(member));
+  if(state.profile?.avatar_storage_path&&!state.profile.avatar_url){
+    jobs.push(nihilityApi.privateMediaUrl('profile',state.profile.avatar_storage_path)
+      .then(url=>{state.profile.avatar_url=url})
+      .catch(error=>{console.warn('Unable to load profile avatar',error)}));
+  }
+  await Promise.all(jobs);
+}
+
 async function loadData(){
   const data=await Promise.all([
     nihilityApi.rest('members',{query:'select=*&order=name.asc'}),
     nihilityApi.rest('fronts',{query:'select=*&order=started_at.desc&limit=100'}),
     nihilityApi.rest('front_members',{query:'select=*&order=joined_at.desc'}),
-    nihilityApi.rest('external_integrations',{query:'provider=eq.pluralkit&select=*'}),
-    nihilityApi.secure('pk_status').catch(()=>({connected:false}))
+    nihilityApi.rest('external_integrations',{query:'provider=eq.pluralkit&select=*'})
   ]);
-  state.members=data[0]||[];state.fronts=data[1]||[];state.frontMembers=data[2]||[];state.integration=data[3]?.[0]||null;state.pkConnected=Boolean(data[4]?.connected);
-  await Promise.all(state.members.map(async m=>{
-    if(m.avatar_storage_path){
-      try{m.avatar_url=await nihilityApi.privateMediaUrl('avatar',m.avatar_storage_path)}
-      catch(error){console.warn('Unable to load member avatar',m.id,error);m.avatar_url=null}
-    }
-    if(m.banner_storage_path){
-      try{m.banner_url=await nihilityApi.privateMediaUrl('banner',m.banner_storage_path)}
-      catch(error){console.warn('Unable to load member banner',m.id,error);m.banner_url=null}
-    }
-  }));
-  if(state.profile?.avatar_storage_path){
-    try{state.profile.avatar_url=await nihilityApi.privateMediaUrl('profile',state.profile.avatar_storage_path)}
-    catch(error){console.warn('Unable to load profile avatar',error);state.profile.avatar_url=null}
-  }
-  renderAll();
+  state.members=data[0]||[];
+  state.fronts=data[1]||[];
+  state.frontMembers=data[2]||[];
+  state.integration=data[3]?.[0]||null;
+  state.pkConnected=Boolean(state.integration);
+  await hydrateHomeMedia();
 }
 function renderAll(){renderHeader();renderHome();renderMembers();renderHistory();renderSettings();renderProfile()}
 function renderHeader(){
@@ -312,7 +369,11 @@ async function boot(){
   nihilityApi.readSessionFromUrl();state.user=await nihilityApi.user();if(!state.user){setView('login');return}
   if(new URLSearchParams(location.search).get('reset')==='1'){setView('reset');return}
   if(!await bootstrapProfile()){setView('denied');return}
-  setView('app');await loadData();const requested=(location.hash||'#home').slice(1);setRoute(['home','members','history','settings','profile'].includes(requested)?requested:'home');
+  setView('loading');
+  await loadData();
+  const requested=(location.hash||'#home').slice(1);
+  setRoute(['home','members','groups','history','settings','profile'].includes(requested)?requested:'home');
+  setView('app');
 }
 
 $('#loginForm').onsubmit=async e=>{e.preventDefault();const m=$('#loginMessage'),email=$('#emailInput').value.trim(),password=$('#passwordInput').value;if(!password){m.textContent='Enter your password, or use the magic-link button.';return}m.textContent='Signing in...';try{await nihilityApi.signInWithPassword(email,password);location.reload()}catch(error){m.textContent=error.message}};
