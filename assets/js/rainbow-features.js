@@ -53,14 +53,16 @@
     await Promise.all(state.groups.map(async g=>{
       const iconPath=g.metadata?.icon_storage_path||null;
       const bannerPath=g.metadata?.banner_storage_path||null;
+      const pkIconUrl=g.metadata?.pk_icon_url||null;
+      const pkBannerUrl=g.metadata?.pk_banner_url||null;
       if(iconPath){
         try{g.icon_display_url=await nihilityApi.privateMediaUrl('avatar',iconPath)}
-        catch(error){console.warn('Unable to load group icon',g.id,error);g.icon_display_url=null}
-      }else g.icon_display_url=null;
+        catch(error){console.warn('Unable to load group icon',g.id,error);g.icon_display_url=pkIconUrl}
+      }else g.icon_display_url=pkIconUrl;
       if(bannerPath){
         try{g.banner_display_url=await nihilityApi.privateMediaUrl('banner',bannerPath)}
-        catch(error){console.warn('Unable to load group banner',g.id,error);g.banner_display_url=null}
-      }else g.banner_display_url=null;
+        catch(error){console.warn('Unable to load group banner',g.id,error);g.banner_display_url=pkBannerUrl}
+      }else g.banner_display_url=pkBannerUrl;
     }));
     state.systemProfile=settingsRows?.[0]?.settings?.system_profile||null;
     state.historyHasMore=state.fronts.length>=100;
@@ -458,8 +460,8 @@
     document.querySelector('#groupsManagerDisplayName').value=group?.display_name||'';
     document.querySelector('#groupsManagerColor').value=group?.color?'#'+group.color:'';
     document.querySelector('#groupsManagerDescription').value=group?.description||'';
-    document.querySelector('#groupsManagerIconUrl').value='';
-    document.querySelector('#groupsManagerBannerUrl').value='';
+    document.querySelector('#groupsManagerIconUrl').value=group?.metadata?.icon_storage_path?'':(group?.metadata?.pk_icon_url||'');
+    document.querySelector('#groupsManagerBannerUrl').value=group?.metadata?.banner_storage_path?'':(group?.metadata?.pk_banner_url||'');
     document.querySelector('#groupsManagerIconFile').value='';
     document.querySelector('#groupsManagerBannerFile').value='';
     document.querySelector('#groupsMemberSearch').value='';
