@@ -125,10 +125,15 @@ async function hydrateHomeMedia(){
 
   const priority=[...ids].map(id=>state.members.find(m=>m.id===id)).filter(Boolean);
   const jobs=priority.map(member=>hydrateMemberMedia(member));
-  if(state.profile?.avatar_storage_path&&!state.profile.avatar_url){
+  if(state.profile?.avatar_storage_path){
     jobs.push(nihilityApi.privateMediaUrl('profile',state.profile.avatar_storage_path)
       .then(url=>{state.profile.avatar_url=url})
       .catch(error=>{console.warn('Unable to load profile avatar',error)}));
+  }
+  if(state.profile?.banner_storage_path){
+    jobs.push(nihilityApi.privateMediaUrl('banner',state.profile.banner_storage_path)
+      .then(url=>{state.profile.banner_url=url})
+      .catch(error=>{console.warn('Unable to load profile banner',error)}));
   }
   await Promise.all(jobs);
 }
@@ -363,17 +368,23 @@ async function saveProfile(e){
     const importedBannerPath=!bannerUpload&&bannerExternal?await importExternalMedia('banner',bannerExternal):null;
     const body={
       display_name:$('#profileDisplayName').value.trim()||null,
-      avatar_url:null,
+      avatar_url:avatarExternal||null,
       avatar_storage_path:avatarUpload?.path||importedAvatarPath||old.avatar_storage_path||null,
-      banner_url:null,
+      banner_url:bannerExternal||null,
       banner_storage_path:bannerUpload?.path||importedBannerPath||old.banner_storage_path||null
     };
     await nihilityApi.rest('profiles',{method:'PATCH',query:'user_id=eq.'+state.user.id,body,prefer:'return=minimal'});
     if(old.avatar_storage_path&&old.avatar_storage_path!==body.avatar_storage_path)await safeDelete('profile',old.avatar_storage_path);
     if(old.banner_storage_path&&old.banner_storage_path!==body.banner_storage_path)await safeDelete('banner',old.banner_storage_path);
     state.profile={...state.profile,...body};
-    if(state.profile.avatar_storage_path)state.profile.avatar_url=await nihilityApi.privateMediaUrl('profile',state.profile.avatar_storage_path);
-    if(state.profile.banner_storage_path)state.profile.banner_url=await nihilityApi.privateMediaUrl('banner',state.profile.banner_storage_path);
+    if(state.profile.avatar_storage_path){
+      try{state.profile.avatar_url=await nihilityApi.privateMediaUrl('profile',state.profile.avatar_storage_path)}
+      catch(error){console.warn('Unable to reload profile avatar',error)}
+    }
+    if(state.profile.banner_storage_path){
+      try{state.profile.banner_url=await nihilityApi.privateMediaUrl('banner',state.profile.banner_storage_path)}
+      catch(error){console.warn('Unable to reload profile banner',error)}
+    }
     $('#profileAvatarFile').value='';$('#profileBannerFile').value='';
     msg.textContent='Profile saved.';renderProfile();
   }catch(error){
@@ -422,7 +433,14 @@ $('#createMemberButton').onclick=()=>openMember();$('#memberSearch').oninput=ren
 $('#frontForm').onsubmit=saveFront;$('#closeFrontDialog').onclick=$('#cancelFrontButton').onclick=()=>$('#frontDialog').close();$('#frontMemberSearch').oninput=()=>buildFrontPicker($$('#frontMemberPicker input:checked').map(i=>i.value));$('#customFrontTimeEnabled').onchange=e=>$('#customFrontTimeRow').hidden=!e.target.checked;
 $('#connectPkButton').onclick=connectPk;$('#disconnectPkButton').onclick=disconnectPk;$('#shareFrontingToggle').onchange=toggleShare;$('#importPkButton').onclick=importPk;
 document.querySelectorAll('input[name="themeMode"]').forEach(i=>i.onchange=()=>applyTheme(i.value));
-$('#profileForm').onsubmit=saveProfile;$('#inviteForm').onsubmit=invite;
+$('#profileForm').onsubmit=saveProfile;
+$('#profileBannerUrl').addEventListener('input',()=>{
+  const banner=$('#profileBannerPreview');
+  const url=$('#profileBannerUrl').value.trim();
+  if(!banner)return;
+  banner.style.backgroundImage=url?'linear-gradient(rgba(10,11,20,.08),rgba(10,11,20,.18)), url("'+url.replaceAll('"','%22')+'")':'';
+  banner.classList.toggle('has-profile-banner',Boolean(url));
+});$('#inviteForm').onsubmit=invite;
 const AUTO_REFRESH_MS=15000;
 let autoRefreshBusy=false;
 let lastAutoRefreshAt=0;
