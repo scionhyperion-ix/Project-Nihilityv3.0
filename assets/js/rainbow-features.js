@@ -43,34 +43,24 @@
   const coreLoadData=loadData;
   window.nihilitySystemLiveCache=window.nihilitySystemLiveCache||{value:null,at:0};
   loadData=async function loadDataWithRainbowFeatures(){
-    await coreLoadData();
     const systemCache=window.nihilitySystemLiveCache;
-    const shouldRefreshSystem=state.pkConnected&&(!systemCache.value||(Date.now()-systemCache.at)>=30000);
+    const groupPromise=nihilityApi.rest('groups',{query:'select=*&order=name.asc'});
+    const linkPromise=nihilityApi.rest('member_groups',{query:'select=*&order=created_at.asc'});
+    const settingsPromise=nihilityApi.rest('app_settings',{query:'select=settings&user_id=eq.'+encodeURIComponent(state.user.id)+'&limit=1'});
+    const shouldRefreshSystem=!systemCache.value||(Date.now()-systemCache.at)>=30000;
     const liveSystemPromise=shouldRefreshSystem
       ?nihilityApi.secure('pk_get_system').then(result=>{systemCache.value=result;systemCache.at=Date.now();return result}).catch(error=>{console.warn('Unable to refresh PK system profile',error);return systemCache.value})
-      :Promise.resolve(state.pkConnected?systemCache.value:null);
-    const [groups,links,settingsRows,liveSystem]=await Promise.all([
-      nihilityApi.rest('groups',{query:'select=*&order=name.asc'}),
-      nihilityApi.rest('member_groups',{query:'select=*&order=created_at.asc'}),
-      nihilityApi.rest('app_settings',{query:'select=settings&user_id=eq.'+encodeURIComponent(state.user.id)+'&limit=1'}),
-      liveSystemPromise
-    ]);
+      :Promise.resolve(systemCache.value);
+
+    await coreLoadData();
+    const [groups,links,settingsRows,liveSystem]=await Promise.all([groupPromise,linkPromise,settingsPromise,liveSystemPromise]);
+
     state.groups=groups||[];
     state.memberGroups=links||[];
-    await Promise.all(state.groups.map(async g=>{
-      const iconPath=g.metadata?.icon_storage_path||null;
-      const bannerPath=g.metadata?.banner_storage_path||null;
-      const pkIconUrl=g.metadata?.pk_icon_url||null;
-      const pkBannerUrl=g.metadata?.pk_banner_url||null;
-      if(iconPath){
-        try{g.icon_display_url=await nihilityApi.privateMediaUrl('avatar',iconPath)}
-        catch(error){console.warn('Unable to load group icon',g.id,error);g.icon_display_url=pkIconUrl}
-      }else g.icon_display_url=pkIconUrl;
-      if(bannerPath){
-        try{g.banner_display_url=await nihilityApi.privateMediaUrl('banner',bannerPath)}
-        catch(error){console.warn('Unable to load group banner',g.id,error);g.banner_display_url=pkBannerUrl}
-      }else g.banner_display_url=pkBannerUrl;
-    }));
+    state.groups.forEach(g=>{
+      g.icon_display_url=g.metadata?.pk_icon_url||null;
+      g.banner_display_url=g.metadata?.pk_banner_url||null;
+    });
     const storedSystem=settingsRows?.[0]?.settings?.system_profile||null;
     state.systemProfile=liveSystem?.system?{...(storedSystem||{}),...liveSystem.system}:storedSystem;
     if(state.systemProfile){
@@ -297,6 +287,11 @@
     document.querySelector('#memberKeepProxy').checked=Boolean(m?.metadata?.keep_proxy);
     clearMemberPreviewObjectUrls();
     updateMemberPreview();
+    if(m&&window.nihilityHydrateMemberMedia){
+      void window.nihilityHydrateMemberMedia(m,{banner:true}).then(()=>{
+        if(document.querySelector('#memberDialog')?.open&&document.querySelector('#memberId')?.value===m.id)updateMemberPreview();
+      });
+    }
   };
 
   saveMember=async function saveMemberWithRainbowFeatures(e){
