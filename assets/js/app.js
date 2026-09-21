@@ -87,6 +87,68 @@ function setRoute(route){
 function activeFront(){return state.fronts.find(f=>!f.ended_at)||null}
 function activeMembers(){return state.members.filter(m=>!m.archived_at)}
 function frontMembers(frontId){return state.frontMembers.filter(x=>x.front_id===frontId).map(x=>state.members.find(m=>m.id===x.member_id)).filter(Boolean)}
+function frontMemberLink(frontId,memberId){
+  return state.frontMembers
+    .filter(x=>x.front_id===frontId&&x.member_id===memberId)
+    .sort((a,b)=>new Date(b.joined_at||0)-new Date(a.joined_at||0))[0]||null;
+}
+function continuousFrontStart(front,memberId){
+  if(!front)return null;
+  const ordered=[...state.fronts].sort((a,b)=>new Date(b.started_at)-new Date(a.started_at));
+  const index=ordered.findIndex(f=>f.id===front.id);
+  if(index<0)return frontMemberLink(front.id,memberId)?.joined_at||front.started_at;
+
+  let start=frontMemberLink(front.id,memberId)?.joined_at||front.started_at;
+  let segmentStart=new Date(front.started_at).getTime();
+
+  for(let i=index+1;i<ordered.length;i++){
+    const previous=ordered[i];
+    if(!previous?.ended_at)break;
+    const previousEnd=new Date(previous.ended_at).getTime();
+    if(!Number.isFinite(previousEnd)||Math.abs(previousEnd-segmentStart)>5000)break;
+
+    const previousLink=frontMemberLink(previous.id,memberId);
+    if(!previousLink)break;
+
+    const previousStart=previousLink.joined_at||previous.started_at;
+    if(previousStart&&new Date(previousStart)<new Date(start))start=previousStart;
+    segmentStart=new Date(previous.started_at).getTime();
+  }
+  return start;
+}
+function frontTimerTextFromMs(ms){
+  const seconds=Math.max(0,Math.floor(ms/1000));
+  if(seconds<60)return seconds+'s';
+  const hours=Math.floor(seconds/3600);
+  const minutes=Math.floor((seconds%3600)/60);
+  return hours?(hours+'h '+minutes+'m'):(minutes+'m');
+}
+function frontSinceText(ts){
+  if(!ts)return'';
+  const date=new Date(ts);
+  const today=new Date();
+  const sameDay=date.getFullYear()===today.getFullYear()&&date.getMonth()===today.getMonth()&&date.getDate()===today.getDate();
+  const options=sameDay
+    ?{hour:'numeric',minute:'2-digit'}
+    :{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'};
+  return 'since '+new Intl.DateTimeFormat(undefined,options).format(date);
+}
+function updateFrontTimers(){
+  const now=Date.now();
+  const starts=[];
+  document.querySelectorAll('[data-front-timer-start]').forEach(el=>{
+    const start=Number(el.dataset.frontTimerStart);
+    if(!Number.isFinite(start))return;
+    starts.push(start);
+    el.textContent=frontTimerTextFromMs(now-start);
+  });
+  const average=$('#frontDuration');
+  if(!average)return;
+  if(!starts.length){average.textContent='--';average.title='Average current fronting time';return}
+  const avgStart=starts.reduce((sum,value)=>sum+value,0)/starts.length;
+  average.textContent='Avg '+frontTimerTextFromMs(now-avgStart);
+  average.title='Average current fronting time across '+starts.length+' fronter'+(starts.length===1?'':'s');
+}
 
 async function bootstrapProfile(){
   const rows=await nihilityApi.rest('profiles',{query:'select=*&user_id=eq.'+state.user.id+'&limit=1'});
@@ -170,8 +232,27 @@ function renderHome(){
     $('#currentFrontHeading').textContent='Nobody is fronting';$('#frontDuration').textContent='--';
     const p=document.createElement('p');p.className='muted';p.textContent='Start a front from Quick front or Manage front.';$('#currentFrontMembers').append(p);
   }else{
-    $('#currentFrontHeading').textContent=members.length===1?label(members[0]):(members.length+' co-fronters');$('#frontDuration').textContent=duration(front.started_at);
-    members.forEach(m=>{const row=document.createElement('div');row.className='front-person';row.append(avatarEl(m,'timeline-avatar'));const copy=document.createElement('div');copy.className='front-person-copy';const s=document.createElement('strong');s.textContent=label(m);const sm=document.createElement('small');sm.textContent=m.pronouns||m.name;copy.append(s,sm);row.append(copy);$('#currentFrontMembers').append(row)});
+    $('#currentFrontHeading').textContent=members.length===1?label(members[0]):(members.length+' co-fronters');
+    members.forEach(m=>{
+      const row=document.createElement('div');row.className='front-person timed-front-person';
+      row.append(avatarEl(m,'timeline-avatar'));
+      const copy=document.createElement('div');copy.className='front-person-copy';
+      const name=document.createElement('strong');name.textContent=label(m);
+      const pronouns=document.createElement('small');pronouns.textContent=m.pronouns||m.name;
+
+      const start=continuousFrontStart(front,m.id);
+      const timing=document.createElement('div');timing.className='front-member-timing';
+      const timer=document.createElement('span');timer.className='front-member-timer';
+      if(start)timer.dataset.frontTimerStart=String(new Date(start).getTime());
+      timer.textContent=start?frontTimerTextFromMs(Date.now()-new Date(start).getTime()):'--';
+      const since=document.createElement('span');since.className='front-member-since';since.textContent=frontSinceText(start);
+      timing.append(timer,since);
+
+      copy.append(name,pronouns,timing);
+      row.append(copy);
+      $('#currentFrontMembers').append(row);
+    });
+    updateFrontTimers();
   }
   const system=state.systemProfile||{};
   const systemName=system.name||system.display_name||state.integration?.external_system_name||'Nihility system';
@@ -470,5 +551,5 @@ window.addEventListener('focus',()=>{if(Date.now()-lastAutoRefreshAt>5000)void a
 window.addEventListener('online',()=>void autoRefreshData({force:true}));
 $('#refreshButton').title='Nihility also refreshes automatically every 15 seconds';
 
-setInterval(()=>{const f=activeFront();if(f)$('#frontDuration').textContent=duration(f.started_at)},60000);
+setInterval(updateFrontTimers,15000);
 boot().then(()=>{lastAutoRefreshAt=Date.now()}).catch(error=>{console.error(error);toast('Unable to start Nihility',error.message,'error')});
