@@ -414,7 +414,7 @@ async function actionImportPkGroups(user:any){
   }
 
   const linkSet=new Set((existingLinks||[]).map((x:any)=>String(x.member_id)+":"+String(x.group_id)));
-  let added=0,skipped=0,membershipsAdded=0,unresolved=0;
+  let added=0,updated=0,unchanged=0,membershipsAdded=0,unresolved=0;
 
   for(const g of pkGroups||[]){
     let local=groupByPk.get(String(g.id))||(g.uuid?groupByPk.get(String(g.uuid)):null);
@@ -446,20 +446,47 @@ async function actionImportPkGroups(user:any){
         if(g.uuid)groupByPk.set(String(g.uuid),local);
       }
     }else{
-      const metadata={...(local.metadata||{}),pk_uuid:g.uuid||local.metadata?.pk_uuid||null,pk_icon_url:iconUrl||local.metadata?.pk_icon_url||null,pk_banner_url:bannerUrl||local.metadata?.pk_banner_url||null,icon_storage_path:iconPath||local.metadata?.icon_storage_path||null,banner_storage_path:bannerPath||local.metadata?.banner_storage_path||null};
-      await admin("/rest/v1/groups?id=eq."+encodeURIComponent(local.id),{
-        method:"PATCH",
-        headers:{Prefer:"return=minimal"},
-        body:JSON.stringify({
-          name:g.name||g.display_name||local.name,
-          display_name:g.display_name||null,
-          description:g.description||null,
-          color:g.color||null,
-          metadata
-        })
-      });
-      local={...local,name:g.name||g.display_name||local.name,display_name:g.display_name||null,description:g.description||null,color:g.color||null,metadata};
-      skipped++;
+      const nextName=g.name||g.display_name||local.name;
+      const nextDisplayName=g.display_name||null;
+      const nextDescription=g.description||null;
+      const nextColor=g.color||null;
+      const metadata={
+        ...(local.metadata||{}),
+        pk_uuid:g.uuid||local.metadata?.pk_uuid||null,
+        pk_icon_url:iconUrl||local.metadata?.pk_icon_url||null,
+        pk_banner_url:bannerUrl||local.metadata?.pk_banner_url||null,
+        icon_storage_path:iconPath||local.metadata?.icon_storage_path||null,
+        banner_storage_path:bannerPath||local.metadata?.banner_storage_path||null
+      };
+      const oldMetadata=local.metadata||{};
+      const changed=
+        local.name!==nextName||
+        (local.display_name||null)!==nextDisplayName||
+        (local.description||null)!==nextDescription||
+        (local.color||null)!==nextColor||
+        (oldMetadata.pk_uuid||null)!==(metadata.pk_uuid||null)||
+        (oldMetadata.pk_icon_url||null)!==(metadata.pk_icon_url||null)||
+        (oldMetadata.pk_banner_url||null)!==(metadata.pk_banner_url||null)||
+        (oldMetadata.icon_storage_path||null)!==(metadata.icon_storage_path||null)||
+        (oldMetadata.banner_storage_path||null)!==(metadata.banner_storage_path||null);
+
+      if(changed){
+        await admin("/rest/v1/groups?id=eq."+encodeURIComponent(local.id),{
+          method:"PATCH",
+          headers:{Prefer:"return=minimal"},
+          body:JSON.stringify({
+            name:nextName,
+            display_name:nextDisplayName,
+            description:nextDescription,
+            color:nextColor,
+            metadata
+          })
+        });
+        local={...local,name:nextName,display_name:nextDisplayName,description:nextDescription,color:nextColor,metadata};
+        updated++;
+      }else{
+        unchanged++;
+      }
     }
     if(!local?.id)continue;
 
@@ -482,7 +509,8 @@ async function actionImportPkGroups(user:any){
   return {
     total:(pkGroups||[]).length,
     added,
-    updated:skipped,
+    updated,
+    unchanged,
     membershipsAdded,
     unresolved,
     metadataUpdated,
