@@ -413,26 +413,46 @@ async function disconnectPk(){
 }
 async function toggleShare(){if(!state.integration)return;const value=$('#shareFrontingToggle').checked;await nihilityApi.rest('external_integrations',{method:'PATCH',query:'provider=eq.pluralkit',body:{share_fronting_updates:value},prefer:'return=minimal'});state.integration.share_fronting_updates=value;renderHome();toast('Front sharing '+(value?'enabled':'disabled'))}
 async function importPk(){
-  const message=$('#pkMessage');message.textContent='Importing members securely...';
+  const message=$('#pkMessage');message.textContent='Comparing PluralKit with Nihility...';
   try{
-    let offset=0,total=null,added=0,skipped=0,mediaCopied=0;
-    while(total===null||offset<total){
-      const result=await nihilityApi.secure('pk_import',{offset,limit:10});
-      total=result.total;added+=result.added;skipped+=result.skipped;mediaCopied+=result.mediaCopied;
-      offset=result.nextOffset??total;
-      message.textContent='Importing members... '+Math.min(offset,total)+' / '+total;
-      if(result.processed===0)break;
+    const comparison=await nihilityApi.secure('pk_compare');
+    const missing=Array.isArray(comparison.missingMemberIds)?comparison.missingMemberIds:[];
+    let added=0,skipped=0,mediaCopied=0;
+
+    if(missing.length){
+      for(let offset=0;offset<missing.length;offset+=10){
+        const batch=missing.slice(offset,offset+10);
+        const result=await nihilityApi.secure('pk_import',{memberIds:batch});
+        added+=result.added||0;skipped+=result.skipped||0;mediaCopied+=result.mediaCopied||0;
+        message.textContent='Importing new members... '+Math.min(offset+batch.length,missing.length)+' / '+missing.length;
+      }
+    }else{
+      message.textContent='Members already up to date. Checking front history...';
     }
+
     let before=null,frontAdded=0,frontSkipped=0,unresolved=0,batches=0;
     do{
-      message.textContent='Importing PluralKit front history... '+frontAdded+' imported';
+      message.textContent='Checking front history... '+frontAdded+' new';
       const result=await nihilityApi.secure('pk_import_fronts',{before,limit:100});
       frontAdded+=result.added||0;frontSkipped+=result.skipped||0;unresolved+=result.unresolved||0;
       before=result.nextBefore||null;batches++;
       if(!result.processed||batches>=100)break;
+      if((result.added||0)===0&&(result.skipped||0)===result.processed)break;
     }while(before);
-    await nihilityApi.rest('imports',{method:'POST',body:{user_id:state.user.id,source:'pluralkit',summary:{members_added:added,members_skipped:skipped,media_copied:mediaCopied,fronts_added:frontAdded,fronts_skipped:frontSkipped,front_members_unresolved:unresolved}},prefer:'return=minimal'});
-    message.textContent='Import complete: '+added+' new members and '+frontAdded+' front-history entries added. Existing Nihility copies were unchanged.'+(unresolved?' '+unresolved+' historical member links could not be matched.':'');
+
+    await nihilityApi.rest('imports',{method:'POST',body:{user_id:state.user.id,source:'pluralkit',summary:{
+      members_total:comparison.memberTotal||0,
+      members_compared:comparison.memberLinked||0,
+      members_missing:missing.length,
+      members_added:added,
+      members_skipped:skipped,
+      media_copied:mediaCopied,
+      fronts_added:frontAdded,
+      fronts_skipped:frontSkipped,
+      front_members_unresolved:unresolved
+    }},prefer:'return=minimal'});
+
+    message.textContent='Comparison complete: '+missing.length+' missing member'+(missing.length===1?'':'s')+' found, '+added+' imported, '+frontAdded+' new front-history entr'+(frontAdded===1?'y':'ies')+' added.'+(unresolved?' '+unresolved+' historical member links could not be matched.':'');
     await loadData();
   }catch(error){message.textContent=error.message}
 }
