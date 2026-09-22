@@ -85,7 +85,6 @@ begin
     when 'member_groups' then v_limit := 100000;
     when 'fronts' then v_limit := 200000;
     when 'front_members' then v_limit := 500000;
-    when 'app_settings' then v_limit := 1;
     when 'imports' then v_limit := 50000;
     when 'account_invites' then
       v_limit := 5000;
@@ -147,10 +146,6 @@ for each row execute function private.enforce_nihility_row_quota();
 
 drop trigger if exists quota_front_members on public.front_members;
 create trigger quota_front_members before insert on public.front_members
-for each row execute function private.enforce_nihility_row_quota();
-
-drop trigger if exists quota_app_settings on public.app_settings;
-create trigger quota_app_settings before insert on public.app_settings
 for each row execute function private.enforce_nihility_row_quota();
 
 drop trigger if exists quota_imports on public.imports;
