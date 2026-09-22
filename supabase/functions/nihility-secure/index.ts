@@ -212,45 +212,154 @@ function detectedImageType(bytes:Uint8Array){
   }
   return null;
 }
+function u16be(bytes:Uint8Array,offset:number){return (bytes[offset]<<8)|bytes[offset+1]}
+function u16le(bytes:Uint8Array,offset:number){return bytes[offset]|(bytes[offset+1]<<8)}
+function u24le(bytes:Uint8Array,offset:number){return bytes[offset]|(bytes[offset+1]<<8)|(bytes[offset+2]<<16)}
+function u32be(bytes:Uint8Array,offset:number){return ((bytes[offset]<<24)>>>0)|(bytes[offset+1]<<16)|(bytes[offset+2]<<8)|bytes[offset+3]}
+function imageDimensions(bytes:Uint8Array,type:string){
+  if(type==="image/png"&&bytes.length>=24){
+    return {width:u32be(bytes,16),height:u32be(bytes,20)};
+  }
+  if(type==="image/gif"&&bytes.length>=10){
+    return {width:u16le(bytes,6),height:u16le(bytes,8)};
+  }
+  if(type==="image/jpeg"){
+    let i=2;
+    const sof=new Set([0xc0,0xc1,0xc2,0xc3,0xc5,0xc6,0xc7,0xc9,0xca,0xcb,0xcd,0xce,0xcf]);
+    while(i+8<bytes.length){
+      if(bytes[i]!==0xff){i++;continue}
+      while(i<bytes.length&&bytes[i]===0xff)i++;
+      const marker=bytes[i++];
+      if(marker===0xd8||marker===0xd9||marker===0x01||(marker>=0xd0&&marker<=0xd7))continue;
+      if(i+1>=bytes.length)break;
+      const length=u16be(bytes,i);
+      if(length<2||i+length>bytes.length)break;
+      if(sof.has(marker)&&length>=7){
+        return {height:u16be(bytes,i+3),width:u16be(bytes,i+5)};
+      }
+      i+=length;
+    }
+    return null;
+  }
+  if(type==="image/webp"&&bytes.length>=30){
+    const chunk=String.fromCharCode(...bytes.slice(12,16));
+    if(chunk==="VP8X"&&bytes.length>=30){
+      return {width:1+u24le(bytes,24),height:1+u24le(bytes,27)};
+    }
+    if(chunk==="VP8L"&&bytes.length>=25&&bytes[20]===0x2f){
+      const b1=bytes[21],b2=bytes[22],b3=bytes[23],b4=bytes[24];
+      return {
+        width:1+(b1|((b2&0x3f)<<8)),
+        height:1+((b2>>6)|(b3<<2)|((b4&0x0f)<<10))
+      };
+    }
+    if(chunk==="VP8 "&&bytes.length>=30&&bytes[23]===0x9d&&bytes[24]===0x01&&bytes[25]===0x2a){
+      return {width:u16le(bytes,26)&0x3fff,height:u16le(bytes,28)&0x3fff};
+    }
+  }
+  return null;
+}
+function validateImageBytes(bytes:Uint8Array,type:string,kind:string){
+  const cfg=BUCKETS[kind];
+  if(!cfg)throw new ClientError("Invalid media kind");
+  if(!MIME_EXT[type])throw new ClientError("Unsupported image type");
+  if(bytes.length===0)throw new ClientError("Empty image response");
+  if(bytes.length>cfg.max)throw new ClientError("Image exceeds the allowed size");
+  if(type==="image/gif"&&bytes.length>2*1024*1024)throw new ClientError("GIF images are limited to 2 MB");
+
+  const detected=detectedImageType(bytes);
+  if(!detected||detected!==type)throw new ClientError("Image content does not match its declared type");
+
+  const dimensions=imageDimensions(bytes,type);
+  if(!dimensions||!dimensions.width||!dimensions.height)throw new ClientError("Unable to read image dimensions");
+  const {width,height}=dimensions;
+  if(width>MAX_IMAGE_DIMENSION||height>MAX_IMAGE_DIMENSION||width*height>MAX_IMAGE_PIXELS){
+    throw new ClientError("Image dimensions are too large");
+  }
+  return {width,height};
+}
+async function readRawBody(req:Request,maxBytes:number){
+  const declared=Number(req.headers.get("content-length")||0);
+  if(Number.isFinite(declared)&&declared>maxBytes)throw new ClientError("Image exceeds the allowed size");
+  const reader=req.body?.getReader();
+  if(!reader)throw new ClientError("Empty image upload");
+  const chunks:Uint8Array[]=[];let total=0;
+  while(true){
+    const {done,value}=await reader.read();
+    if(done)break;
+    if(value){
+      total+=value.length;
+      if(total>maxBytes){await reader.cancel();throw new ClientError("Image exceeds the allowed size")}
+      chunks.push(value);
+    }
+  }
+  if(!total)throw new ClientError("Empty image upload");
+  const bytes=new Uint8Array(total);let off=0;
+  for(const chunk of chunks){bytes.set(chunk,off);off+=chunk.length}
+  return bytes;
+}
+async function ensureMediaQuota(userId:string,additionalBytes:number){
+  const used=await admin("/rest/v1/rpc/nihility_media_usage_bytes",{
+    method:"POST",
+    body:JSON.stringify({p_user_id:userId})
+  });
+  const total=Number(used||0);
+  if(!Number.isFinite(total)||total+additionalBytes>MEDIA_QUOTA_BYTES){
+    throw new ClientError("Media storage quota exceeded. Remove unused media before uploading more.",413);
+  }
+}
+async function storeImageBytes(userId:string,kind:string,bytes:Uint8Array,type:string){
+  const cfg=BUCKETS[kind];
+  if(!cfg)throw new ClientError("Invalid media kind");
+  validateImageBytes(bytes,type,kind);
+  await ensureMediaQuota(userId,bytes.length);
+  const path=userId+"/"+crypto.randomUUID()+"."+MIME_EXT[type];
+  const r=await fetch(SUPABASE_URL+"/storage/v1/object/"+encodeURIComponent(cfg.name)+"/"+path.split("/").map(encodeURIComponent).join("/"),{
+    method:"POST",
+    headers:{apikey:SERVICE_KEY,Authorization:"Bearer "+SERVICE_KEY,"Content-Type":type,"x-upsert":"false"},
+    body:bytes
+  });
+  if(!r.ok){
+    console.error("Storage upload failed",r.status,await r.text().catch(()=>""));
+    throw new Error("Media storage failed");
+  }
+  return path;
+}
 async function safeImage(url:string,kind:string){
-  const cfg=BUCKETS[kind]; if(!cfg)throw new Error("Invalid media kind");
-  let current=new URL(url);
+  const cfg=BUCKETS[kind]; if(!cfg)throw new ClientError("Invalid media kind");
+  let current:URL;
+  try{current=new URL(url)}catch{throw new ClientError("Invalid image URL")}
   for(let redirects=0;redirects<4;redirects++){
     await validateHost(current);
     const r=await fetch(current,{redirect:"manual",signal:AbortSignal.timeout(12000),headers:{"User-Agent":"Project-Nihility-Media-Importer/1.0","Accept":"image/png,image/jpeg,image/webp,image/gif"}});
     if([301,302,303,307,308].includes(r.status)){
-      const loc=r.headers.get("location"); if(!loc)throw new Error("Invalid image redirect");
+      const loc=r.headers.get("location"); if(!loc)throw new ClientError("Invalid image redirect");
       current=new URL(loc,current); continue;
     }
-    if(!r.ok)throw new Error("Unable to fetch image");
+    if(!r.ok)throw new ClientError("Unable to fetch image");
     const type=(r.headers.get("content-type")||"").split(";")[0].toLowerCase();
-    if(!MIME_EXT[type])throw new Error("Unsupported image type");
+    if(!MIME_EXT[type])throw new ClientError("Unsupported image type");
     const declared=Number(r.headers.get("content-length")||0);
-    if(declared>cfg.max)throw new Error("Image exceeds the allowed size");
-    const reader=r.body?.getReader(); if(!reader)throw new Error("Empty image response");
-    const chunks:Uint8Array[]=[]; let total=0;
-    while(true){
-      const {done,value}=await reader.read(); if(done)break;
-      if(value){total+=value.length;if(total>cfg.max){reader.cancel();throw new Error("Image exceeds the allowed size")}chunks.push(value)}
-    }
-    if(total===0)throw new Error("Empty image response");
-    const bytes=new Uint8Array(total);let off=0;for(const c of chunks){bytes.set(c,off);off+=c.length}
-    const detected=detectedImageType(bytes);
-    if(!detected||detected!==type)throw new Error("Image content does not match its declared type");
+    if(declared>cfg.max)throw new ClientError("Image exceeds the allowed size");
+    const bytes=await readRawBody(new Request(current,{method:"POST",body:r.body,headers:r.headers}),cfg.max);
+    validateImageBytes(bytes,type,kind);
     return {bytes,type,ext:MIME_EXT[type]};
   }
-  throw new Error("Too many image redirects");
+  throw new ClientError("Too many image redirects");
 }
 async function storeImage(userId:string,kind:string,url:string){
-  const cfg=BUCKETS[kind]; const img=await safeImage(url,kind);
-  const path=userId+"/"+crypto.randomUUID()+"."+img.ext;
-  const r=await fetch(SUPABASE_URL+"/storage/v1/object/"+encodeURIComponent(cfg.name)+"/"+path.split("/").map(encodeURIComponent).join("/"),{
-    method:"POST",
-    headers:{apikey:SERVICE_KEY,Authorization:"Bearer "+SERVICE_KEY,"Content-Type":img.type,"x-upsert":"false"},
-    body:img.bytes
-  });
-  if(!r.ok)throw new Error("Unable to store imported image");
-  return path;
+  const img=await safeImage(url,kind);
+  return storeImageBytes(userId,kind,img.bytes,img.type);
+}
+async function actionUploadMedia(user:any,req:Request){
+  const kind=String(req.headers.get("x-media-kind")||"");
+  const cfg=BUCKETS[kind];
+  if(!cfg)throw new ClientError("Invalid media kind");
+  const type=(req.headers.get("content-type")||"").split(";")[0].toLowerCase();
+  if(!MIME_EXT[type])throw new ClientError("Unsupported image type");
+  const bytes=await readRawBody(req,cfg.max);
+  const path=await storeImageBytes(user.id,kind,bytes,type);
+  return {path};
 }
 
 async function actionConnect(user:any,body:any){
