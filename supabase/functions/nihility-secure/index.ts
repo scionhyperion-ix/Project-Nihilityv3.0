@@ -197,15 +197,52 @@ async function actionMirror(user:any,body:any){
   await pk(token,"/systems/@me/switches",{method:"POST",body:JSON.stringify(payload)});
   return {shared:true};
 }
+async function actionComparePk(user:any){
+  const token=await getSecret(user.id);
+  const [pkMembers,localMembers]=await Promise.all([
+    pk(token,"/systems/@me/members"),
+    admin("/rest/v1/members?user_id=eq."+encodeURIComponent(user.id)+"&pk_id=not.is.null&select=pk_id")
+  ]);
+  const localIds=new Set((localMembers||[]).map((m:any)=>String(m.pk_id)).filter(Boolean));
+  const missingMemberIds=(pkMembers||[])
+    .map((m:any)=>String(m?.id||""))
+    .filter((id:string)=>id&&!localIds.has(id));
+  return {
+    memberTotal:(pkMembers||[]).length,
+    memberLinked:(pkMembers||[]).length-missingMemberIds.length,
+    missingMemberIds
+  };
+}
+
 async function actionImportPk(user:any,body:any){
   const token=await getSecret(user.id);
   const all=await pk(token,"/systems/@me/members");
-  const offset=Math.max(0,Number(body.offset)||0),limit=Math.min(25,Math.max(1,Number(body.limit)||10));
-  const batch=(all||[]).slice(offset,offset+limit);
+  const requestedIds=Array.isArray(body.memberIds)
+    ?body.memberIds.map((id:any)=>String(id||"")).filter(Boolean).slice(0,25)
+    :null;
+
+  let batch:any[]=[];
+  let offset=0;
+  if(requestedIds){
+    const wanted=new Set(requestedIds);
+    batch=(all||[]).filter((m:any)=>wanted.has(String(m?.id||"")));
+  }else{
+    offset=Math.max(0,Number(body.offset)||0);
+    const limit=Math.min(25,Math.max(1,Number(body.limit)||10));
+    batch=(all||[]).slice(offset,offset+limit);
+  }
+
+  const batchIds=batch.map((m:any)=>String(m.id)).filter(Boolean);
+  let existingIds=new Set<string>();
+  if(batchIds.length){
+    const filter="("+batchIds.map((id:string)=>id.replace(/[^A-Za-z0-9_-]/g,"")).join(",")+")";
+    const existing=await admin("/rest/v1/members?user_id=eq."+encodeURIComponent(user.id)+"&pk_id=in."+encodeURIComponent(filter)+"&select=pk_id");
+    existingIds=new Set((existing||[]).map((m:any)=>String(m.pk_id)));
+  }
+
   let added=0,skipped=0,mediaCopied=0;
   for(const m of batch){
-    const existing=await admin("/rest/v1/members?user_id=eq."+encodeURIComponent(user.id)+"&pk_id=eq."+encodeURIComponent(m.id)+"&select=id&limit=1");
-    if(existing?.length){skipped++;continue}
+    if(existingIds.has(String(m.id))){skipped++;continue}
     let avatarPath=null,bannerPath=null;
     const avatar=m.avatar_url||null,banner=m.banner||m.banner_url||null;
     if(avatar){try{avatarPath=await storeImage(user.id,"avatar",avatar);mediaCopied++}catch{}}
@@ -222,8 +259,18 @@ async function actionImportPk(user:any,body:any){
     });
     added++;
   }
-  return {total:(all||[]).length,offset,processed:batch.length,added,skipped,mediaCopied,nextOffset:offset+batch.length<(all||[]).length?offset+batch.length:null};
+
+  return {
+    total:requestedIds?batch.length:(all||[]).length,
+    offset,
+    processed:batch.length,
+    added,
+    skipped,
+    mediaCopied,
+    nextOffset:requestedIds?null:(offset+batch.length<(all||[]).length?offset+batch.length:null)
+  };
 }
+
 function sanitizePkSystem(system:any){
   return {
     id:system?.id||null,
@@ -367,7 +414,7 @@ async function actionImportPkGroups(user:any){
   }
 
   const linkSet=new Set((existingLinks||[]).map((x:any)=>String(x.member_id)+":"+String(x.group_id)));
-  let added=0,skipped=0,membershipsAdded=0,unresolved=0;
+  let added=0,updated=0,unchanged=0,membershipsAdded=0,unresolved=0;
 
   for(const g of pkGroups||[]){
     let local=groupByPk.get(String(g.id))||(g.uuid?groupByPk.get(String(g.uuid)):null);
@@ -399,20 +446,47 @@ async function actionImportPkGroups(user:any){
         if(g.uuid)groupByPk.set(String(g.uuid),local);
       }
     }else{
-      const metadata={...(local.metadata||{}),pk_uuid:g.uuid||local.metadata?.pk_uuid||null,pk_icon_url:iconUrl||local.metadata?.pk_icon_url||null,pk_banner_url:bannerUrl||local.metadata?.pk_banner_url||null,icon_storage_path:iconPath||local.metadata?.icon_storage_path||null,banner_storage_path:bannerPath||local.metadata?.banner_storage_path||null};
-      await admin("/rest/v1/groups?id=eq."+encodeURIComponent(local.id),{
-        method:"PATCH",
-        headers:{Prefer:"return=minimal"},
-        body:JSON.stringify({
-          name:g.name||g.display_name||local.name,
-          display_name:g.display_name||null,
-          description:g.description||null,
-          color:g.color||null,
-          metadata
-        })
-      });
-      local={...local,name:g.name||g.display_name||local.name,display_name:g.display_name||null,description:g.description||null,color:g.color||null,metadata};
-      skipped++;
+      const nextName=g.name||g.display_name||local.name;
+      const nextDisplayName=g.display_name||null;
+      const nextDescription=g.description||null;
+      const nextColor=g.color||null;
+      const metadata={
+        ...(local.metadata||{}),
+        pk_uuid:g.uuid||local.metadata?.pk_uuid||null,
+        pk_icon_url:iconUrl||local.metadata?.pk_icon_url||null,
+        pk_banner_url:bannerUrl||local.metadata?.pk_banner_url||null,
+        icon_storage_path:iconPath||local.metadata?.icon_storage_path||null,
+        banner_storage_path:bannerPath||local.metadata?.banner_storage_path||null
+      };
+      const oldMetadata=local.metadata||{};
+      const changed=
+        local.name!==nextName||
+        (local.display_name||null)!==nextDisplayName||
+        (local.description||null)!==nextDescription||
+        (local.color||null)!==nextColor||
+        (oldMetadata.pk_uuid||null)!==(metadata.pk_uuid||null)||
+        (oldMetadata.pk_icon_url||null)!==(metadata.pk_icon_url||null)||
+        (oldMetadata.pk_banner_url||null)!==(metadata.pk_banner_url||null)||
+        (oldMetadata.icon_storage_path||null)!==(metadata.icon_storage_path||null)||
+        (oldMetadata.banner_storage_path||null)!==(metadata.banner_storage_path||null);
+
+      if(changed){
+        await admin("/rest/v1/groups?id=eq."+encodeURIComponent(local.id),{
+          method:"PATCH",
+          headers:{Prefer:"return=minimal"},
+          body:JSON.stringify({
+            name:nextName,
+            display_name:nextDisplayName,
+            description:nextDescription,
+            color:nextColor,
+            metadata
+          })
+        });
+        local={...local,name:nextName,display_name:nextDisplayName,description:nextDescription,color:nextColor,metadata};
+        updated++;
+      }else{
+        unchanged++;
+      }
     }
     if(!local?.id)continue;
 
@@ -435,7 +509,8 @@ async function actionImportPkGroups(user:any){
   return {
     total:(pkGroups||[]).length,
     added,
-    updated:skipped,
+    updated,
+    unchanged,
     membershipsAdded,
     unresolved,
     metadataUpdated,
@@ -449,35 +524,77 @@ async function actionImportPkFronts(user:any,body:any){
   const before=body.before?String(body.before):null;
   const query="?limit="+limit+(before?"&before="+encodeURIComponent(before):"");
   const switches=await pk(token,"/systems/@me/switches"+query);
+  const validSwitches=(switches||[]).filter((sw:any)=>sw?.id&&sw?.timestamp);
+
+  const switchIds=validSwitches.map((sw:any)=>String(sw.id));
+  let existingIds=new Set<string>();
+  if(switchIds.length){
+    const filter="("+switchIds.map((id:string)=>id.replace(/[^A-Za-z0-9_-]/g,"")).join(",")+")";
+    const existing=await admin("/rest/v1/fronts?user_id=eq."+encodeURIComponent(user.id)+"&source=eq.pluralkit&external_id=in."+encodeURIComponent(filter)+"&select=external_id");
+    existingIds=new Set((existing||[]).map((f:any)=>String(f.external_id)));
+  }
+
+  const allPkMemberIds=[...new Set(validSwitches.flatMap((sw:any)=>
+    (Array.isArray(sw.members)?sw.members:[])
+      .map((m:any)=>typeof m==="string"?m:m?.id)
+      .filter(Boolean)
+      .map((id:any)=>String(id))
+  ))];
+
+  const localMemberMap=new Map<string,string>();
+  if(allPkMemberIds.length){
+    const filter="("+allPkMemberIds.map((id:string)=>id.replace(/[^A-Za-z0-9_-]/g,"")).join(",")+")";
+    const localMembers=await admin("/rest/v1/members?user_id=eq."+encodeURIComponent(user.id)+"&pk_id=in."+encodeURIComponent(filter)+"&select=id,pk_id");
+    for(const m of localMembers||[])if(m.pk_id&&m.id)localMemberMap.set(String(m.pk_id),String(m.id));
+  }
+
   let added=0,skipped=0,unresolved=0;
-  for(const sw of switches||[]){
-    if(!sw?.id||!sw?.timestamp)continue;
-    const existing=await admin("/rest/v1/fronts?user_id=eq."+encodeURIComponent(user.id)+"&source=eq.pluralkit&external_id=eq."+encodeURIComponent(sw.id)+"&select=id&limit=1");
-    if(existing?.length){skipped++;continue}
-    const memberIds=(Array.isArray(sw.members)?sw.members:[]).map((m:any)=>typeof m==="string"?m:m?.id).filter(Boolean);
-    const localMembers:any[]=[];
+  for(const sw of validSwitches){
+    if(existingIds.has(String(sw.id))){skipped++;continue}
+
+    const memberIds=(Array.isArray(sw.members)?sw.members:[])
+      .map((m:any)=>typeof m==="string"?m:m?.id)
+      .filter(Boolean)
+      .map((id:any)=>String(id));
+
+    const localMembers:string[]=[];
     for(const pkId of memberIds){
-      const rows=await admin("/rest/v1/members?user_id=eq."+encodeURIComponent(user.id)+"&pk_id=eq."+encodeURIComponent(pkId)+"&select=id&limit=1");
-      if(rows?.[0]?.id)localMembers.push(rows[0].id);else unresolved++;
+      const localId=localMemberMap.get(pkId);
+      if(localId)localMembers.push(localId);else unresolved++;
     }
+
     const newer=await admin("/rest/v1/fronts?user_id=eq."+encodeURIComponent(user.id)+"&started_at=gt."+encodeURIComponent(sw.timestamp)+"&order=started_at.asc&select=started_at&limit=1");
     const created=await admin("/rest/v1/fronts",{
       method:"POST",headers:{Prefer:"return=representation"},
       body:JSON.stringify({user_id:user.id,started_at:sw.timestamp,ended_at:newer?.[0]?.started_at||null,note:null,source:"pluralkit",external_id:sw.id})
     });
+
     const frontId=created?.[0]?.id;
     if(frontId){
       for(const memberId of localMembers){
-        await admin("/rest/v1/front_members",{method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify({user_id:user.id,front_id:frontId,member_id:memberId,joined_at:sw.timestamp,left_at:newer?.[0]?.started_at||null})});
+        await admin("/rest/v1/front_members",{
+          method:"POST",headers:{Prefer:"return=minimal"},
+          body:JSON.stringify({user_id:user.id,front_id:frontId,member_id:memberId,joined_at:sw.timestamp,left_at:newer?.[0]?.started_at||null})
+        });
       }
       const older=await admin("/rest/v1/fronts?user_id=eq."+encodeURIComponent(user.id)+"&started_at=lt."+encodeURIComponent(sw.timestamp)+"&ended_at=is.null&select=id&limit=20");
-      for(const f of older||[])await admin("/rest/v1/fronts?id=eq."+encodeURIComponent(f.id),{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({ended_at:sw.timestamp})});
+      for(const f of older||[])await admin("/rest/v1/fronts?id=eq."+encodeURIComponent(f.id),{
+        method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({ended_at:sw.timestamp})
+      });
       added++;
     }
   }
+
   const oldest=(switches||[]).length?switches[switches.length-1]?.timestamp:null;
-  return {processed:(switches||[]).length,added,skipped,unresolved,nextBefore:(switches||[]).length===limit?oldest:null};
+  return {
+    processed:(switches||[]).length,
+    added,
+    skipped,
+    unresolved,
+    nextBefore:(switches||[]).length===limit?oldest:null
+  };
 }
+
 async function actionImportMedia(user:any,body:any){
   const kind=String(body.kind||""); const url=String(body.url||"");
   const path=await storeImage(user.id,kind,url);
@@ -500,6 +617,7 @@ Deno.serve(async(req)=>{
     else if(action==="pk_status")result=await actionStatus(user);
     else if(action==="pk_disconnect")result=await actionDisconnect(user);
     else if(action==="pk_mirror_front")result=await actionMirror(user,body);
+    else if(action==="pk_compare")result=await actionComparePk(user);
     else if(action==="pk_import")result=await actionImportPk(user,body);
     else if(action==="pk_import_groups")result=await actionImportPkGroups(user);
     else if(action==="pk_get_system")result=await actionGetPkSystem(user);
