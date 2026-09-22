@@ -805,6 +805,48 @@ async function actionImportMedia(user:any,body:any){
   return {path};
 }
 
+const ACTION_LIMITS:Record<string,{limit:number,window:number}> = {
+  pk_connect:{limit:10,window:60},
+  pk_status:{limit:120,window:60},
+  pk_disconnect:{limit:10,window:60},
+  pk_mirror_front:{limit:60,window:60},
+  pk_compare:{limit:30,window:60},
+  pk_import:{limit:120,window:60},
+  pk_import_groups:{limit:10,window:60},
+  pk_get_system:{limit:60,window:60},
+  pk_update_system:{limit:20,window:60},
+  pk_import_fronts:{limit:120,window:60},
+  import_media:{limit:30,window:60},
+  upload_media:{limit:60,window:60},
+};
+const AUDITED_ACTIONS=new Set([
+  "pk_connect","pk_disconnect","pk_mirror_front","pk_import","pk_import_groups",
+  "pk_update_system","pk_import_fronts","import_media","upload_media"
+]);
+async function consumeRateLimit(userId:string,action:string){
+  const spec=ACTION_LIMITS[action]||{limit:30,window:60};
+  const globalOk=await admin("/rest/v1/rpc/consume_nihility_rate_limit",{
+    method:"POST",
+    body:JSON.stringify({p_user_id:userId,p_action:"__global__",p_limit:240,p_window_seconds:60})
+  });
+  if(globalOk!==true)throw new ClientError("Too many requests. Please wait a moment and try again.",429);
+  const actionOk=await admin("/rest/v1/rpc/consume_nihility_rate_limit",{
+    method:"POST",
+    body:JSON.stringify({p_user_id:userId,p_action:action,p_limit:spec.limit,p_window_seconds:spec.window})
+  });
+  if(actionOk!==true)throw new ClientError("This action is being used too quickly. Please wait a moment and try again.",429);
+}
+async function recordSecurityEvent(userId:string|null,eventType:string,success:boolean,details:Record<string,unknown>={}){
+  try{
+    await admin("/rest/v1/rpc/record_nihility_security_event",{
+      method:"POST",
+      body:JSON.stringify({p_user_id:userId,p_event_type:eventType,p_success:success,p_details:details})
+    });
+  }catch(error){
+    console.warn("Unable to record security event",eventType,error);
+  }
+}
+
 async function readJsonBody(req:Request,maxBytes=65536){
   const declared=Number(req.headers.get("content-length")||0);
   if(Number.isFinite(declared)&&declared>maxBytes)throw new Error("Request body is too large");
@@ -832,12 +874,28 @@ Deno.serve(async(req)=>{
   if(req.method==="OPTIONS")return new Response(null,{status:204,headers:cors(origin)});
   if(origin && !ALLOWED_ORIGINS.has(origin))return json({error:"Origin not allowed"},403,origin);
   if(req.method!=="POST")return json({error:"Method not allowed"},405,origin);
+
+  let user:any=null;
+  let action="unknown";
   try{
-    const user=await currentUser(req);
+    user=await currentUser(req);
     const profile=await admin("/rest/v1/profiles?user_id=eq."+encodeURIComponent(user.id)+"&select=user_id&limit=1");
-    if(!profile?.length)throw new Error("Nihility profile required");
+    if(!profile?.length)throw new ClientError("Nihility profile required",403);
+
+    const headerAction=String(req.headers.get("x-nihility-action")||"");
+    if(headerAction==="upload_media"){
+      action="upload_media";
+      await consumeRateLimit(user.id,action);
+      const result=await actionUploadMedia(user,req);
+      await recordSecurityEvent(user.id,"edge."+action,true,{origin:origin||null});
+      return json(result,200,origin);
+    }
+
     const body=await readJsonBody(req);
-    const action=String(body.action||"");
+    action=String(body.action||"");
+    if(!ACTION_LIMITS[action])throw new ClientError("Unknown action",400);
+    await consumeRateLimit(user.id,action);
+
     let result;
     if(action==="pk_connect")result=await actionConnect(user,body);
     else if(action==="pk_status")result=await actionStatus(user);
@@ -850,10 +908,18 @@ Deno.serve(async(req)=>{
     else if(action==="pk_update_system")result=await actionUpdatePkSystem(user,body);
     else if(action==="pk_import_fronts")result=await actionImportPkFronts(user,body);
     else if(action==="import_media")result=await actionImportMedia(user,body);
-    else return json({error:"Unknown action"},400,origin);
+    else throw new ClientError("Unknown action",400);
+
+    if(AUDITED_ACTIONS.has(action)){
+      await recordSecurityEvent(user.id,"edge."+action,true,{origin:origin||null});
+    }
     return json(result,200,origin);
   }catch(error){
-    const message=error instanceof Error?error.message:"Request failed";
-    return json({error:message},400,origin);
+    if(user?.id&&AUDITED_ACTIONS.has(action)){
+      await recordSecurityEvent(user.id,"edge."+action,false,{origin:origin||null});
+    }
+    if(error instanceof ClientError)return json({error:error.message},error.status,origin);
+    console.error("Unhandled nihility-secure error",action,error);
+    return json({error:"Request failed. Please try again."},500,origin);
   }
 });
