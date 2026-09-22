@@ -37,16 +37,18 @@ class ClientError extends Error {
 }
 
 function cors(origin:string|null){
-  const fallback="https://scionhyperion-ix.github.io";
-  const allowed = origin && ALLOWED_ORIGINS.has(origin) ? origin : fallback;
-  return {
-    "Access-Control-Allow-Origin": allowed,
+  const headers:Record<string,string>={
     "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-nihility-action, x-media-kind",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Vary": "Origin",
     "Content-Type": "application/json",
-    "Cache-Control": "no-store"
+    "Cache-Control": "no-store",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    "Cross-Origin-Resource-Policy": "same-site"
   };
+  if(origin&&ALLOWED_ORIGINS.has(origin))headers["Access-Control-Allow-Origin"]=origin;
+  return headers;
 }
 function json(data:unknown,status=200,origin:string|null=null){
   return new Response(JSON.stringify(data),{status,headers:cors(origin)});
@@ -100,12 +102,34 @@ async function admin(path:string,init:RequestInit={}){
   }
   return data;
 }
+function decodeJwtPayload(token:string){
+  const parts=token.split(".");
+  if(parts.length!==3)throw new ClientError("Invalid or expired session",401);
+  const normalized=parts[1].replace(/-/g,"+").replace(/_/g,"/");
+  const padded=normalized+"=".repeat((4-normalized.length%4)%4);
+  try{
+    const bin=atob(padded);
+    const bytes=new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+    return JSON.parse(new TextDecoder().decode(bytes));
+  }catch{throw new ClientError("Invalid or expired session",401)}
+}
 async function currentUser(req:Request){
   const auth=req.headers.get("Authorization")||"";
   if(!auth.startsWith("Bearer "))throw new ClientError("Authentication required",401);
+  const token=auth.slice(7);
   const r=await fetch(SUPABASE_URL+"/auth/v1/user",{headers:{apikey:SERVICE_KEY,Authorization:auth}});
   if(!r.ok)throw new ClientError("Invalid or expired session",401);
-  return await r.json();
+  const user=await r.json();
+  const payload=decodeJwtPayload(token);
+  const sessionId=String(payload?.session_id||"");
+  if(!/^[0-9a-fA-F-]{36}$/.test(sessionId))throw new ClientError("Invalid or expired session",401);
+  const active=await admin("/rest/v1/rpc/is_nihility_session_active",{
+    method:"POST",
+    body:JSON.stringify({p_user_id:user.id,p_session_id:sessionId})
+  });
+  if(active!==true)throw new ClientError("This session has been signed out.",401);
+  return user;
 }
 async function getSecret(userId:string){
   const rows=await admin("/rest/v1/integration_secrets?user_id=eq."+encodeURIComponent(userId)+"&provider=eq.pluralkit&select=ciphertext,iv,cipher_version&limit=1");
@@ -1048,8 +1072,8 @@ async function readJsonBody(req:Request,maxBytes=65536){
 
 Deno.serve(async(req)=>{
   const origin=req.headers.get("Origin");
-  if(req.method==="OPTIONS")return new Response(null,{status:204,headers:cors(origin)});
   if(origin && !ALLOWED_ORIGINS.has(origin))return json({error:"Origin not allowed"},403,origin);
+  if(req.method==="OPTIONS")return new Response(null,{status:204,headers:cors(origin)});
   if(req.method!=="POST")return json({error:"Method not allowed"},405,origin);
 
   let user:any=null;
@@ -1068,6 +1092,8 @@ Deno.serve(async(req)=>{
       return json(result,200,origin);
     }
 
+    const contentType=(req.headers.get("content-type")||"").split(";")[0].trim().toLowerCase();
+    if(contentType!=="application/json")throw new ClientError("JSON content type required",415);
     const body=await readJsonBody(req);
     action=String(body.action||"");
     if(!ACTION_LIMITS[action])throw new ClientError("Unknown action",400);
