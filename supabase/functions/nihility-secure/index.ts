@@ -166,32 +166,32 @@ function literalIp(host:string){
   return h.includes(":");
 }
 async function validateHost(u:URL){
-  if(u.href.length>2048)throw new Error("Image URL is too long");
-  if(u.protocol!=="https:")throw new Error("Only HTTPS image URLs are allowed");
-  if(u.username||u.password)throw new Error("Credentials in image URLs are not allowed");
-  if(u.port&&u.port!=="443")throw new Error("Custom image URL ports are not allowed");
+  if(u.href.length>2048)throw new ClientError("Image URL is too long");
+  if(u.protocol!=="https:")throw new ClientError("Only HTTPS image URLs are allowed");
+  if(u.username||u.password)throw new ClientError("Credentials in image URLs are not allowed");
+  if(u.port&&u.port!=="443")throw new ClientError("Custom image URL ports are not allowed");
 
   const host=u.hostname.toLowerCase().replace(/\.$/,"").replace(/^\[|\]$/g,"");
   if(!TRUSTED_MEDIA_HOSTS.has(host)){
-    throw new Error("This image host is not approved for secure server-side import. Upload the image file instead.");
+    throw new ClientError("This image host is not approved for secure server-side import. Upload the image file instead.");
   }
 
   if(host==="localhost"||host.endsWith(".localhost")||host.endsWith(".local")||host.endsWith(".internal")){
-    throw new Error("Local network URLs are not allowed");
+    throw new ClientError("Local network URLs are not allowed");
   }
 
   if(literalIp(host)){
     if(host.includes(":")?privateIPv6(host):privateIPv4(host)){
-      throw new Error("Private or reserved IP image URLs are not allowed");
+      throw new ClientError("Private or reserved IP image URLs are not allowed");
     }
   }else{
     const [a,aaaa]=await Promise.all([
       Deno.resolveDns(host,"A").catch(()=>[]),
       Deno.resolveDns(host,"AAAA").catch(()=>[]),
     ]);
-    if(!a.length&&!aaaa.length)throw new Error("Image host could not be resolved");
+    if(!a.length&&!aaaa.length)throw new ClientError("Image host could not be resolved");
     if(a.some(privateIPv4)||aaaa.some(privateIPv6)){
-      throw new Error("Private or reserved image hosts are not allowed");
+      throw new ClientError("Private or reserved image hosts are not allowed");
     }
   }
 }
@@ -364,8 +364,8 @@ async function actionUploadMedia(user:any,req:Request){
 
 async function actionConnect(user:any,body:any){
   const token=String(body.token||"").trim();
-  if(!token)throw new Error("PluralKit token is required");
-  if(token.length>512)throw new Error("PluralKit token is invalid");
+  if(!token)throw new ClientError("PluralKit token is required");
+  if(token.length>512)throw new ClientError("PluralKit token is invalid");
   const system=await pk(token,"/systems/@me");
   const enc=await encryptToken(token);
   await admin("/rest/v1/integration_secrets?on_conflict=user_id,provider",{
@@ -396,7 +396,7 @@ async function actionMirror(user:any,body:any){
   }
   const inFilter="("+ids.map((x:string)=>String(x).replace(/[^a-fA-F0-9-]/g,"")).join(",")+")";
   const members=await admin("/rest/v1/members?user_id=eq."+encodeURIComponent(user.id)+"&id=in."+encodeURIComponent(inFilter)+"&select=id,pk_id,archived_at");
-  if(members.length!==ids.length||members.some((m:any)=>!m.pk_id||m.archived_at))throw new Error("One or more members cannot be shared to PluralKit");
+  if(members.length!==ids.length||members.some((m:any)=>!m.pk_id||m.archived_at))throw new ClientError("One or more members cannot be shared to PluralKit");
   const payload:any={members:members.map((m:any)=>m.pk_id)}; if(body.timestamp)payload.timestamp=body.timestamp;
   await pk(token,"/systems/@me/switches",{method:"POST",body:JSON.stringify(payload)});
   return {shared:true};
@@ -530,11 +530,11 @@ async function actionUpdatePkSystem(user:any,body:any){
   }
   if(Object.prototype.hasOwnProperty.call(input,"color")){
     const color=String(input.color||"").trim().replace(/^#/,"");
-    if(color&&!/^[0-9a-fA-F]{6}$/.test(color))throw new Error("Color must be a 6-character hex color");
+    if(color&&!/^[0-9a-fA-F]{6}$/.test(color))throw new ClientError("Color must be a 6-character hex color");
     payload.color=color||null;
   }
-  if(payload.avatar_url&&!/^https:\/\//i.test(payload.avatar_url))throw new Error("Avatar must use HTTPS");
-  if(payload.banner&&!/^https:\/\//i.test(payload.banner))throw new Error("Banner must use HTTPS");
+  if(payload.avatar_url&&!/^https:\/\//i.test(payload.avatar_url))throw new ClientError("Avatar must use HTTPS");
+  if(payload.banner&&!/^https:\/\//i.test(payload.banner))throw new ClientError("Banner must use HTTPS");
   await pk(token,"/systems/@me",{method:"PATCH",body:JSON.stringify(payload)});
   const updated=sanitizePkSystem(await pk(token,"/systems/@me"));
   const local=await saveLocalSystemProfile(user,updated,{copyMedia:true});
@@ -849,7 +849,7 @@ async function recordSecurityEvent(userId:string|null,eventType:string,success:b
 
 async function readJsonBody(req:Request,maxBytes=65536){
   const declared=Number(req.headers.get("content-length")||0);
-  if(Number.isFinite(declared)&&declared>maxBytes)throw new Error("Request body is too large");
+  if(Number.isFinite(declared)&&declared>maxBytes)throw new ClientError("Request body is too large");
   const reader=req.body?.getReader();
   if(!reader)return {};
   const chunks:Uint8Array[]=[];let total=0;
@@ -858,7 +858,7 @@ async function readJsonBody(req:Request,maxBytes=65536){
     if(done)break;
     if(value){
       total+=value.length;
-      if(total>maxBytes){await reader.cancel();throw new Error("Request body is too large")}
+      if(total>maxBytes){await reader.cancel();throw new ClientError("Request body is too large")}
       chunks.push(value);
     }
   }
@@ -866,7 +866,7 @@ async function readJsonBody(req:Request,maxBytes=65536){
   const bytes=new Uint8Array(total);let off=0;
   for(const chunk of chunks){bytes.set(chunk,off);off+=chunk.length}
   const text=new TextDecoder().decode(bytes);
-  try{return JSON.parse(text)}catch{throw new Error("Invalid JSON request body")}
+  try{return JSON.parse(text)}catch{throw new ClientError("Invalid JSON request body")}
 }
 
 Deno.serve(async(req)=>{
