@@ -2,6 +2,7 @@
 (function(){
   const cfg=window.NIHILITY_CONFIG||{};
   const SESSION_KEY='nihility_supabase_session';
+  const PKCE_KEY='nihility_auth_pkce_v1';
   const BUCKETS={avatar:'nihility-avatars',banner:'nihility-banners',profile:'nihility-profile-avatars'};
   const configured=()=>Boolean(cfg.SUPABASE_URL&&cfg.SUPABASE_ANON_KEY);
   const getSession=()=>{try{return JSON.parse(sessionStorage.getItem(SESSION_KEY)||'null')}catch{return null}};
@@ -14,22 +15,96 @@
     const text=await response.text();let data=null;try{data=text?JSON.parse(text):null}catch{data=text}
     if(!response.ok)throw new Error(data?.message||data?.msg||data?.error_description||data?.error||response.statusText);return data;
   }
-  async function sendMagicLink(email){const redirect=location.origin+location.pathname;return raw('/auth/v1/otp?redirect_to='+encodeURIComponent(redirect),{method:'POST',body:{email,create_user:true}})}
-  async function sendPasswordReset(email){const redirect=location.origin+location.pathname+'?reset=1';return raw('/auth/v1/recover?redirect_to='+encodeURIComponent(redirect),{method:'POST',body:{email}})}
+  function base64url(bytes){return btoa(String.fromCharCode(...bytes)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
+  async function beginPkceFlow(kind){
+    const verifier=base64url(crypto.getRandomValues(new Uint8Array(48)));
+    const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier));
+    const challenge=base64url(new Uint8Array(digest));
+    localStorage.setItem(PKCE_KEY,JSON.stringify({verifier,kind,createdAt:Date.now()}));
+    return challenge;
+  }
+  function clearPkceFlow(){localStorage.removeItem(PKCE_KEY)}
+  function getPkceFlow(){
+    try{
+      const flow=JSON.parse(localStorage.getItem(PKCE_KEY)||'null');
+      if(!flow?.verifier||!flow?.createdAt||Date.now()-Number(flow.createdAt)>20*60*1000){clearPkceFlow();return null}
+      return flow;
+    }catch{clearPkceFlow();return null}
+  }
+  async function sendMagicLink(email){
+    const challenge=await beginPkceFlow('magiclink');
+    const redirect=location.origin+location.pathname;
+    try{
+      return await raw('/auth/v1/otp?redirect_to='+encodeURIComponent(redirect),{
+        method:'POST',
+        body:{email,create_user:true,code_challenge:challenge,code_challenge_method:'s256'}
+      });
+    }catch(error){clearPkceFlow();throw error}
+  }
+  async function sendPasswordReset(email){
+    const challenge=await beginPkceFlow('recovery');
+    const redirect=location.origin+location.pathname+'?reset=1';
+    try{
+      return await raw('/auth/v1/recover?redirect_to='+encodeURIComponent(redirect),{
+        method:'POST',
+        body:{email,code_challenge:challenge,code_challenge_method:'s256'}
+      });
+    }catch(error){clearPkceFlow();throw error}
+  }
   async function signInWithPassword(email,password){
     const data=await raw('/auth/v1/token?grant_type=password',{method:'POST',body:{email,password}});
     const s={access_token:data.access_token,refresh_token:data.refresh_token,expires_at:Date.now()+Number(data.expires_in||3600)*1000};
-    saveSession(s);return data.user||null;
+    saveSession(s);clearPkceFlow();return data.user||null;
   }
   async function setPassword(password){return raw('/auth/v1/user',{method:'PUT',body:{password}})}
-  function readSessionFromUrl(){const p=new URLSearchParams(location.hash.replace(/^#/,'')),access_token=p.get('access_token');if(!access_token)return null;const s={access_token,refresh_token:p.get('refresh_token'),expires_at:Date.now()+Number(p.get('expires_in')||3600)*1000};saveSession(s);history.replaceState(null,'',location.pathname+location.search);return s}
+  async function readSessionFromUrl(){
+    const url=new URL(location.href);
+    const legacy=new URLSearchParams(location.hash.replace(/^#/,''));
+    if(legacy.has('access_token')||legacy.has('refresh_token')){
+      history.replaceState(null,'',url.pathname+url.search);
+      throw new Error('This sign-in link used the retired login format. Request a new magic link or password-reset email.');
+    }
+    const code=url.searchParams.get('code');
+    if(!code)return null;
+    const flow=getPkceFlow();
+    if(!flow)throw new Error('This secure sign-in link must be opened in the same browser where it was requested. Request a new link.');
+    const data=await raw('/auth/v1/token?grant_type=pkce',{
+      method:'POST',
+      body:{auth_code:code,code_verifier:flow.verifier}
+    });
+    const s={access_token:data.access_token,refresh_token:data.refresh_token,expires_at:Date.now()+Number(data.expires_in||3600)*1000};
+    saveSession(s);clearPkceFlow();
+    url.searchParams.delete('code');
+    url.searchParams.delete('error');
+    url.searchParams.delete('error_code');
+    url.searchParams.delete('error_description');
+    history.replaceState(null,'',url.pathname+(url.searchParams.toString()?'?'+url.searchParams.toString():''));
+    return s;
+  }
   async function refresh(){let s=getSession();if(!s)return null;if(!s.expires_at||s.expires_at-Date.now()>60000)return s;if(!s.refresh_token)return s;const r=await fetch(cfg.SUPABASE_URL+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{apikey:cfg.SUPABASE_ANON_KEY,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:s.refresh_token})});if(!r.ok){saveSession(null);return null}const d=await r.json();s={access_token:d.access_token,refresh_token:d.refresh_token||s.refresh_token,expires_at:Date.now()+Number(d.expires_in||3600)*1000};saveSession(s);return s}
   async function user(){const s=await refresh();if(!s)return null;try{return await raw('/auth/v1/user')}catch{saveSession(null);return null}}
   async function rest(table,{method='GET',query='',body=null,prefer=''}={}){const headers={};if(prefer)headers.Prefer=prefer;return raw('/rest/v1/'+table+(query?'?'+query:''),{method,headers,body})}
   async function rpc(name,body={}){return raw('/rest/v1/rpc/'+encodeURIComponent(name),{method:'POST',body})}
-  function extFor(file){return({'image/png':'png','image/jpeg':'jpg','image/webp':'webp','image/gif':'gif'})[file.type]||'bin'}
   function encPath(path){return String(path).split('/').map(encodeURIComponent).join('/')}
-  async function upload(kind,file){const bucket=BUCKETS[kind];if(!bucket)throw new Error('Unknown media type.');const s=await refresh();if(!s?.access_token)throw new Error('You are signed out.');const u=await user();if(!u?.id)throw new Error('Unable to resolve your account.');const path=u.id+'/'+crypto.randomUUID()+'.'+extFor(file);const r=await fetch(cfg.SUPABASE_URL+'/storage/v1/object/'+encodeURIComponent(bucket)+'/'+encPath(path),{method:'POST',headers:{apikey:cfg.SUPABASE_ANON_KEY,Authorization:'Bearer '+s.access_token,'Content-Type':file.type,'x-upsert':'false'},body:file});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d?.message||d?.error||'Upload failed.');return{path,url:await privateMediaUrl(kind,path),source:'supabase'}}
+  async function upload(kind,file){
+    if(!BUCKETS[kind])throw new Error('Unknown media type.');
+    const s=await refresh();if(!s?.access_token)throw new Error('You are signed out.');
+    const r=await fetch(cfg.SUPABASE_URL+'/functions/v1/nihility-secure',{
+      method:'POST',
+      headers:{
+        apikey:cfg.SUPABASE_ANON_KEY,
+        Authorization:'Bearer '+s.access_token,
+        'Content-Type':file.type,
+        'x-nihility-action':'upload_media',
+        'x-media-kind':kind
+      },
+      body:file
+    });
+    const data=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(data?.error||'Upload failed.');
+    if(!data?.path)throw new Error('Upload did not return a storage path.');
+    return{path:data.path,url:await privateMediaUrl(kind,data.path),source:'supabase'}
+  }
   const privateMediaCache=new Map();
   async function privateMediaUrl(kind,path){
     if(!path)return null;
