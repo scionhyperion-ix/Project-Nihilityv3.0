@@ -197,15 +197,52 @@ async function actionMirror(user:any,body:any){
   await pk(token,"/systems/@me/switches",{method:"POST",body:JSON.stringify(payload)});
   return {shared:true};
 }
+async function actionComparePk(user:any){
+  const token=await getSecret(user.id);
+  const [pkMembers,localMembers]=await Promise.all([
+    pk(token,"/systems/@me/members"),
+    admin("/rest/v1/members?user_id=eq."+encodeURIComponent(user.id)+"&pk_id=not.is.null&select=pk_id")
+  ]);
+  const localIds=new Set((localMembers||[]).map((m:any)=>String(m.pk_id)).filter(Boolean));
+  const missingMemberIds=(pkMembers||[])
+    .map((m:any)=>String(m?.id||""))
+    .filter((id:string)=>id&&!localIds.has(id));
+  return {
+    memberTotal:(pkMembers||[]).length,
+    memberLinked:(pkMembers||[]).length-missingMemberIds.length,
+    missingMemberIds
+  };
+}
+
 async function actionImportPk(user:any,body:any){
   const token=await getSecret(user.id);
   const all=await pk(token,"/systems/@me/members");
-  const offset=Math.max(0,Number(body.offset)||0),limit=Math.min(25,Math.max(1,Number(body.limit)||10));
-  const batch=(all||[]).slice(offset,offset+limit);
+  const requestedIds=Array.isArray(body.memberIds)
+    ?body.memberIds.map((id:any)=>String(id||"")).filter(Boolean).slice(0,25)
+    :null;
+
+  let batch:any[]=[];
+  let offset=0;
+  if(requestedIds){
+    const wanted=new Set(requestedIds);
+    batch=(all||[]).filter((m:any)=>wanted.has(String(m?.id||"")));
+  }else{
+    offset=Math.max(0,Number(body.offset)||0);
+    const limit=Math.min(25,Math.max(1,Number(body.limit)||10));
+    batch=(all||[]).slice(offset,offset+limit);
+  }
+
+  const batchIds=batch.map((m:any)=>String(m.id)).filter(Boolean);
+  let existingIds=new Set<string>();
+  if(batchIds.length){
+    const filter="("+batchIds.map((id:string)=>id.replace(/[^A-Za-z0-9_-]/g,"")).join(",")+")";
+    const existing=await admin("/rest/v1/members?user_id=eq."+encodeURIComponent(user.id)+"&pk_id=in."+encodeURIComponent(filter)+"&select=pk_id");
+    existingIds=new Set((existing||[]).map((m:any)=>String(m.pk_id)));
+  }
+
   let added=0,skipped=0,mediaCopied=0;
   for(const m of batch){
-    const existing=await admin("/rest/v1/members?user_id=eq."+encodeURIComponent(user.id)+"&pk_id=eq."+encodeURIComponent(m.id)+"&select=id&limit=1");
-    if(existing?.length){skipped++;continue}
+    if(existingIds.has(String(m.id))){skipped++;continue}
     let avatarPath=null,bannerPath=null;
     const avatar=m.avatar_url||null,banner=m.banner||m.banner_url||null;
     if(avatar){try{avatarPath=await storeImage(user.id,"avatar",avatar);mediaCopied++}catch{}}
@@ -222,8 +259,18 @@ async function actionImportPk(user:any,body:any){
     });
     added++;
   }
-  return {total:(all||[]).length,offset,processed:batch.length,added,skipped,mediaCopied,nextOffset:offset+batch.length<(all||[]).length?offset+batch.length:null};
+
+  return {
+    total:requestedIds?batch.length:(all||[]).length,
+    offset,
+    processed:batch.length,
+    added,
+    skipped,
+    mediaCopied,
+    nextOffset:requestedIds?null:(offset+batch.length<(all||[]).length?offset+batch.length:null)
+  };
 }
+
 function sanitizePkSystem(system:any){
   return {
     id:system?.id||null,
@@ -500,6 +547,7 @@ Deno.serve(async(req)=>{
     else if(action==="pk_status")result=await actionStatus(user);
     else if(action==="pk_disconnect")result=await actionDisconnect(user);
     else if(action==="pk_mirror_front")result=await actionMirror(user,body);
+    else if(action==="pk_compare")result=await actionComparePk(user);
     else if(action==="pk_import")result=await actionImportPk(user,body);
     else if(action==="pk_import_groups")result=await actionImportPkGroups(user);
     else if(action==="pk_get_system")result=await actionGetPkSystem(user);
