@@ -245,9 +245,14 @@ begin
     true,
     jsonb_build_object('actor_user_id', auth.uid(), 'operation', tg_op)
   );
-  return coalesce(new, old);
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
+  return new;
 end
-$$;
+$;
+
+revoke all on function private.audit_nihility_row_change() from public, anon, authenticated;
 
 drop trigger if exists audit_profiles_security on public.profiles;
 create trigger audit_profiles_security
