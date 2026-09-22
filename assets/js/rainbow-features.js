@@ -43,11 +43,21 @@
   const coreLoadData=loadData;
   window.nihilitySystemLiveCache=window.nihilitySystemLiveCache||{value:null,at:0};
 
-  function applySystemMedia(system,liveSystem=null){
+  function applySystemMedia(system){
     if(!system)return;
-    const live=liveSystem?.system||null;
-    system.avatar_display_url=live?.avatar_url||system.avatar_url||null;
-    system.banner_display_url=live?.banner||system.banner||system.banner_url||null;
+    system.avatar_display_url=null;
+    system.banner_display_url=null;
+  }
+  async function hydrateSystemPrivateMedia(system){
+    if(!system)return;
+    if(system.avatar_storage_path){
+      try{system.avatar_display_url=await nihilityApi.privateMediaUrl('avatar',system.avatar_storage_path)}
+      catch(error){console.warn('Unable to load system avatar',error)}
+    }
+    if(system.banner_storage_path){
+      try{system.banner_display_url=await nihilityApi.privateMediaUrl('banner',system.banner_storage_path)}
+      catch(error){console.warn('Unable to load system banner',error)}
+    }
   }
 
   loadData=async function loadDataWithRainbowFeatures(){
@@ -68,14 +78,24 @@
 
     state.groups=groups||[];
     state.memberGroups=links||[];
-    state.groups.forEach(g=>{
-      g.icon_display_url=g.metadata?.pk_icon_url||null;
-      g.banner_display_url=g.metadata?.pk_banner_url||null;
-    });
+    state.groups.forEach(g=>{g.icon_display_url=null;g.banner_display_url=null});
+    void Promise.all(state.groups.map(async g=>{
+      const iconPath=g.metadata?.icon_storage_path||g.icon_storage_path||null;
+      const bannerPath=g.metadata?.banner_storage_path||null;
+      if(iconPath){
+        try{g.icon_display_url=await nihilityApi.privateMediaUrl('avatar',iconPath)}
+        catch(error){console.warn('Unable to load group icon',g.id,error)}
+      }
+      if(bannerPath){
+        try{g.banner_display_url=await nihilityApi.privateMediaUrl('banner',bannerPath)}
+        catch(error){console.warn('Unable to load group banner',g.id,error)}
+      }
+    })).then(()=>{if(state.route==='groups')renderGroups()});
 
     const storedSystem=settingsRows?.[0]?.settings?.system_profile||null;
     state.systemProfile=storedSystem?{...storedSystem}:null;
     applySystemMedia(state.systemProfile);
+    void hydrateSystemPrivateMedia(state.systemProfile).then(()=>renderHome());
 
     state.historyHasMore=state.fronts.length>=100;
     refreshFeatureControls();
@@ -83,14 +103,13 @@
 
     void liveSystemPromise.then(async liveSystem=>{
       if(!liveSystem?.system||!state.pkConnected)return;
-      state.systemProfile={...(state.systemProfile||{}),...liveSystem.system};
-      applySystemMedia(state.systemProfile,liveSystem);
-      if(!state.systemProfile.avatar_display_url&&state.systemProfile.avatar_storage_path){
-        try{state.systemProfile.avatar_display_url=await nihilityApi.privateMediaUrl('avatar',state.systemProfile.avatar_storage_path)}catch(error){console.warn('Unable to load system avatar',error)}
-      }
-      if(!state.systemProfile.banner_display_url&&state.systemProfile.banner_storage_path){
-        try{state.systemProfile.banner_display_url=await nihilityApi.privateMediaUrl('banner',state.systemProfile.banner_storage_path)}catch(error){console.warn('Unable to load system banner',error)}
-      }
+      const paths={
+        avatar_storage_path:state.systemProfile?.avatar_storage_path||null,
+        banner_storage_path:state.systemProfile?.banner_storage_path||null
+      };
+      state.systemProfile={...(state.systemProfile||{}),...liveSystem.system,...paths};
+      applySystemMedia(state.systemProfile);
+      await hydrateSystemPrivateMedia(state.systemProfile);
       renderHome();
       applyImportedSystemIdentity();
     });
@@ -275,8 +294,8 @@
 
     const avatarFile=previewFileUrl(document.querySelector('#memberAvatarFile'));
     const bannerFile=previewFileUrl(document.querySelector('#memberBannerFile'));
-    const avatarUrl=avatarFile||document.querySelector('#memberAvatarUrl')?.value.trim()||current?.avatar_url||'';
-    const bannerUrl=bannerFile||document.querySelector('#memberBannerUrl')?.value.trim()||current?.banner_url||'';
+    const avatarUrl=avatarFile||current?.avatar_url||'';
+    const bannerUrl=bannerFile||current?.banner_url||'';
     setMemberPreviewImage(document.querySelector('#memberPreviewAvatar'),document.querySelector('#memberPreviewAvatarFallback'),avatarUrl,initial(display||name));
     const banner=document.querySelector('#memberPreviewBanner'),bannerFallback=document.querySelector('#memberPreviewBannerFallback');
     if(bannerUrl){banner.hidden=false;banner.src=bannerUrl;bannerFallback.hidden=true;banner.onerror=()=>{banner.hidden=true;bannerFallback.hidden=false}}
@@ -459,8 +478,8 @@
     }
 
     clearGroupPreviewObjectUrls();
-    const iconUrl=groupPreviewFileUrl(document.querySelector('#groupsManagerIconFile'))||document.querySelector('#groupsManagerIconUrl')?.value.trim()||group?.icon_display_url||'';
-    const bannerUrl=groupPreviewFileUrl(document.querySelector('#groupsManagerBannerFile'))||document.querySelector('#groupsManagerBannerUrl')?.value.trim()||group?.banner_display_url||'';
+    const iconUrl=groupPreviewFileUrl(document.querySelector('#groupsManagerIconFile'))||group?.icon_display_url||'';
+    const bannerUrl=groupPreviewFileUrl(document.querySelector('#groupsManagerBannerFile'))||group?.banner_display_url||'';
 
     const iconImg=document.querySelector('#groupPreviewIconImage'),iconFallback=document.querySelector('#groupPreviewIconFallback');
     if(iconImg&&iconFallback){

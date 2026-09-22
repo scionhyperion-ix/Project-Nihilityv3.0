@@ -117,8 +117,8 @@
     const pronouns=document.querySelector('#systemEditPronouns')?.value.trim()||'';
     const description=document.querySelector('#systemEditDescription')?.value.trim()||'';
     const color=String(document.querySelector('#systemEditColor')?.value||'').trim().replace(/^#/,'');
-    const avatar=document.querySelector('#systemEditAvatar')?.value.trim()||current.avatar_url||current.avatar_display_url||'';
-    const banner=document.querySelector('#systemEditBanner')?.value.trim()||current.banner||current.banner_display_url||'';
+    const avatar=current.avatar_display_url||'';
+    const banner=current.banner_display_url||'';
 
     document.querySelector('#systemEditorNamePreview').textContent=name;
     document.querySelector('#systemEditorPronounsPreview').textContent=pronouns;
@@ -182,8 +182,8 @@
         window.nihilitySystemLiveCache.at=Date.now();
       }
       state.systemProfile={...(state.systemProfile||{}),...(result.system||system)};
-      state.systemProfile.avatar_display_url=state.systemProfile.avatar_url||state.systemProfile.avatar_display_url||null;
-      state.systemProfile.banner_display_url=state.systemProfile.banner||state.systemProfile.banner_display_url||null;
+      state.systemProfile.avatar_display_url=null;
+      state.systemProfile.banner_display_url=null;
       if(result.system?.avatar_storage_path){
         try{state.systemProfile.avatar_display_url=await nihilityApi.privateMediaUrl('avatar',result.system.avatar_storage_path)}catch{}
       }

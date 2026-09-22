@@ -220,7 +220,7 @@ function renderHeader(){
   $('#sidebarName').textContent=name;$('#sidebarRole').textContent=state.profile?.role||'member';
   ['#sidebarAvatar','#profileAvatarPreview'].forEach(sel=>{
     const box=$(sel);box.replaceChildren();
-    if(state.profile?.avatar_url){const img=document.createElement('img');img.src=state.profile.avatar_url;img.alt='';box.append(img)}
+    if(state.profile?.avatar_storage_path&&state.profile?.avatar_url){const img=document.createElement('img');img.src=state.profile.avatar_url;img.alt='';box.append(img)}
     else box.textContent=initial(name);
   });
 }
@@ -313,7 +313,7 @@ function renderProfile(){
   $('#invitePanel').hidden=state.profile.role!=='owner';
   const banner=$('#profileBannerPreview');
   if(banner){
-    const url=state.profile.banner_url||'';
+    const url=state.profile.banner_storage_path?state.profile.banner_url||'':'';
     banner.style.backgroundImage=url?'linear-gradient(rgba(10,11,20,.08),rgba(10,11,20,.18)), url("'+url.replaceAll('"','%22')+'")':'';
     banner.classList.toggle('has-profile-banner',Boolean(url));
   }
@@ -468,9 +468,9 @@ async function saveProfile(e){
     const importedBannerPath=!bannerUpload&&bannerExternal?await importExternalMedia('banner',bannerExternal):null;
     const body={
       display_name:$('#profileDisplayName').value.trim()||null,
-      avatar_url:avatarExternal||null,
+      avatar_url:null,
       avatar_storage_path:avatarUpload?.path||importedAvatarPath||old.avatar_storage_path||null,
-      banner_url:bannerExternal||null,
+      banner_url:null,
       banner_storage_path:bannerUpload?.path||importedBannerPath||old.banner_storage_path||null
     };
     await nihilityApi.rest('profiles',{method:'PATCH',query:'user_id=eq.'+state.user.id,body,prefer:'return=minimal'});
@@ -510,22 +510,29 @@ async function boot(){
   initTheme();
   localStorage.removeItem('nihility_pk_token');sessionStorage.removeItem('nihility_pk_token_session');
   if(!nihilityApi.configured()){setView('setup');return}
-  nihilityApi.readSessionFromUrl();state.user=await nihilityApi.user();if(!state.user){setView('login');return}
+  try{
+    await nihilityApi.readSessionFromUrl();
+  }catch(error){
+    nihilityApi.saveSession(null);
+    setView('login');
+    const message=$('#loginMessage');
+    if(message)message.textContent=error.message||'Unable to verify this sign-in link.';
+    return;
+  }
+  state.user=await nihilityApi.user();if(!state.user){setView('login');return}
   if(new URLSearchParams(location.search).get('reset')==='1'){setView('reset');return}
   if(!await bootstrapProfile()){setView('denied');return}
   setView('loading');
   await loadData();
-  // A full browser refresh always returns to Home instead of restoring the
-  // previous route from the URL hash. In-app navigation still works normally.
   setRoute('home');
   setView('app');
 }
 
 $('#loginForm').onsubmit=async e=>{e.preventDefault();const m=$('#loginMessage'),email=$('#emailInput').value.trim(),password=$('#passwordInput').value;if(!password){m.textContent='Enter your password, or use the magic-link button.';return}m.textContent='Signing in...';try{await nihilityApi.signInWithPassword(email,password);location.reload()}catch(error){m.textContent=error.message}};
-$('#magicLinkButton').onclick=async()=>{const m=$('#loginMessage'),email=$('#emailInput').value.trim();if(!email){m.textContent='Enter your email first.';return}m.textContent='Sending...';try{await nihilityApi.sendMagicLink(email);m.textContent='Check your email for the sign-in link.'}catch(error){m.textContent=error.message}};
-$('#forgotPasswordButton').onclick=async()=>{const m=$('#loginMessage'),email=$('#emailInput').value.trim();if(!email){m.textContent='Enter your email first.';return}m.textContent='Sending password reset...';try{await nihilityApi.sendPasswordReset(email);m.textContent='Check your email for the password reset link.'}catch(error){m.textContent=error.message}};
-$('#resetPasswordForm').onsubmit=async e=>{e.preventDefault();const m=$('#resetPasswordMessage'),password=$('#resetPasswordInput').value;m.textContent='Saving...';try{await nihilityApi.setPassword(password);m.textContent='Password saved. Redirecting...';history.replaceState(null,'',location.pathname);setTimeout(()=>location.reload(),600)}catch(error){m.textContent=error.message}};
-$('#passwordForm').onsubmit=async e=>{e.preventDefault();const m=$('#passwordMessage'),password=$('#newPasswordInput').value;m.textContent='Saving...';try{await nihilityApi.setPassword(password);$('#newPasswordInput').value='';m.textContent='Password saved. You can use it the next time you sign in.'}catch(error){m.textContent=error.message}};
+$('#magicLinkButton').onclick=async()=>{const m=$('#loginMessage'),email=$('#emailInput').value.trim();if(!email){m.textContent='Enter your email first.';return}m.textContent='Sending...';try{await nihilityApi.sendMagicLink(email);m.textContent='Check your email, then open the sign-in link in this browser.'}catch(error){m.textContent=error.message}};
+$('#forgotPasswordButton').onclick=async()=>{const m=$('#loginMessage'),email=$('#emailInput').value.trim();if(!email){m.textContent='Enter your email first.';return}m.textContent='Sending password reset...';try{await nihilityApi.sendPasswordReset(email);m.textContent='Check your email, then open the reset link in this browser.'}catch(error){m.textContent=error.message}};
+$('#resetPasswordForm').onsubmit=async e=>{e.preventDefault();const m=$('#resetPasswordMessage'),password=$('#resetPasswordInput').value;if(password.length<12){m.textContent='Use at least 12 characters for your password.';return}m.textContent='Saving...';try{await nihilityApi.setPassword(password);m.textContent='Password saved. Redirecting...';history.replaceState(null,'',location.pathname);setTimeout(()=>location.reload(),600)}catch(error){m.textContent=error.message}};
+$('#passwordForm').onsubmit=async e=>{e.preventDefault();const m=$('#passwordMessage'),password=$('#newPasswordInput').value;if(password.length<12){m.textContent='Use at least 12 characters for your password.';return}m.textContent='Saving...';try{await nihilityApi.setPassword(password);$('#newPasswordInput').value='';m.textContent='Password saved. You can use it the next time you sign in.'}catch(error){m.textContent=error.message}};
 function signOut(){nihilityApi.saveSession(null);location.reload()}
 $('#signOutButton').onclick=signOut;$('#deniedSignOut').onclick=signOut;$('#sidebarProfileButton').onclick=()=>setRoute('profile');
 $$('[data-route]').forEach(b=>b.onclick=()=>setRoute(b.dataset.route));$$('[data-route-link]').forEach(b=>b.onclick=()=>setRoute(b.dataset.routeLink));
@@ -536,11 +543,8 @@ $('#connectPkButton').onclick=connectPk;$('#disconnectPkButton').onclick=disconn
 document.querySelectorAll('input[name="themeMode"]').forEach(i=>i.onchange=()=>applyTheme(i.value));
 $('#profileForm').onsubmit=saveProfile;
 $('#profileBannerUrl').addEventListener('input',()=>{
-  const banner=$('#profileBannerPreview');
-  const url=$('#profileBannerUrl').value.trim();
-  if(!banner)return;
-  banner.style.backgroundImage=url?'linear-gradient(rgba(10,11,20,.08),rgba(10,11,20,.18)), url("'+url.replaceAll('"','%22')+'")':'';
-  banner.classList.toggle('has-profile-banner',Boolean(url));
+  // External URLs are copied server-side on save. Do not fetch them directly
+  // in the browser, which would disclose the user's IP to the image host.
 });$('#inviteForm').onsubmit=invite;
 const AUTO_REFRESH_MS=15000;
 let autoRefreshBusy=false;

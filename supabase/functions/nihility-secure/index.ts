@@ -27,13 +27,21 @@ const BUCKETS: Record<string,{name:string,max:number}> = {
   banner:{name:"nihility-banners",max:5*1024*1024},
   profile:{name:"nihility-profile-avatars",max:2*1024*1024},
 };
+const MEDIA_QUOTA_BYTES = 1024*1024*1024; // 1 GiB per account.
+const MAX_IMAGE_DIMENSION = 8192;
+const MAX_IMAGE_PIXELS = 40_000_000;
+
+class ClientError extends Error {
+  status:number;
+  constructor(message:string,status=400){super(message);this.name="ClientError";this.status=status}
+}
 
 function cors(origin:string|null){
   const fallback="https://scionhyperion-ix.github.io";
   const allowed = origin && ALLOWED_ORIGINS.has(origin) ? origin : fallback;
   return {
     "Access-Control-Allow-Origin": allowed,
-    "Access-Control-Allow-Headers": "authorization, apikey, content-type",
+    "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-nihility-action, x-media-kind",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Vary": "Origin",
     "Content-Type": "application/json",
@@ -50,19 +58,33 @@ function unb64(s:string){
   const bin=atob(s); const out=new Uint8Array(bin.length);
   for(let i=0;i<bin.length;i++)out[i]=bin.charCodeAt(i); return out;
 }
-async function key(){
+let vaultKeyPromise:Promise<CryptoKey>|null=null;
+async function vaultKey(){
+  if(!vaultKeyPromise){
+    vaultKeyPromise=(async()=>{
+      const encoded=await admin("/rest/v1/rpc/get_nihility_encryption_key",{method:"POST",body:"{}"});
+      if(typeof encoded!=="string"||!encoded)throw new Error("Encryption key unavailable");
+      return crypto.subtle.importKey("raw",unb64(encoded),{name:"AES-GCM"},false,["encrypt","decrypt"]);
+    })();
+  }
+  return vaultKeyPromise;
+}
+async function legacyKey(){
   const material=new TextEncoder().encode("nihility-pk-token-v1\n"+SERVICE_KEY);
   const digest=await crypto.subtle.digest("SHA-256",material);
-  return crypto.subtle.importKey("raw",digest,{name:"AES-GCM"},false,["encrypt","decrypt"]);
+  return crypto.subtle.importKey("raw",digest,{name:"AES-GCM"},false,["decrypt"]);
 }
 async function encryptToken(token:string){
   const iv=crypto.getRandomValues(new Uint8Array(12));
-  const cipher=await crypto.subtle.encrypt({name:"AES-GCM",iv},await key(),new TextEncoder().encode(token));
+  const cipher=await crypto.subtle.encrypt({name:"AES-GCM",iv},await vaultKey(),new TextEncoder().encode(token));
   return {ciphertext:b64(new Uint8Array(cipher)),iv:b64(iv)};
 }
-async function decryptToken(ciphertext:string,iv:string){
-  const plain=await crypto.subtle.decrypt({name:"AES-GCM",iv:unb64(iv)},await key(),unb64(ciphertext));
+async function decryptWith(key:CryptoKey,ciphertext:string,iv:string){
+  const plain=await crypto.subtle.decrypt({name:"AES-GCM",iv:unb64(iv)},key,unb64(ciphertext));
   return new TextDecoder().decode(plain);
+}
+async function decryptToken(ciphertext:string,iv:string){
+  return decryptWith(await vaultKey(),ciphertext,iv);
 }
 async function admin(path:string,init:RequestInit={}){
   const headers=new Headers(init.headers||{});
@@ -72,20 +94,34 @@ async function admin(path:string,init:RequestInit={}){
   const r=await fetch(SUPABASE_URL+path,{...init,headers});
   const text=await r.text();
   let data:any=null; try{data=text?JSON.parse(text):null}catch{data=text}
-  if(!r.ok)throw new Error(data?.message||data?.error||r.statusText);
+  if(!r.ok){
+    console.error("Supabase admin request failed",r.status,path,typeof data==="string"?data.slice(0,500):data);
+    throw new Error("Database operation failed");
+  }
   return data;
 }
 async function currentUser(req:Request){
   const auth=req.headers.get("Authorization")||"";
-  if(!auth.startsWith("Bearer "))throw new Error("Authentication required");
+  if(!auth.startsWith("Bearer "))throw new ClientError("Authentication required",401);
   const r=await fetch(SUPABASE_URL+"/auth/v1/user",{headers:{apikey:SERVICE_KEY,Authorization:auth}});
-  if(!r.ok)throw new Error("Invalid or expired session");
+  if(!r.ok)throw new ClientError("Invalid or expired session",401);
   return await r.json();
 }
 async function getSecret(userId:string){
-  const rows=await admin("/rest/v1/integration_secrets?user_id=eq."+encodeURIComponent(userId)+"&provider=eq.pluralkit&select=ciphertext,iv&limit=1");
-  if(!rows?.[0])throw new Error("PluralKit is not connected");
-  return decryptToken(rows[0].ciphertext,rows[0].iv);
+  const rows=await admin("/rest/v1/integration_secrets?user_id=eq."+encodeURIComponent(userId)+"&provider=eq.pluralkit&select=ciphertext,iv,cipher_version&limit=1");
+  if(!rows?.[0])throw new ClientError("PluralKit is not connected",409);
+  const row=rows[0];
+  if(Number(row.cipher_version||1)>=2)return decryptToken(row.ciphertext,row.iv);
+
+  // One-time transparent migration from the old service-key-derived key.
+  const token=await decryptWith(await legacyKey(),row.ciphertext,row.iv);
+  const migrated=await encryptToken(token);
+  await admin("/rest/v1/integration_secrets?user_id=eq."+encodeURIComponent(userId)+"&provider=eq.pluralkit",{
+    method:"PATCH",
+    headers:{Prefer:"return=minimal"},
+    body:JSON.stringify({ciphertext:migrated.ciphertext,iv:migrated.iv,cipher_version:2,updated_at:new Date().toISOString()})
+  });
+  return token;
 }
 async function pk(token:string,path:string,init:RequestInit={}){
   const headers=new Headers(init.headers||{});
@@ -94,7 +130,12 @@ async function pk(token:string,path:string,init:RequestInit={}){
   const r=await fetch(PK_BASE+path,{...init,headers,signal:AbortSignal.timeout(15000)});
   const text=await r.text();
   let data:any=null; try{data=text?JSON.parse(text):null}catch{data=text}
-  if(!r.ok)throw new Error(data?.message||data?.error||("PluralKit error "+r.status));
+  if(!r.ok){
+    console.warn("PluralKit request failed",r.status,path);
+    if(r.status===401||r.status===403)throw new ClientError("PluralKit rejected the connection credentials.",401);
+    if(r.status===429)throw new ClientError("PluralKit rate limit reached. Please wait and try again.",429);
+    throw new ClientError("PluralKit request failed. Please try again.",502);
+  }
   return data;
 }
 
@@ -125,32 +166,32 @@ function literalIp(host:string){
   return h.includes(":");
 }
 async function validateHost(u:URL){
-  if(u.href.length>2048)throw new Error("Image URL is too long");
-  if(u.protocol!=="https:")throw new Error("Only HTTPS image URLs are allowed");
-  if(u.username||u.password)throw new Error("Credentials in image URLs are not allowed");
-  if(u.port&&u.port!=="443")throw new Error("Custom image URL ports are not allowed");
+  if(u.href.length>2048)throw new ClientError("Image URL is too long");
+  if(u.protocol!=="https:")throw new ClientError("Only HTTPS image URLs are allowed");
+  if(u.username||u.password)throw new ClientError("Credentials in image URLs are not allowed");
+  if(u.port&&u.port!=="443")throw new ClientError("Custom image URL ports are not allowed");
 
   const host=u.hostname.toLowerCase().replace(/\.$/,"").replace(/^\[|\]$/g,"");
   if(!TRUSTED_MEDIA_HOSTS.has(host)){
-    throw new Error("This image host is not approved for secure server-side import. Upload the image file instead.");
+    throw new ClientError("This image host is not approved for secure server-side import. Upload the image file instead.");
   }
 
   if(host==="localhost"||host.endsWith(".localhost")||host.endsWith(".local")||host.endsWith(".internal")){
-    throw new Error("Local network URLs are not allowed");
+    throw new ClientError("Local network URLs are not allowed");
   }
 
   if(literalIp(host)){
     if(host.includes(":")?privateIPv6(host):privateIPv4(host)){
-      throw new Error("Private or reserved IP image URLs are not allowed");
+      throw new ClientError("Private or reserved IP image URLs are not allowed");
     }
   }else{
     const [a,aaaa]=await Promise.all([
       Deno.resolveDns(host,"A").catch(()=>[]),
       Deno.resolveDns(host,"AAAA").catch(()=>[]),
     ]);
-    if(!a.length&&!aaaa.length)throw new Error("Image host could not be resolved");
+    if(!a.length&&!aaaa.length)throw new ClientError("Image host could not be resolved");
     if(a.some(privateIPv4)||aaaa.some(privateIPv6)){
-      throw new Error("Private or reserved image hosts are not allowed");
+      throw new ClientError("Private or reserved image hosts are not allowed");
     }
   }
 }
@@ -171,56 +212,165 @@ function detectedImageType(bytes:Uint8Array){
   }
   return null;
 }
+function u16be(bytes:Uint8Array,offset:number){return (bytes[offset]<<8)|bytes[offset+1]}
+function u16le(bytes:Uint8Array,offset:number){return bytes[offset]|(bytes[offset+1]<<8)}
+function u24le(bytes:Uint8Array,offset:number){return bytes[offset]|(bytes[offset+1]<<8)|(bytes[offset+2]<<16)}
+function u32be(bytes:Uint8Array,offset:number){return ((bytes[offset]<<24)>>>0)|(bytes[offset+1]<<16)|(bytes[offset+2]<<8)|bytes[offset+3]}
+function imageDimensions(bytes:Uint8Array,type:string){
+  if(type==="image/png"&&bytes.length>=24){
+    return {width:u32be(bytes,16),height:u32be(bytes,20)};
+  }
+  if(type==="image/gif"&&bytes.length>=10){
+    return {width:u16le(bytes,6),height:u16le(bytes,8)};
+  }
+  if(type==="image/jpeg"){
+    let i=2;
+    const sof=new Set([0xc0,0xc1,0xc2,0xc3,0xc5,0xc6,0xc7,0xc9,0xca,0xcb,0xcd,0xce,0xcf]);
+    while(i+8<bytes.length){
+      if(bytes[i]!==0xff){i++;continue}
+      while(i<bytes.length&&bytes[i]===0xff)i++;
+      const marker=bytes[i++];
+      if(marker===0xd8||marker===0xd9||marker===0x01||(marker>=0xd0&&marker<=0xd7))continue;
+      if(i+1>=bytes.length)break;
+      const length=u16be(bytes,i);
+      if(length<2||i+length>bytes.length)break;
+      if(sof.has(marker)&&length>=7){
+        return {height:u16be(bytes,i+3),width:u16be(bytes,i+5)};
+      }
+      i+=length;
+    }
+    return null;
+  }
+  if(type==="image/webp"&&bytes.length>=30){
+    const chunk=String.fromCharCode(...bytes.slice(12,16));
+    if(chunk==="VP8X"&&bytes.length>=30){
+      return {width:1+u24le(bytes,24),height:1+u24le(bytes,27)};
+    }
+    if(chunk==="VP8L"&&bytes.length>=25&&bytes[20]===0x2f){
+      const b1=bytes[21],b2=bytes[22],b3=bytes[23],b4=bytes[24];
+      return {
+        width:1+(b1|((b2&0x3f)<<8)),
+        height:1+((b2>>6)|(b3<<2)|((b4&0x0f)<<10))
+      };
+    }
+    if(chunk==="VP8 "&&bytes.length>=30&&bytes[23]===0x9d&&bytes[24]===0x01&&bytes[25]===0x2a){
+      return {width:u16le(bytes,26)&0x3fff,height:u16le(bytes,28)&0x3fff};
+    }
+  }
+  return null;
+}
+function validateImageBytes(bytes:Uint8Array,type:string,kind:string){
+  const cfg=BUCKETS[kind];
+  if(!cfg)throw new ClientError("Invalid media kind");
+  if(!MIME_EXT[type])throw new ClientError("Unsupported image type");
+  if(bytes.length===0)throw new ClientError("Empty image response");
+  if(bytes.length>cfg.max)throw new ClientError("Image exceeds the allowed size");
+  if(type==="image/gif"&&bytes.length>2*1024*1024)throw new ClientError("GIF images are limited to 2 MB");
+
+  const detected=detectedImageType(bytes);
+  if(!detected||detected!==type)throw new ClientError("Image content does not match its declared type");
+
+  const dimensions=imageDimensions(bytes,type);
+  if(!dimensions||!dimensions.width||!dimensions.height)throw new ClientError("Unable to read image dimensions");
+  const {width,height}=dimensions;
+  if(width>MAX_IMAGE_DIMENSION||height>MAX_IMAGE_DIMENSION||width*height>MAX_IMAGE_PIXELS){
+    throw new ClientError("Image dimensions are too large");
+  }
+  return {width,height};
+}
+async function readRawBody(req:Request|Response,maxBytes:number){
+  const declared=Number(req.headers.get("content-length")||0);
+  if(Number.isFinite(declared)&&declared>maxBytes)throw new ClientError("Image exceeds the allowed size");
+  const reader=req.body?.getReader();
+  if(!reader)throw new ClientError("Empty image upload");
+  const chunks:Uint8Array[]=[];let total=0;
+  while(true){
+    const {done,value}=await reader.read();
+    if(done)break;
+    if(value){
+      total+=value.length;
+      if(total>maxBytes){await reader.cancel();throw new ClientError("Image exceeds the allowed size")}
+      chunks.push(value);
+    }
+  }
+  if(!total)throw new ClientError("Empty image upload");
+  const bytes=new Uint8Array(total);let off=0;
+  for(const chunk of chunks){bytes.set(chunk,off);off+=chunk.length}
+  return bytes;
+}
+async function ensureMediaQuota(userId:string,additionalBytes:number){
+  const used=await admin("/rest/v1/rpc/nihility_media_usage_bytes",{
+    method:"POST",
+    body:JSON.stringify({p_user_id:userId})
+  });
+  const total=Number(used||0);
+  if(!Number.isFinite(total)||total+additionalBytes>MEDIA_QUOTA_BYTES){
+    throw new ClientError("Media storage quota exceeded. Remove unused media before uploading more.",413);
+  }
+}
+async function storeImageBytes(userId:string,kind:string,bytes:Uint8Array,type:string){
+  const cfg=BUCKETS[kind];
+  if(!cfg)throw new ClientError("Invalid media kind");
+  validateImageBytes(bytes,type,kind);
+  await ensureMediaQuota(userId,bytes.length);
+  const path=userId+"/"+crypto.randomUUID()+"."+MIME_EXT[type];
+  const r=await fetch(SUPABASE_URL+"/storage/v1/object/"+encodeURIComponent(cfg.name)+"/"+path.split("/").map(encodeURIComponent).join("/"),{
+    method:"POST",
+    headers:{apikey:SERVICE_KEY,Authorization:"Bearer "+SERVICE_KEY,"Content-Type":type,"x-upsert":"false"},
+    body:bytes
+  });
+  if(!r.ok){
+    console.error("Storage upload failed",r.status,await r.text().catch(()=>""));
+    throw new Error("Media storage failed");
+  }
+  return path;
+}
 async function safeImage(url:string,kind:string){
-  const cfg=BUCKETS[kind]; if(!cfg)throw new Error("Invalid media kind");
-  let current=new URL(url);
+  const cfg=BUCKETS[kind]; if(!cfg)throw new ClientError("Invalid media kind");
+  let current:URL;
+  try{current=new URL(url)}catch{throw new ClientError("Invalid image URL")}
   for(let redirects=0;redirects<4;redirects++){
     await validateHost(current);
     const r=await fetch(current,{redirect:"manual",signal:AbortSignal.timeout(12000),headers:{"User-Agent":"Project-Nihility-Media-Importer/1.0","Accept":"image/png,image/jpeg,image/webp,image/gif"}});
     if([301,302,303,307,308].includes(r.status)){
-      const loc=r.headers.get("location"); if(!loc)throw new Error("Invalid image redirect");
+      const loc=r.headers.get("location"); if(!loc)throw new ClientError("Invalid image redirect");
       current=new URL(loc,current); continue;
     }
-    if(!r.ok)throw new Error("Unable to fetch image");
+    if(!r.ok)throw new ClientError("Unable to fetch image");
     const type=(r.headers.get("content-type")||"").split(";")[0].toLowerCase();
-    if(!MIME_EXT[type])throw new Error("Unsupported image type");
+    if(!MIME_EXT[type])throw new ClientError("Unsupported image type");
     const declared=Number(r.headers.get("content-length")||0);
-    if(declared>cfg.max)throw new Error("Image exceeds the allowed size");
-    const reader=r.body?.getReader(); if(!reader)throw new Error("Empty image response");
-    const chunks:Uint8Array[]=[]; let total=0;
-    while(true){
-      const {done,value}=await reader.read(); if(done)break;
-      if(value){total+=value.length;if(total>cfg.max){reader.cancel();throw new Error("Image exceeds the allowed size")}chunks.push(value)}
-    }
-    if(total===0)throw new Error("Empty image response");
-    const bytes=new Uint8Array(total);let off=0;for(const c of chunks){bytes.set(c,off);off+=c.length}
-    const detected=detectedImageType(bytes);
-    if(!detected||detected!==type)throw new Error("Image content does not match its declared type");
+    if(declared>cfg.max)throw new ClientError("Image exceeds the allowed size");
+    const bytes=await readRawBody(r,cfg.max);
+    validateImageBytes(bytes,type,kind);
     return {bytes,type,ext:MIME_EXT[type]};
   }
-  throw new Error("Too many image redirects");
+  throw new ClientError("Too many image redirects");
 }
 async function storeImage(userId:string,kind:string,url:string){
-  const cfg=BUCKETS[kind]; const img=await safeImage(url,kind);
-  const path=userId+"/"+crypto.randomUUID()+"."+img.ext;
-  const r=await fetch(SUPABASE_URL+"/storage/v1/object/"+encodeURIComponent(cfg.name)+"/"+path.split("/").map(encodeURIComponent).join("/"),{
-    method:"POST",
-    headers:{apikey:SERVICE_KEY,Authorization:"Bearer "+SERVICE_KEY,"Content-Type":img.type,"x-upsert":"false"},
-    body:img.bytes
-  });
-  if(!r.ok)throw new Error("Unable to store imported image");
-  return path;
+  const img=await safeImage(url,kind);
+  return storeImageBytes(userId,kind,img.bytes,img.type);
+}
+async function actionUploadMedia(user:any,req:Request){
+  const kind=String(req.headers.get("x-media-kind")||"");
+  const cfg=BUCKETS[kind];
+  if(!cfg)throw new ClientError("Invalid media kind");
+  const type=(req.headers.get("content-type")||"").split(";")[0].toLowerCase();
+  if(!MIME_EXT[type])throw new ClientError("Unsupported image type");
+  const bytes=await readRawBody(req,cfg.max);
+  const path=await storeImageBytes(user.id,kind,bytes,type);
+  return {path};
 }
 
 async function actionConnect(user:any,body:any){
   const token=String(body.token||"").trim();
-  if(!token)throw new Error("PluralKit token is required");
-  if(token.length>512)throw new Error("PluralKit token is invalid");
+  if(!token)throw new ClientError("PluralKit token is required");
+  if(token.length>512)throw new ClientError("PluralKit token is invalid");
   const system=await pk(token,"/systems/@me");
   const enc=await encryptToken(token);
   await admin("/rest/v1/integration_secrets?on_conflict=user_id,provider",{
     method:"POST",headers:{Prefer:"resolution=merge-duplicates,return=minimal"},
-    body:JSON.stringify({user_id:user.id,provider:"pluralkit",ciphertext:enc.ciphertext,iv:enc.iv,cipher_version:1})
+    body:JSON.stringify({user_id:user.id,provider:"pluralkit",ciphertext:enc.ciphertext,iv:enc.iv,cipher_version:2})
   });
   await admin("/rest/v1/external_integrations?on_conflict=user_id,provider",{
     method:"POST",headers:{Prefer:"resolution=merge-duplicates,return=minimal"},
@@ -246,7 +396,7 @@ async function actionMirror(user:any,body:any){
   }
   const inFilter="("+ids.map((x:string)=>String(x).replace(/[^a-fA-F0-9-]/g,"")).join(",")+")";
   const members=await admin("/rest/v1/members?user_id=eq."+encodeURIComponent(user.id)+"&id=in."+encodeURIComponent(inFilter)+"&select=id,pk_id,archived_at");
-  if(members.length!==ids.length||members.some((m:any)=>!m.pk_id||m.archived_at))throw new Error("One or more members cannot be shared to PluralKit");
+  if(members.length!==ids.length||members.some((m:any)=>!m.pk_id||m.archived_at))throw new ClientError("One or more members cannot be shared to PluralKit");
   const payload:any={members:members.map((m:any)=>m.pk_id)}; if(body.timestamp)payload.timestamp=body.timestamp;
   await pk(token,"/systems/@me/switches",{method:"POST",body:JSON.stringify(payload)});
   return {shared:true};
@@ -380,11 +530,11 @@ async function actionUpdatePkSystem(user:any,body:any){
   }
   if(Object.prototype.hasOwnProperty.call(input,"color")){
     const color=String(input.color||"").trim().replace(/^#/,"");
-    if(color&&!/^[0-9a-fA-F]{6}$/.test(color))throw new Error("Color must be a 6-character hex color");
+    if(color&&!/^[0-9a-fA-F]{6}$/.test(color))throw new ClientError("Color must be a 6-character hex color");
     payload.color=color||null;
   }
-  if(payload.avatar_url&&!/^https:\/\//i.test(payload.avatar_url))throw new Error("Avatar must use HTTPS");
-  if(payload.banner&&!/^https:\/\//i.test(payload.banner))throw new Error("Banner must use HTTPS");
+  if(payload.avatar_url&&!/^https:\/\//i.test(payload.avatar_url))throw new ClientError("Avatar must use HTTPS");
+  if(payload.banner&&!/^https:\/\//i.test(payload.banner))throw new ClientError("Banner must use HTTPS");
   await pk(token,"/systems/@me",{method:"PATCH",body:JSON.stringify(payload)});
   const updated=sanitizePkSystem(await pk(token,"/systems/@me"));
   const local=await saveLocalSystemProfile(user,updated,{copyMedia:true});
@@ -655,9 +805,51 @@ async function actionImportMedia(user:any,body:any){
   return {path};
 }
 
+const ACTION_LIMITS:Record<string,{limit:number,window:number}> = {
+  pk_connect:{limit:10,window:60},
+  pk_status:{limit:120,window:60},
+  pk_disconnect:{limit:10,window:60},
+  pk_mirror_front:{limit:60,window:60},
+  pk_compare:{limit:30,window:60},
+  pk_import:{limit:120,window:60},
+  pk_import_groups:{limit:10,window:60},
+  pk_get_system:{limit:60,window:60},
+  pk_update_system:{limit:20,window:60},
+  pk_import_fronts:{limit:120,window:60},
+  import_media:{limit:30,window:60},
+  upload_media:{limit:60,window:60},
+};
+const AUDITED_ACTIONS=new Set([
+  "pk_connect","pk_disconnect","pk_mirror_front","pk_import","pk_import_groups",
+  "pk_update_system","pk_import_fronts","import_media","upload_media"
+]);
+async function consumeRateLimit(userId:string,action:string){
+  const spec=ACTION_LIMITS[action]||{limit:30,window:60};
+  const globalOk=await admin("/rest/v1/rpc/consume_nihility_rate_limit",{
+    method:"POST",
+    body:JSON.stringify({p_user_id:userId,p_action:"__global__",p_limit:240,p_window_seconds:60})
+  });
+  if(globalOk!==true)throw new ClientError("Too many requests. Please wait a moment and try again.",429);
+  const actionOk=await admin("/rest/v1/rpc/consume_nihility_rate_limit",{
+    method:"POST",
+    body:JSON.stringify({p_user_id:userId,p_action:action,p_limit:spec.limit,p_window_seconds:spec.window})
+  });
+  if(actionOk!==true)throw new ClientError("This action is being used too quickly. Please wait a moment and try again.",429);
+}
+async function recordSecurityEvent(userId:string|null,eventType:string,success:boolean,details:Record<string,unknown>={}){
+  try{
+    await admin("/rest/v1/rpc/record_nihility_security_event",{
+      method:"POST",
+      body:JSON.stringify({p_user_id:userId,p_event_type:eventType,p_success:success,p_details:details})
+    });
+  }catch(error){
+    console.warn("Unable to record security event",eventType,error);
+  }
+}
+
 async function readJsonBody(req:Request,maxBytes=65536){
   const declared=Number(req.headers.get("content-length")||0);
-  if(Number.isFinite(declared)&&declared>maxBytes)throw new Error("Request body is too large");
+  if(Number.isFinite(declared)&&declared>maxBytes)throw new ClientError("Request body is too large");
   const reader=req.body?.getReader();
   if(!reader)return {};
   const chunks:Uint8Array[]=[];let total=0;
@@ -666,7 +858,7 @@ async function readJsonBody(req:Request,maxBytes=65536){
     if(done)break;
     if(value){
       total+=value.length;
-      if(total>maxBytes){await reader.cancel();throw new Error("Request body is too large")}
+      if(total>maxBytes){await reader.cancel();throw new ClientError("Request body is too large")}
       chunks.push(value);
     }
   }
@@ -674,7 +866,7 @@ async function readJsonBody(req:Request,maxBytes=65536){
   const bytes=new Uint8Array(total);let off=0;
   for(const chunk of chunks){bytes.set(chunk,off);off+=chunk.length}
   const text=new TextDecoder().decode(bytes);
-  try{return JSON.parse(text)}catch{throw new Error("Invalid JSON request body")}
+  try{return JSON.parse(text)}catch{throw new ClientError("Invalid JSON request body")}
 }
 
 Deno.serve(async(req)=>{
@@ -682,12 +874,28 @@ Deno.serve(async(req)=>{
   if(req.method==="OPTIONS")return new Response(null,{status:204,headers:cors(origin)});
   if(origin && !ALLOWED_ORIGINS.has(origin))return json({error:"Origin not allowed"},403,origin);
   if(req.method!=="POST")return json({error:"Method not allowed"},405,origin);
+
+  let user:any=null;
+  let action="unknown";
   try{
-    const user=await currentUser(req);
+    user=await currentUser(req);
     const profile=await admin("/rest/v1/profiles?user_id=eq."+encodeURIComponent(user.id)+"&select=user_id&limit=1");
-    if(!profile?.length)throw new Error("Nihility profile required");
+    if(!profile?.length)throw new ClientError("Nihility profile required",403);
+
+    const headerAction=String(req.headers.get("x-nihility-action")||"");
+    if(headerAction==="upload_media"){
+      action="upload_media";
+      await consumeRateLimit(user.id,action);
+      const result=await actionUploadMedia(user,req);
+      await recordSecurityEvent(user.id,"edge."+action,true,{origin:origin||null});
+      return json(result,200,origin);
+    }
+
     const body=await readJsonBody(req);
-    const action=String(body.action||"");
+    action=String(body.action||"");
+    if(!ACTION_LIMITS[action])throw new ClientError("Unknown action",400);
+    await consumeRateLimit(user.id,action);
+
     let result;
     if(action==="pk_connect")result=await actionConnect(user,body);
     else if(action==="pk_status")result=await actionStatus(user);
@@ -700,10 +908,18 @@ Deno.serve(async(req)=>{
     else if(action==="pk_update_system")result=await actionUpdatePkSystem(user,body);
     else if(action==="pk_import_fronts")result=await actionImportPkFronts(user,body);
     else if(action==="import_media")result=await actionImportMedia(user,body);
-    else return json({error:"Unknown action"},400,origin);
+    else throw new ClientError("Unknown action",400);
+
+    if(AUDITED_ACTIONS.has(action)){
+      await recordSecurityEvent(user.id,"edge."+action,true,{origin:origin||null});
+    }
     return json(result,200,origin);
   }catch(error){
-    const message=error instanceof Error?error.message:"Request failed";
-    return json({error:message},400,origin);
+    if(user?.id&&AUDITED_ACTIONS.has(action)){
+      await recordSecurityEvent(user.id,"edge."+action,false,{origin:origin||null});
+    }
+    if(error instanceof ClientError)return json({error:error.message},error.status,origin);
+    console.error("Unhandled nihility-secure error",action,error);
+    return json({error:"Request failed. Please try again."},500,origin);
   }
 });

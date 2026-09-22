@@ -197,3 +197,10 @@
     max-width:92px;
   }
 }
+
+
+/* GitHub Pages cannot set frame-ancestors/X-Frame-Options headers.
+   Keep the document hidden unless the early frame guard confirms top-level use. */
+html.frame-guard body{
+  visibility:hidden!important;
+}
