@@ -547,7 +547,13 @@ async function verifyNewPassword(password,message){
 }
 $('#resetPasswordForm').onsubmit=async e=>{e.preventDefault();const m=$('#resetPasswordMessage'),password=$('#resetPasswordInput').value;try{if(!await verifyNewPassword(password,m))return;m.textContent='Saving...';await nihilityApi.setPassword(password);m.textContent='Password saved. Redirecting...';history.replaceState(null,'',location.pathname);setTimeout(()=>location.reload(),600)}catch(error){m.textContent=error.message}};
 $('#passwordForm').onsubmit=async e=>{e.preventDefault();const m=$('#passwordMessage'),password=$('#newPasswordInput').value;try{if(!await verifyNewPassword(password,m))return;m.textContent='Saving...';await nihilityApi.setPassword(password);$('#newPasswordInput').value='';m.textContent='Password saved. You can use it the next time you sign in.'}catch(error){m.textContent=error.message}};
-function signOut(){nihilityApi.saveSession(null);location.reload()}
+async function signOut(){
+  const button=$('#signOutButton');
+  if(button)button.disabled=true;
+  try{await nihilityApi.signOut('local')}
+  catch(error){console.warn('Server sign-out failed; local session will still be cleared.',error)}
+  finally{nihilityApi.saveSession(null);location.reload()}
+}
 $('#signOutButton').onclick=signOut;$('#deniedSignOut').onclick=signOut;$('#sidebarProfileButton').onclick=()=>setRoute('profile');
 $$('[data-route]').forEach(b=>b.onclick=()=>setRoute(b.dataset.route));$$('[data-route-link]').forEach(b=>b.onclick=()=>setRoute(b.dataset.routeLink));
 $('#openFrontManager').onclick=()=>openFront('replace');$('#chooseAnyMemberButton').onclick=()=>openFront('replace');$('#newFrontButton').onclick=()=>openFront('replace');$('#addCoFronterButton').onclick=()=>openFront('add');$('#switchOutButton').onclick=switchOut;
