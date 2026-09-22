@@ -311,6 +311,46 @@ function gifFrameCount(bytes:Uint8Array,maxFrames=100){
   return null;
 }
 
+function pngAnimationFrames(bytes:Uint8Array){
+  if(bytes.length<33)return 1;
+  let offset=8;
+  while(offset+12<=bytes.length){
+    const length=u32be(bytes,offset);
+    const type=String.fromCharCode(...bytes.slice(offset+4,offset+8));
+    const dataStart=offset+8;
+    const next=dataStart+length+4;
+    if(next>bytes.length)return null;
+    if(type==="acTL"){
+      if(length<8)return null;
+      return u32be(bytes,dataStart);
+    }
+    offset=next;
+  }
+  return 1;
+}
+function webpAnimationFrames(bytes:Uint8Array,maxFrames=100){
+  if(bytes.length<12)return null;
+  const riff=String.fromCharCode(...bytes.slice(0,4));
+  const webp=String.fromCharCode(...bytes.slice(8,12));
+  if(riff!=="RIFF"||webp!=="WEBP")return null;
+  let offset=12,frames=0,animated=false;
+  while(offset+8<=bytes.length){
+    const type=String.fromCharCode(...bytes.slice(offset,offset+4));
+    const length=(bytes[offset+4]|(bytes[offset+5]<<8)|(bytes[offset+6]<<16)|(bytes[offset+7]<<24))>>>0;
+    const dataStart=offset+8;
+    const next=dataStart+length+(length&1);
+    if(next>bytes.length)return null;
+    if(type==="VP8X"&&length>=1) animated=Boolean(bytes[dataStart]&0x02);
+    if(type==="ANMF"){
+      frames++;
+      if(frames>maxFrames)return frames;
+    }
+    offset=next;
+  }
+  if(animated&&frames===0)return null;
+  return animated?frames:1;
+}
+
 function validateImageBytes(bytes:Uint8Array,type:string,kind:string){
   const cfg=BUCKETS[kind];
   if(!cfg)throw new ClientError("Invalid media kind");
@@ -322,6 +362,16 @@ function validateImageBytes(bytes:Uint8Array,type:string,kind:string){
     const frames=gifFrameCount(bytes,100);
     if(frames==null)throw new ClientError("Unable to validate GIF structure");
     if(frames>100)throw new ClientError("Animated GIFs are limited to 100 frames");
+  }
+  if(type==="image/png"){
+    const frames=pngAnimationFrames(bytes);
+    if(frames==null)throw new ClientError("Unable to validate PNG structure");
+    if(frames>100)throw new ClientError("Animated PNGs are limited to 100 frames");
+  }
+  if(type==="image/webp"){
+    const frames=webpAnimationFrames(bytes,100);
+    if(frames==null)throw new ClientError("Unable to validate WebP structure");
+    if(frames>100)throw new ClientError("Animated WebP images are limited to 100 frames");
   }
 
   const detected=detectedImageType(bytes);
