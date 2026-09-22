@@ -124,6 +124,29 @@
     return objectUrl;
   }
   async function deleteMedia(kind,path){if(!path)return;const bucket=BUCKETS[kind];if(!bucket)return;const cacheKey=bucket+':'+path;const cached=privateMediaCache.get(cacheKey);if(cached){URL.revokeObjectURL(cached);privateMediaCache.delete(cacheKey)}const s=await refresh();if(!s?.access_token)return;const r=await fetch(cfg.SUPABASE_URL+'/storage/v1/object/'+encodeURIComponent(bucket)+'/'+encPath(path),{method:'DELETE',headers:{apikey:cfg.SUPABASE_ANON_KEY,Authorization:'Bearer '+s.access_token}});if(!r.ok&&r.status!==404)throw new Error('Unable to delete stored media.')}
+  async function sha1Hex(value){
+    const bytes=new TextEncoder().encode(value);
+    const digest=await crypto.subtle.digest('SHA-1',bytes);
+    return Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,'0')).join('').toUpperCase();
+  }
+  async function checkPwnedPassword(password){
+    if(typeof password!=='string'||!password)throw new Error('Password is required.');
+    const hash=await sha1Hex(password);
+    const prefix=hash.slice(0,5);
+    const suffix=hash.slice(5);
+    const result=await secure('password_range',{prefix});
+    const lines=String(result?.range||'').split(/\r?\n/);
+    for(const line of lines){
+      const separator=line.indexOf(':');
+      if(separator<0)continue;
+      const candidate=line.slice(0,separator).trim().toUpperCase();
+      if(candidate!==suffix)continue;
+      const count=Number(line.slice(separator+1).trim())||0;
+      return{pwned:count>0,count};
+    }
+    return{pwned:false,count:0};
+  }
+
   async function secure(action,payload={}){
     const s=await refresh();
     if(!s?.access_token)throw new Error('You are signed out.');
@@ -141,5 +164,5 @@
     return data;
   }
 
-  window.nihilityApi={configured,getSession,saveSession,sendMagicLink,sendPasswordReset,signInWithPassword,setPassword,readSessionFromUrl,refresh,user,rest,rpc,upload,privateMediaUrl,deleteMedia,secure};
+  window.nihilityApi={configured,getSession,saveSession,sendMagicLink,sendPasswordReset,signInWithPassword,setPassword,checkPwnedPassword,readSessionFromUrl,refresh,user,rest,rpc,upload,privateMediaUrl,deleteMedia,secure};
 })();
