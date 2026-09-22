@@ -259,13 +259,70 @@ function imageDimensions(bytes:Uint8Array,type:string){
   }
   return null;
 }
+function gifFrameCount(bytes:Uint8Array,maxFrames=100){
+  if(bytes.length<13)return null;
+  const signature=String.fromCharCode(...bytes.slice(0,6));
+  if(signature!=="GIF87a"&&signature!=="GIF89a")return null;
+
+  let offset=13;
+  const globalPacked=bytes[10];
+  if(globalPacked&0x80){
+    offset+=3*(1<<((globalPacked&0x07)+1));
+    if(offset>bytes.length)return null;
+  }
+
+  const skipSubBlocks=()=>{
+    while(offset<bytes.length){
+      const size=bytes[offset++];
+      if(size===0)return true;
+      if(offset+size>bytes.length)return false;
+      offset+=size;
+    }
+    return false;
+  };
+
+  let frames=0;
+  while(offset<bytes.length){
+    const introducer=bytes[offset++];
+    if(introducer===0x3b)return frames;
+    if(introducer===0x21){
+      if(offset>=bytes.length)return null;
+      offset++; // extension label
+      if(!skipSubBlocks())return null;
+      continue;
+    }
+    if(introducer===0x2c){
+      if(offset+9>bytes.length)return null;
+      const packed=bytes[offset+8];
+      offset+=9;
+      if(packed&0x80){
+        offset+=3*(1<<((packed&0x07)+1));
+        if(offset>bytes.length)return null;
+      }
+      if(offset>=bytes.length)return null;
+      offset++; // LZW minimum code size
+      if(!skipSubBlocks())return null;
+      frames++;
+      if(frames>maxFrames)return frames;
+      continue;
+    }
+    return null;
+  }
+  return null;
+}
+
 function validateImageBytes(bytes:Uint8Array,type:string,kind:string){
   const cfg=BUCKETS[kind];
   if(!cfg)throw new ClientError("Invalid media kind");
   if(!MIME_EXT[type])throw new ClientError("Unsupported image type");
   if(bytes.length===0)throw new ClientError("Empty image response");
   if(bytes.length>cfg.max)throw new ClientError("Image exceeds the allowed size");
-  if(type==="image/gif"&&bytes.length>2*1024*1024)throw new ClientError("GIF images are limited to 2 MB");
+  if(type==="image/gif"){
+    if(bytes.length>2*1024*1024)throw new ClientError("GIF images are limited to 2 MB");
+    const frames=gifFrameCount(bytes,100);
+    if(frames==null)throw new ClientError("Unable to validate GIF structure");
+    if(frames>100)throw new ClientError("Animated GIFs are limited to 100 frames");
+  }
 
   const detected=detectedImageType(bytes);
   if(!detected||detected!==type)throw new ClientError("Image content does not match its declared type");
@@ -298,31 +355,75 @@ async function readRawBody(req:Request|Response,maxBytes:number){
   for(const chunk of chunks){bytes.set(chunk,off);off+=chunk.length}
   return bytes;
 }
-async function ensureMediaQuota(userId:string,additionalBytes:number){
-  const used=await admin("/rest/v1/rpc/nihility_media_usage_bytes",{
+async function reserveMediaQuota(userId:string,additionalBytes:number){
+  const reservationId=crypto.randomUUID();
+  const ok=await admin("/rest/v1/rpc/reserve_nihility_media_quota",{
     method:"POST",
-    body:JSON.stringify({p_user_id:userId})
+    body:JSON.stringify({
+      p_user_id:userId,
+      p_reservation_id:reservationId,
+      p_bytes:additionalBytes,
+      p_limit_bytes:MEDIA_QUOTA_BYTES
+    })
   });
-  const total=Number(used||0);
-  if(!Number.isFinite(total)||total+additionalBytes>MEDIA_QUOTA_BYTES){
+  if(ok!==true){
     throw new ClientError("Media storage quota exceeded. Remove unused media before uploading more.",413);
+  }
+  return reservationId;
+}
+async function releaseMediaReservation(userId:string,reservationId:string){
+  try{
+    await admin("/rest/v1/rpc/release_nihility_media_reservation",{
+      method:"POST",
+      body:JSON.stringify({p_user_id:userId,p_reservation_id:reservationId})
+    });
+  }catch(error){
+    console.warn("Unable to release media quota reservation",error);
+  }
+}
+async function finalizeMediaReservation(userId:string,reservationId:string,bucketId:string,path:string){
+  try{
+    await admin("/rest/v1/rpc/finalize_nihility_media_reservation",{
+      method:"POST",
+      body:JSON.stringify({
+        p_user_id:userId,
+        p_reservation_id:reservationId,
+        p_bucket_id:bucketId,
+        p_object_path:path
+      })
+    });
+  }catch(error){
+    // The unresolved reservation remains counted until it expires, which is
+    // intentionally conservative and avoids undercounting concurrent uploads.
+    console.warn("Unable to finalize media quota reservation",error);
   }
 }
 async function storeImageBytes(userId:string,kind:string,bytes:Uint8Array,type:string){
   const cfg=BUCKETS[kind];
   if(!cfg)throw new ClientError("Invalid media kind");
   validateImageBytes(bytes,type,kind);
-  await ensureMediaQuota(userId,bytes.length);
+
+  const reservationId=await reserveMediaQuota(userId,bytes.length);
   const path=userId+"/"+crypto.randomUUID()+"."+MIME_EXT[type];
-  const r=await fetch(SUPABASE_URL+"/storage/v1/object/"+encodeURIComponent(cfg.name)+"/"+path.split("/").map(encodeURIComponent).join("/"),{
-    method:"POST",
-    headers:{apikey:SERVICE_KEY,Authorization:"Bearer "+SERVICE_KEY,"Content-Type":type,"x-upsert":"false"},
-    body:bytes
-  });
-  if(!r.ok){
-    console.error("Storage upload failed",r.status,await r.text().catch(()=>""));
+  let response:Response;
+  try{
+    response=await fetch(SUPABASE_URL+"/storage/v1/object/"+encodeURIComponent(cfg.name)+"/"+path.split("/").map(encodeURIComponent).join("/"),{
+      method:"POST",
+      headers:{apikey:SERVICE_KEY,Authorization:"Bearer "+SERVICE_KEY,"Content-Type":type,"x-upsert":"false"},
+      body:bytes
+    });
+  }catch(error){
+    await releaseMediaReservation(userId,reservationId);
+    throw error;
+  }
+
+  if(!response.ok){
+    console.error("Storage upload failed",response.status,await response.text().catch(()=>""));
+    await releaseMediaReservation(userId,reservationId);
     throw new Error("Media storage failed");
   }
+
+  await finalizeMediaReservation(userId,reservationId,cfg.name,path);
   return path;
 }
 async function safeImage(url:string,kind:string){
