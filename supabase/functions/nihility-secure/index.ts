@@ -969,6 +969,7 @@ const ACTION_LIMITS:Record<string,{limit:number,window:number}> = {
   pk_import_fronts:{limit:120,window:60},
   import_media:{limit:30,window:60},
   upload_media:{limit:60,window:60},
+  password_range:{limit:12,window:60},
 };
 const AUDITED_ACTIONS=new Set([
   "pk_connect","pk_disconnect","pk_mirror_front","pk_import","pk_import_groups",
@@ -996,6 +997,31 @@ async function recordSecurityEvent(userId:string|null,eventType:string,success:b
   }catch(error){
     console.warn("Unable to record security event",eventType,error);
   }
+}
+
+async function actionPasswordRange(body:any){
+  const prefix=String(body.prefix||"").trim().toUpperCase();
+  if(!/^[A-F0-9]{5}$/.test(prefix))throw new ClientError("Invalid password hash prefix");
+
+  const response=await fetch("https://api.pwnedpasswords.com/range/"+prefix,{
+    method:"GET",
+    headers:{
+      "Accept":"text/plain",
+      "Add-Padding":"true",
+      "User-Agent":"Project-Nihility/1.0 (+https://projectnihilityofficial.top)"
+    },
+    signal:AbortSignal.timeout(8000),
+    cache:"no-store"
+  });
+
+  if(!response.ok){
+    console.warn("Pwned Passwords request failed",response.status);
+    throw new ClientError("Password safety service is temporarily unavailable. Please try again.",503);
+  }
+
+  const range=await response.text();
+  if(range.length>100000)throw new Error("Unexpected Pwned Passwords response size");
+  return {range};
 }
 
 async function readJsonBody(req:Request,maxBytes=65536){
@@ -1059,6 +1085,7 @@ Deno.serve(async(req)=>{
     else if(action==="pk_update_system")result=await actionUpdatePkSystem(user,body);
     else if(action==="pk_import_fronts")result=await actionImportPkFronts(user,body);
     else if(action==="import_media")result=await actionImportMedia(user,body);
+    else if(action==="password_range")result=await actionPasswordRange(body);
     else throw new ClientError("Unknown action",400);
 
     if(AUDITED_ACTIONS.has(action)){
