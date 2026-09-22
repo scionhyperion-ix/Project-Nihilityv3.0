@@ -2,8 +2,23 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const ALLOWED_ORIGIN = "https://scionhyperion-ix.github.io";
+const ALLOWED_ORIGINS = new Set([
+  "https://scionhyperion-ix.github.io",
+  "https://projectnihilityofficial.top",
+  "https://www.projectnihilityofficial.top",
+]);
 const PK_BASE = "https://api.pluralkit.me/v2";
+
+// Server-side media fetching is intentionally restricted to image hosts we trust.
+// This closes the DNS-rebinding gap that exists when validating DNS and then
+// allowing fetch() to resolve an arbitrary attacker-controlled hostname again.
+const TRUSTED_MEDIA_HOSTS = new Set([
+  "i.pinimg.com",
+  "i.postimg.cc",
+  "cdn.discordapp.com",
+  "media.discordapp.net",
+  "i.imgur.com",
+]);
 const MIME_EXT: Record<string,string> = {
   "image/png":"png","image/jpeg":"jpg","image/webp":"webp","image/gif":"gif"
 };
@@ -14,7 +29,8 @@ const BUCKETS: Record<string,{name:string,max:number}> = {
 };
 
 function cors(origin:string|null){
-  const allowed = origin === ALLOWED_ORIGIN ? origin : ALLOWED_ORIGIN;
+  const fallback="https://scionhyperion-ix.github.io";
+  const allowed = origin && ALLOWED_ORIGINS.has(origin) ? origin : fallback;
   return {
     "Access-Control-Allow-Origin": allowed,
     "Access-Control-Allow-Headers": "authorization, apikey, content-type",
@@ -109,18 +125,51 @@ function literalIp(host:string){
   return h.includes(":");
 }
 async function validateHost(u:URL){
+  if(u.href.length>2048)throw new Error("Image URL is too long");
   if(u.protocol!=="https:")throw new Error("Only HTTPS image URLs are allowed");
   if(u.username||u.password)throw new Error("Credentials in image URLs are not allowed");
+  if(u.port&&u.port!=="443")throw new Error("Custom image URL ports are not allowed");
+
   const host=u.hostname.toLowerCase().replace(/\.$/,"").replace(/^\[|\]$/g,"");
-  if(host==="localhost"||host.endsWith(".localhost")||host.endsWith(".local")||host.endsWith(".internal"))throw new Error("Local network URLs are not allowed");
-  if(literalIp(host)){
-    if(host.includes(":")?privateIPv6(host):privateIPv4(host))throw new Error("Private or reserved IP image URLs are not allowed");
-  }else{
-    const a=await Deno.resolveDns(host,"A").catch(()=>[]);
-    const aaaa=await Deno.resolveDns(host,"AAAA").catch(()=>[]);
-    if(!a.length&&!aaaa.length)throw new Error("Image host could not be resolved");
-    if(a.some(privateIPv4)||aaaa.some(privateIPv6))throw new Error("Private or reserved image hosts are not allowed");
+  if(!TRUSTED_MEDIA_HOSTS.has(host)){
+    throw new Error("This image host is not approved for secure server-side import. Upload the image file instead.");
   }
+
+  if(host==="localhost"||host.endsWith(".localhost")||host.endsWith(".local")||host.endsWith(".internal")){
+    throw new Error("Local network URLs are not allowed");
+  }
+
+  if(literalIp(host)){
+    if(host.includes(":")?privateIPv6(host):privateIPv4(host)){
+      throw new Error("Private or reserved IP image URLs are not allowed");
+    }
+  }else{
+    const [a,aaaa]=await Promise.all([
+      Deno.resolveDns(host,"A").catch(()=>[]),
+      Deno.resolveDns(host,"AAAA").catch(()=>[]),
+    ]);
+    if(!a.length&&!aaaa.length)throw new Error("Image host could not be resolved");
+    if(a.some(privateIPv4)||aaaa.some(privateIPv6)){
+      throw new Error("Private or reserved image hosts are not allowed");
+    }
+  }
+}
+
+function detectedImageType(bytes:Uint8Array){
+  if(bytes.length>=8 &&
+     bytes[0]===0x89&&bytes[1]===0x50&&bytes[2]===0x4e&&bytes[3]===0x47&&
+     bytes[4]===0x0d&&bytes[5]===0x0a&&bytes[6]===0x1a&&bytes[7]===0x0a) return "image/png";
+  if(bytes.length>=3&&bytes[0]===0xff&&bytes[1]===0xd8&&bytes[2]===0xff) return "image/jpeg";
+  if(bytes.length>=6){
+    const sig=String.fromCharCode(...bytes.slice(0,6));
+    if(sig==="GIF87a"||sig==="GIF89a") return "image/gif";
+  }
+  if(bytes.length>=12){
+    const riff=String.fromCharCode(...bytes.slice(0,4));
+    const webp=String.fromCharCode(...bytes.slice(8,12));
+    if(riff==="RIFF"&&webp==="WEBP") return "image/webp";
+  }
+  return null;
 }
 async function safeImage(url:string,kind:string){
   const cfg=BUCKETS[kind]; if(!cfg)throw new Error("Invalid media kind");
@@ -143,7 +192,10 @@ async function safeImage(url:string,kind:string){
       const {done,value}=await reader.read(); if(done)break;
       if(value){total+=value.length;if(total>cfg.max){reader.cancel();throw new Error("Image exceeds the allowed size")}chunks.push(value)}
     }
+    if(total===0)throw new Error("Empty image response");
     const bytes=new Uint8Array(total);let off=0;for(const c of chunks){bytes.set(c,off);off+=c.length}
+    const detected=detectedImageType(bytes);
+    if(!detected||detected!==type)throw new Error("Image content does not match its declared type");
     return {bytes,type,ext:MIME_EXT[type]};
   }
   throw new Error("Too many image redirects");
@@ -161,7 +213,9 @@ async function storeImage(userId:string,kind:string,url:string){
 }
 
 async function actionConnect(user:any,body:any){
-  const token=String(body.token||"").trim(); if(!token)throw new Error("PluralKit token is required");
+  const token=String(body.token||"").trim();
+  if(!token)throw new Error("PluralKit token is required");
+  if(token.length>512)throw new Error("PluralKit token is invalid");
   const system=await pk(token,"/systems/@me");
   const enc=await encryptToken(token);
   await admin("/rest/v1/integration_secrets?on_conflict=user_id,provider",{
@@ -601,16 +655,38 @@ async function actionImportMedia(user:any,body:any){
   return {path};
 }
 
+async function readJsonBody(req:Request,maxBytes=65536){
+  const declared=Number(req.headers.get("content-length")||0);
+  if(Number.isFinite(declared)&&declared>maxBytes)throw new Error("Request body is too large");
+  const reader=req.body?.getReader();
+  if(!reader)return {};
+  const chunks:Uint8Array[]=[];let total=0;
+  while(true){
+    const {done,value}=await reader.read();
+    if(done)break;
+    if(value){
+      total+=value.length;
+      if(total>maxBytes){await reader.cancel();throw new Error("Request body is too large")}
+      chunks.push(value);
+    }
+  }
+  if(total===0)return {};
+  const bytes=new Uint8Array(total);let off=0;
+  for(const chunk of chunks){bytes.set(chunk,off);off+=chunk.length}
+  const text=new TextDecoder().decode(bytes);
+  try{return JSON.parse(text)}catch{throw new Error("Invalid JSON request body")}
+}
+
 Deno.serve(async(req)=>{
   const origin=req.headers.get("Origin");
   if(req.method==="OPTIONS")return new Response(null,{status:204,headers:cors(origin)});
-  if(origin && origin!==ALLOWED_ORIGIN)return json({error:"Origin not allowed"},403,origin);
+  if(origin && !ALLOWED_ORIGINS.has(origin))return json({error:"Origin not allowed"},403,origin);
   if(req.method!=="POST")return json({error:"Method not allowed"},405,origin);
   try{
     const user=await currentUser(req);
     const profile=await admin("/rest/v1/profiles?user_id=eq."+encodeURIComponent(user.id)+"&select=user_id&limit=1");
     if(!profile?.length)throw new Error("Nihility profile required");
-    const body=await req.json().catch(()=>({}));
+    const body=await readJsonBody(req);
     const action=String(body.action||"");
     let result;
     if(action==="pk_connect")result=await actionConnect(user,body);
