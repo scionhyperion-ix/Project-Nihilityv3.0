@@ -57,6 +57,20 @@
     saveSession(s);clearPkceFlow();return data.user||null;
   }
   async function setPassword(password){return raw('/auth/v1/user',{method:'PUT',body:{password}})}
+  async function signOut(scope='local'){
+    const session=getSession();
+    try{
+      if(session?.access_token){
+        await fetch(cfg.SUPABASE_URL+'/auth/v1/logout?scope='+encodeURIComponent(scope),{
+          method:'POST',
+          headers:{apikey:cfg.SUPABASE_ANON_KEY,Authorization:'Bearer '+session.access_token}
+        });
+      }
+    }finally{
+      clearPkceFlow();
+      saveSession(null);
+    }
+  }
   async function readSessionFromUrl(){
     const url=new URL(location.href);
     const legacy=new URLSearchParams(location.hash.replace(/^#/,''));
@@ -164,5 +178,5 @@
     return data;
   }
 
-  window.nihilityApi={configured,getSession,saveSession,sendMagicLink,sendPasswordReset,signInWithPassword,setPassword,checkPwnedPassword,readSessionFromUrl,refresh,user,rest,rpc,upload,privateMediaUrl,deleteMedia,secure};
+  window.nihilityApi={configured,getSession,saveSession,sendMagicLink,sendPasswordReset,signInWithPassword,setPassword,signOut,checkPwnedPassword,readSessionFromUrl,refresh,user,rest,rpc,upload,privateMediaUrl,deleteMedia,secure};
 })();
