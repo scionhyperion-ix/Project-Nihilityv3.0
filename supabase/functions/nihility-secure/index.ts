@@ -496,35 +496,77 @@ async function actionImportPkFronts(user:any,body:any){
   const before=body.before?String(body.before):null;
   const query="?limit="+limit+(before?"&before="+encodeURIComponent(before):"");
   const switches=await pk(token,"/systems/@me/switches"+query);
+  const validSwitches=(switches||[]).filter((sw:any)=>sw?.id&&sw?.timestamp);
+
+  const switchIds=validSwitches.map((sw:any)=>String(sw.id));
+  let existingIds=new Set<string>();
+  if(switchIds.length){
+    const filter="("+switchIds.map((id:string)=>id.replace(/[^A-Za-z0-9_-]/g,"")).join(",")+")";
+    const existing=await admin("/rest/v1/fronts?user_id=eq."+encodeURIComponent(user.id)+"&source=eq.pluralkit&external_id=in."+encodeURIComponent(filter)+"&select=external_id");
+    existingIds=new Set((existing||[]).map((f:any)=>String(f.external_id)));
+  }
+
+  const allPkMemberIds=[...new Set(validSwitches.flatMap((sw:any)=>
+    (Array.isArray(sw.members)?sw.members:[])
+      .map((m:any)=>typeof m==="string"?m:m?.id)
+      .filter(Boolean)
+      .map((id:any)=>String(id))
+  ))];
+
+  const localMemberMap=new Map<string,string>();
+  if(allPkMemberIds.length){
+    const filter="("+allPkMemberIds.map((id:string)=>id.replace(/[^A-Za-z0-9_-]/g,"")).join(",")+")";
+    const localMembers=await admin("/rest/v1/members?user_id=eq."+encodeURIComponent(user.id)+"&pk_id=in."+encodeURIComponent(filter)+"&select=id,pk_id");
+    for(const m of localMembers||[])if(m.pk_id&&m.id)localMemberMap.set(String(m.pk_id),String(m.id));
+  }
+
   let added=0,skipped=0,unresolved=0;
-  for(const sw of switches||[]){
-    if(!sw?.id||!sw?.timestamp)continue;
-    const existing=await admin("/rest/v1/fronts?user_id=eq."+encodeURIComponent(user.id)+"&source=eq.pluralkit&external_id=eq."+encodeURIComponent(sw.id)+"&select=id&limit=1");
-    if(existing?.length){skipped++;continue}
-    const memberIds=(Array.isArray(sw.members)?sw.members:[]).map((m:any)=>typeof m==="string"?m:m?.id).filter(Boolean);
-    const localMembers:any[]=[];
+  for(const sw of validSwitches){
+    if(existingIds.has(String(sw.id))){skipped++;continue}
+
+    const memberIds=(Array.isArray(sw.members)?sw.members:[])
+      .map((m:any)=>typeof m==="string"?m:m?.id)
+      .filter(Boolean)
+      .map((id:any)=>String(id));
+
+    const localMembers:string[]=[];
     for(const pkId of memberIds){
-      const rows=await admin("/rest/v1/members?user_id=eq."+encodeURIComponent(user.id)+"&pk_id=eq."+encodeURIComponent(pkId)+"&select=id&limit=1");
-      if(rows?.[0]?.id)localMembers.push(rows[0].id);else unresolved++;
+      const localId=localMemberMap.get(pkId);
+      if(localId)localMembers.push(localId);else unresolved++;
     }
+
     const newer=await admin("/rest/v1/fronts?user_id=eq."+encodeURIComponent(user.id)+"&started_at=gt."+encodeURIComponent(sw.timestamp)+"&order=started_at.asc&select=started_at&limit=1");
     const created=await admin("/rest/v1/fronts",{
       method:"POST",headers:{Prefer:"return=representation"},
       body:JSON.stringify({user_id:user.id,started_at:sw.timestamp,ended_at:newer?.[0]?.started_at||null,note:null,source:"pluralkit",external_id:sw.id})
     });
+
     const frontId=created?.[0]?.id;
     if(frontId){
       for(const memberId of localMembers){
-        await admin("/rest/v1/front_members",{method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify({user_id:user.id,front_id:frontId,member_id:memberId,joined_at:sw.timestamp,left_at:newer?.[0]?.started_at||null})});
+        await admin("/rest/v1/front_members",{
+          method:"POST",headers:{Prefer:"return=minimal"},
+          body:JSON.stringify({user_id:user.id,front_id:frontId,member_id:memberId,joined_at:sw.timestamp,left_at:newer?.[0]?.started_at||null})
+        });
       }
       const older=await admin("/rest/v1/fronts?user_id=eq."+encodeURIComponent(user.id)+"&started_at=lt."+encodeURIComponent(sw.timestamp)+"&ended_at=is.null&select=id&limit=20");
-      for(const f of older||[])await admin("/rest/v1/fronts?id=eq."+encodeURIComponent(f.id),{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({ended_at:sw.timestamp})});
+      for(const f of older||[])await admin("/rest/v1/fronts?id=eq."+encodeURIComponent(f.id),{
+        method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({ended_at:sw.timestamp})
+      });
       added++;
     }
   }
+
   const oldest=(switches||[]).length?switches[switches.length-1]?.timestamp:null;
-  return {processed:(switches||[]).length,added,skipped,unresolved,nextBefore:(switches||[]).length===limit?oldest:null};
+  return {
+    processed:(switches||[]).length,
+    added,
+    skipped,
+    unresolved,
+    nextBefore:(switches||[]).length===limit?oldest:null
+  };
 }
+
 async function actionImportMedia(user:any,body:any){
   const kind=String(body.kind||""); const url=String(body.url||"");
   const path=await storeImage(user.id,kind,url);
