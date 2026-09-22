@@ -729,10 +729,10 @@
     await coreImportPk();
     const msg=document.querySelector('#pkMessage');
     try{
-      msg.textContent='Importing PluralKit groups and memberships...';
+      msg.textContent='Comparing PluralKit groups and memberships...';
       const r=await nihilityApi.secure('pk_import_groups');
       const systemPart=r.systemName?(' System name imported as "'+r.systemName+'".'):'';
-      msg.textContent='Import complete. '+(r.added||0)+' groups added, '+(r.updated||0)+' linked groups refreshed, '+(r.membershipsAdded||0)+' memberships linked.'+systemPart+' Nihility now keeps these imported names locally.';
+      msg.textContent='Import complete. '+(r.added||0)+' new groups, '+(r.updated||0)+' changed groups updated, '+(r.unchanged||0)+' unchanged groups skipped, '+(r.membershipsAdded||0)+' missing memberships linked.'+systemPart+' Nihility keeps the local copies.';
       await loadData();
     }catch(error){msg.textContent='Member/front import completed, but group import failed: '+error.message}
   }
