@@ -107,8 +107,12 @@ function decodeJwtPayload(token:string){
   if(parts.length!==3)throw new ClientError("Invalid or expired session",401);
   const normalized=parts[1].replace(/-/g,"+").replace(/_/g,"/");
   const padded=normalized+"=".repeat((4-normalized.length%4)%4);
-  try{return JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(padded),c=>c.charCodeAt(0))))}
-  catch{throw new ClientError("Invalid or expired session",401)}
+  try{
+    const bin=atob(padded);
+    const bytes=new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+    return JSON.parse(new TextDecoder().decode(bytes));
+  }catch{throw new ClientError("Invalid or expired session",401)}
 }
 async function currentUser(req:Request){
   const auth=req.headers.get("Authorization")||"";
