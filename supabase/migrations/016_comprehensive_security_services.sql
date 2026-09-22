@@ -250,7 +250,7 @@ begin
   end if;
   return new;
 end
-$;
+$$;
 
 revoke all on function private.audit_nihility_row_change() from public, anon, authenticated;
 
