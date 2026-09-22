@@ -278,7 +278,7 @@ function validateImageBytes(bytes:Uint8Array,type:string,kind:string){
   }
   return {width,height};
 }
-async function readRawBody(req:Request,maxBytes:number){
+async function readRawBody(req:Request|Response,maxBytes:number){
   const declared=Number(req.headers.get("content-length")||0);
   if(Number.isFinite(declared)&&declared>maxBytes)throw new ClientError("Image exceeds the allowed size");
   const reader=req.body?.getReader();
@@ -341,7 +341,7 @@ async function safeImage(url:string,kind:string){
     if(!MIME_EXT[type])throw new ClientError("Unsupported image type");
     const declared=Number(r.headers.get("content-length")||0);
     if(declared>cfg.max)throw new ClientError("Image exceeds the allowed size");
-    const bytes=await readRawBody(new Request(current,{method:"POST",body:r.body,headers:r.headers}),cfg.max);
+    const bytes=await readRawBody(r,cfg.max);
     validateImageBytes(bytes,type,kind);
     return {bytes,type,ext:MIME_EXT[type]};
   }
