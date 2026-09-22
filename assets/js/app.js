@@ -437,7 +437,6 @@ async function importPk(){
       frontAdded+=result.added||0;frontSkipped+=result.skipped||0;unresolved+=result.unresolved||0;
       before=result.nextBefore||null;batches++;
       if(!result.processed||batches>=100)break;
-      if((result.added||0)===0&&(result.skipped||0)===result.processed)break;
     }while(before);
 
     await nihilityApi.rest('imports',{method:'POST',body:{user_id:state.user.id,source:'pluralkit',summary:{
