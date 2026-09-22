@@ -27,13 +27,21 @@ const BUCKETS: Record<string,{name:string,max:number}> = {
   banner:{name:"nihility-banners",max:5*1024*1024},
   profile:{name:"nihility-profile-avatars",max:2*1024*1024},
 };
+const MEDIA_QUOTA_BYTES = 1024*1024*1024; // 1 GiB per account.
+const MAX_IMAGE_DIMENSION = 8192;
+const MAX_IMAGE_PIXELS = 40_000_000;
+
+class ClientError extends Error {
+  status:number;
+  constructor(message:string,status=400){super(message);this.name="ClientError";this.status=status}
+}
 
 function cors(origin:string|null){
   const fallback="https://scionhyperion-ix.github.io";
   const allowed = origin && ALLOWED_ORIGINS.has(origin) ? origin : fallback;
   return {
     "Access-Control-Allow-Origin": allowed,
-    "Access-Control-Allow-Headers": "authorization, apikey, content-type",
+    "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-nihility-action, x-media-kind",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Vary": "Origin",
     "Content-Type": "application/json",
@@ -50,19 +58,33 @@ function unb64(s:string){
   const bin=atob(s); const out=new Uint8Array(bin.length);
   for(let i=0;i<bin.length;i++)out[i]=bin.charCodeAt(i); return out;
 }
-async function key(){
+let vaultKeyPromise:Promise<CryptoKey>|null=null;
+async function vaultKey(){
+  if(!vaultKeyPromise){
+    vaultKeyPromise=(async()=>{
+      const encoded=await admin("/rest/v1/rpc/get_nihility_encryption_key",{method:"POST",body:"{}"});
+      if(typeof encoded!=="string"||!encoded)throw new Error("Encryption key unavailable");
+      return crypto.subtle.importKey("raw",unb64(encoded),{name:"AES-GCM"},false,["encrypt","decrypt"]);
+    })();
+  }
+  return vaultKeyPromise;
+}
+async function legacyKey(){
   const material=new TextEncoder().encode("nihility-pk-token-v1\n"+SERVICE_KEY);
   const digest=await crypto.subtle.digest("SHA-256",material);
-  return crypto.subtle.importKey("raw",digest,{name:"AES-GCM"},false,["encrypt","decrypt"]);
+  return crypto.subtle.importKey("raw",digest,{name:"AES-GCM"},false,["decrypt"]);
 }
 async function encryptToken(token:string){
   const iv=crypto.getRandomValues(new Uint8Array(12));
-  const cipher=await crypto.subtle.encrypt({name:"AES-GCM",iv},await key(),new TextEncoder().encode(token));
+  const cipher=await crypto.subtle.encrypt({name:"AES-GCM",iv},await vaultKey(),new TextEncoder().encode(token));
   return {ciphertext:b64(new Uint8Array(cipher)),iv:b64(iv)};
 }
-async function decryptToken(ciphertext:string,iv:string){
-  const plain=await crypto.subtle.decrypt({name:"AES-GCM",iv:unb64(iv)},await key(),unb64(ciphertext));
+async function decryptWith(key:CryptoKey,ciphertext:string,iv:string){
+  const plain=await crypto.subtle.decrypt({name:"AES-GCM",iv:unb64(iv)},key,unb64(ciphertext));
   return new TextDecoder().decode(plain);
+}
+async function decryptToken(ciphertext:string,iv:string){
+  return decryptWith(await vaultKey(),ciphertext,iv);
 }
 async function admin(path:string,init:RequestInit={}){
   const headers=new Headers(init.headers||{});
@@ -72,20 +94,34 @@ async function admin(path:string,init:RequestInit={}){
   const r=await fetch(SUPABASE_URL+path,{...init,headers});
   const text=await r.text();
   let data:any=null; try{data=text?JSON.parse(text):null}catch{data=text}
-  if(!r.ok)throw new Error(data?.message||data?.error||r.statusText);
+  if(!r.ok){
+    console.error("Supabase admin request failed",r.status,path,typeof data==="string"?data.slice(0,500):data);
+    throw new Error("Database operation failed");
+  }
   return data;
 }
 async function currentUser(req:Request){
   const auth=req.headers.get("Authorization")||"";
-  if(!auth.startsWith("Bearer "))throw new Error("Authentication required");
+  if(!auth.startsWith("Bearer "))throw new ClientError("Authentication required",401);
   const r=await fetch(SUPABASE_URL+"/auth/v1/user",{headers:{apikey:SERVICE_KEY,Authorization:auth}});
-  if(!r.ok)throw new Error("Invalid or expired session");
+  if(!r.ok)throw new ClientError("Invalid or expired session",401);
   return await r.json();
 }
 async function getSecret(userId:string){
-  const rows=await admin("/rest/v1/integration_secrets?user_id=eq."+encodeURIComponent(userId)+"&provider=eq.pluralkit&select=ciphertext,iv&limit=1");
-  if(!rows?.[0])throw new Error("PluralKit is not connected");
-  return decryptToken(rows[0].ciphertext,rows[0].iv);
+  const rows=await admin("/rest/v1/integration_secrets?user_id=eq."+encodeURIComponent(userId)+"&provider=eq.pluralkit&select=ciphertext,iv,cipher_version&limit=1");
+  if(!rows?.[0])throw new ClientError("PluralKit is not connected",409);
+  const row=rows[0];
+  if(Number(row.cipher_version||1)>=2)return decryptToken(row.ciphertext,row.iv);
+
+  // One-time transparent migration from the old service-key-derived key.
+  const token=await decryptWith(await legacyKey(),row.ciphertext,row.iv);
+  const migrated=await encryptToken(token);
+  await admin("/rest/v1/integration_secrets?user_id=eq."+encodeURIComponent(userId)+"&provider=eq.pluralkit",{
+    method:"PATCH",
+    headers:{Prefer:"return=minimal"},
+    body:JSON.stringify({ciphertext:migrated.ciphertext,iv:migrated.iv,cipher_version:2,updated_at:new Date().toISOString()})
+  });
+  return token;
 }
 async function pk(token:string,path:string,init:RequestInit={}){
   const headers=new Headers(init.headers||{});
@@ -94,7 +130,12 @@ async function pk(token:string,path:string,init:RequestInit={}){
   const r=await fetch(PK_BASE+path,{...init,headers,signal:AbortSignal.timeout(15000)});
   const text=await r.text();
   let data:any=null; try{data=text?JSON.parse(text):null}catch{data=text}
-  if(!r.ok)throw new Error(data?.message||data?.error||("PluralKit error "+r.status));
+  if(!r.ok){
+    console.warn("PluralKit request failed",r.status,path);
+    if(r.status===401||r.status===403)throw new ClientError("PluralKit rejected the connection credentials.",401);
+    if(r.status===429)throw new ClientError("PluralKit rate limit reached. Please wait and try again.",429);
+    throw new ClientError("PluralKit request failed. Please try again.",502);
+  }
   return data;
 }
 
@@ -220,7 +261,7 @@ async function actionConnect(user:any,body:any){
   const enc=await encryptToken(token);
   await admin("/rest/v1/integration_secrets?on_conflict=user_id,provider",{
     method:"POST",headers:{Prefer:"resolution=merge-duplicates,return=minimal"},
-    body:JSON.stringify({user_id:user.id,provider:"pluralkit",ciphertext:enc.ciphertext,iv:enc.iv,cipher_version:1})
+    body:JSON.stringify({user_id:user.id,provider:"pluralkit",ciphertext:enc.ciphertext,iv:enc.iv,cipher_version:2})
   });
   await admin("/rest/v1/external_integrations?on_conflict=user_id,provider",{
     method:"POST",headers:{Prefer:"resolution=merge-duplicates,return=minimal"},
