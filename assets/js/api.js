@@ -177,6 +177,22 @@
     if(!r.ok)throw new Error(data?.error||data?.message||'Secure request failed.');
     return data;
   }
+  async function secureFile(action,file,{mode=null,previewHash=null}={}){
+    const s=await refresh();
+    if(!s?.access_token)throw new Error('You are signed out.');
+    const headers={
+      apikey:cfg.SUPABASE_ANON_KEY,
+      Authorization:'Bearer '+s.access_token,
+      'Content-Type':'application/json',
+      'x-nihility-action':action
+    };
+    if(mode)headers['x-backup-mode']=mode;
+    if(previewHash)headers['x-backup-preview-hash']=previewHash;
+    const r=await fetch(cfg.SUPABASE_URL+'/functions/v1/nihility-secure',{method:'POST',headers,body:file});
+    const data=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(data?.error||data?.message||'Secure file request failed.');
+    return data;
+  }
 
-  window.nihilityApi={configured,getSession,saveSession,sendMagicLink,sendPasswordReset,signInWithPassword,setPassword,signOut,checkPwnedPassword,readSessionFromUrl,refresh,user,rest,rpc,upload,privateMediaUrl,deleteMedia,secure};
+  window.nihilityApi={configured,getSession,saveSession,sendMagicLink,sendPasswordReset,signInWithPassword,setPassword,signOut,checkPwnedPassword,readSessionFromUrl,refresh,user,rest,rpc,upload,privateMediaUrl,deleteMedia,secure,secureFile};
 })();
