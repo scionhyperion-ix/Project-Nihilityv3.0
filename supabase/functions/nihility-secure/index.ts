@@ -633,7 +633,7 @@ async function actionImportPk(user:any,body:any){
         pronouns:m.pronouns||null,color:m.color||null,description:m.description||null,birthday:m.birthday||null,
         avatar_url:null,avatar_source:avatarPath?"supabase":null,avatar_storage_path:avatarPath,
         banner_url:null,banner_source:bannerPath?"supabase":null,banner_storage_path:bannerPath,
-        pk_id:m.id,metadata:{pk_uuid:m.uuid||null,proxy_tags:Array.isArray(m.proxy_tags)?m.proxy_tags:[],keep_proxy:Boolean(m.keep_proxy)},archived_at:null
+        pk_id:m.id,metadata:{pk_uuid:m.uuid||null,pk_avatar_url:avatar,pk_banner_url:banner,proxy_tags:Array.isArray(m.proxy_tags)?m.proxy_tags:[],keep_proxy:Boolean(m.keep_proxy)},archived_at:null
       })
     });
     added++;
@@ -731,12 +731,19 @@ async function actionImportPkGroups(user:any){
 
   const settingsRows=await admin("/rest/v1/app_settings?user_id=eq."+encodeURIComponent(user.id)+"&select=settings&limit=1");
   const existingSettings=settingsRows?.[0]?.settings||{};
-  let systemAvatarPath=existingSettings?.system_profile?.avatar_storage_path||null;
-  let systemBannerPath=existingSettings?.system_profile?.banner_storage_path||null;
+  const oldSystem=existingSettings?.system_profile||{};
   const systemAvatarUrl=pkSystem?.avatar_url||null;
   const systemBannerUrl=pkSystem?.banner||pkSystem?.banner_url||null;
-  if(!systemAvatarPath&&systemAvatarUrl){try{systemAvatarPath=await storeImage(user.id,"avatar",systemAvatarUrl)}catch{}}
-  if(!systemBannerPath&&systemBannerUrl){try{systemBannerPath=await storeImage(user.id,"banner",systemBannerUrl)}catch{}}
+  let systemAvatarPath=oldSystem.avatar_storage_path||null;
+  let systemBannerPath=oldSystem.banner_storage_path||null;
+  if((oldSystem.avatar_url||null)!==systemAvatarUrl){
+    systemAvatarPath=null;
+    if(systemAvatarUrl){try{systemAvatarPath=await storeImage(user.id,"avatar",systemAvatarUrl)}catch{}}
+  }
+  if((oldSystem.banner||oldSystem.banner_url||null)!==systemBannerUrl){
+    systemBannerPath=null;
+    if(systemBannerUrl){try{systemBannerPath=await storeImage(user.id,"banner",systemBannerUrl)}catch{}}
+  }
   const importedSystem={
     id:pkSystem?.id||null,
     uuid:pkSystem?.uuid||null,
@@ -758,8 +765,8 @@ async function actionImportPkGroups(user:any){
     body:JSON.stringify({user_id:user.id,settings:mergedSettings})
   });
 
-  const localMembers=await admin("/rest/v1/members?user_id=eq."+encodeURIComponent(user.id)+"&select=id,pk_id,metadata");
-  const localGroups=await admin("/rest/v1/groups?user_id=eq."+encodeURIComponent(user.id)+"&select=id,name,display_name,description,color,pk_id,metadata");
+  const localMembers=await admin("/rest/v1/members?user_id=eq."+encodeURIComponent(user.id)+"&select=id,name,display_name,pronouns,color,description,birthday,avatar_storage_path,banner_storage_path,pk_id,metadata,archived_at");
+  const localGroups=await admin("/rest/v1/groups?user_id=eq."+encodeURIComponent(user.id)+"&select=id,name,display_name,description,color,icon_storage_path,pk_id,metadata");
   const existingLinks=await admin("/rest/v1/member_groups?user_id=eq."+encodeURIComponent(user.id)+"&select=member_id,group_id");
 
   const memberMap=new Map<string,string>();
@@ -768,21 +775,85 @@ async function actionImportPkGroups(user:any){
     if(row.metadata?.pk_uuid)memberMap.set(String(row.metadata.pk_uuid),row.id);
   }
 
-  let metadataUpdated=0;
-  const localByPk=new Map<string,any>((localMembers||[]).filter((m:any)=>m.pk_id).map((m:any)=>[String(m.pk_id),m]));
+  const localByPk=new Map<string,any>();
+  for(const row of localMembers||[]){
+    if(row.pk_id)localByPk.set(String(row.pk_id),row);
+    if(row.metadata?.pk_uuid)localByPk.set(String(row.metadata.pk_uuid),row);
+  }
+
+  let membersUpdated=0,membersUnchanged=0,memberMediaCopied=0;
   for(const pm of pkMembers||[]){
-    const local=localByPk.get(String(pm.id));
+    const local=localByPk.get(String(pm.id))||(pm.uuid?localByPk.get(String(pm.uuid)):null);
     if(!local)continue;
-    const metadata={...(local.metadata||{})};
-    let changed=false;
-    if(metadata.pk_uuid==null&&pm.uuid){metadata.pk_uuid=pm.uuid;changed=true}
-    if(metadata.proxy_tags==null&&Array.isArray(pm.proxy_tags)){metadata.proxy_tags=pm.proxy_tags;changed=true}
-    if(metadata.keep_proxy==null&&typeof pm.keep_proxy==="boolean"){metadata.keep_proxy=pm.keep_proxy;changed=true}
+
+    const oldMetadata=local.metadata||{};
+    const avatarUrl=pm.avatar_url||null;
+    const bannerUrl=pm.banner||pm.banner_url||null;
+    let avatarPath=local.avatar_storage_path||null;
+    let bannerPath=local.banner_storage_path||null;
+
+    if((oldMetadata.pk_avatar_url||null)!==avatarUrl){
+      avatarPath=null;
+      if(avatarUrl){
+        try{avatarPath=await storeImage(user.id,"avatar",avatarUrl);memberMediaCopied++}catch{}
+      }
+    }
+    if((oldMetadata.pk_banner_url||null)!==bannerUrl){
+      bannerPath=null;
+      if(bannerUrl){
+        try{bannerPath=await storeImage(user.id,"banner",bannerUrl);memberMediaCopied++}catch{}
+      }
+    }
+
+    const next={
+      name:pm.name||pm.display_name||pm.id,
+      display_name:pm.display_name||null,
+      pronouns:pm.pronouns||null,
+      color:pm.color||null,
+      description:pm.description||null,
+      birthday:pm.birthday||null,
+      avatar_url:null,
+      avatar_source:avatarPath?"supabase":null,
+      avatar_storage_path:avatarPath,
+      banner_url:null,
+      banner_source:bannerPath?"supabase":null,
+      banner_storage_path:bannerPath,
+      archived_at:null,
+      metadata:{
+        ...oldMetadata,
+        pk_uuid:pm.uuid||oldMetadata.pk_uuid||null,
+        pk_avatar_url:avatarUrl,
+        pk_banner_url:bannerUrl,
+        proxy_tags:Array.isArray(pm.proxy_tags)?pm.proxy_tags:[],
+        keep_proxy:Boolean(pm.keep_proxy)
+      }
+    };
+
+    const changed=
+      local.name!==next.name||
+      (local.display_name||null)!==next.display_name||
+      (local.pronouns||null)!==next.pronouns||
+      (local.color||null)!==next.color||
+      (local.description||null)!==next.description||
+      (local.birthday||null)!==next.birthday||
+      (local.avatar_storage_path||null)!==(next.avatar_storage_path||null)||
+      (local.banner_storage_path||null)!==(next.banner_storage_path||null)||
+      local.archived_at!=null||
+      JSON.stringify(oldMetadata)!==JSON.stringify(next.metadata);
+
     if(changed){
       await admin("/rest/v1/members?id=eq."+encodeURIComponent(local.id),{
-        method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({metadata})
+        method:"PATCH",
+        headers:{Prefer:"return=minimal"},
+        body:JSON.stringify(next)
       });
-      metadataUpdated++;
+      local.name=next.name;local.display_name=next.display_name;local.pronouns=next.pronouns;
+      local.color=next.color;local.description=next.description;local.birthday=next.birthday;
+      local.avatar_storage_path=next.avatar_storage_path;local.banner_storage_path=next.banner_storage_path;
+      local.metadata=next.metadata;local.archived_at=null;
+      membersUpdated++;
+    }else{
+      membersUnchanged++;
     }
   }
 
@@ -793,16 +864,25 @@ async function actionImportPkGroups(user:any){
   }
 
   const linkSet=new Set((existingLinks||[]).map((x:any)=>String(x.member_id)+":"+String(x.group_id)));
-  let added=0,updated=0,unchanged=0,membershipsAdded=0,unresolved=0;
+  let added=0,updated=0,unchanged=0,membershipsAdded=0,membershipsRemoved=0,unresolved=0,groupMediaCopied=0;
 
   for(const g of pkGroups||[]){
     let local=groupByPk.get(String(g.id))||(g.uuid?groupByPk.get(String(g.uuid)):null);
-    let iconPath=local?.metadata?.icon_storage_path||null;
-    let bannerPath=local?.metadata?.banner_storage_path||null;
+    const oldMetadata=local?.metadata||{};
     const iconUrl=g.icon||g.icon_url||null;
     const bannerUrl=g.banner||g.banner_url||null;
-    if(!iconPath&&iconUrl){try{iconPath=await storeImage(user.id,"avatar",iconUrl)}catch{}}
-    if(!bannerPath&&bannerUrl){try{bannerPath=await storeImage(user.id,"banner",bannerUrl)}catch{}}
+    let iconPath=oldMetadata.icon_storage_path||null;
+    let bannerPath=oldMetadata.banner_storage_path||null;
+
+    if((oldMetadata.pk_icon_url||null)!==iconUrl){
+      iconPath=null;
+      if(iconUrl){try{iconPath=await storeImage(user.id,"avatar",iconUrl);groupMediaCopied++}catch{}}
+    }
+    if((oldMetadata.pk_banner_url||null)!==bannerUrl){
+      bannerPath=null;
+      if(bannerUrl){try{bannerPath=await storeImage(user.id,"banner",bannerUrl);groupMediaCopied++}catch{}}
+    }
+
     if(!local){
       const created=await admin("/rest/v1/groups",{
         method:"POST",headers:{Prefer:"return=representation"},
@@ -814,6 +894,7 @@ async function actionImportPkGroups(user:any){
           color:g.color||null,
           icon_url:null,
           icon_source:null,
+          icon_storage_path:iconPath,
           pk_id:g.id,
           metadata:{pk_uuid:g.uuid||null,pk_icon_url:iconUrl,pk_banner_url:bannerUrl,icon_storage_path:iconPath,banner_storage_path:bannerPath}
         })
@@ -830,24 +911,20 @@ async function actionImportPkGroups(user:any){
       const nextDescription=g.description||null;
       const nextColor=g.color||null;
       const metadata={
-        ...(local.metadata||{}),
-        pk_uuid:g.uuid||local.metadata?.pk_uuid||null,
-        pk_icon_url:iconUrl||local.metadata?.pk_icon_url||null,
-        pk_banner_url:bannerUrl||local.metadata?.pk_banner_url||null,
-        icon_storage_path:iconPath||local.metadata?.icon_storage_path||null,
-        banner_storage_path:bannerPath||local.metadata?.banner_storage_path||null
+        ...oldMetadata,
+        pk_uuid:g.uuid||oldMetadata.pk_uuid||null,
+        pk_icon_url:iconUrl,
+        pk_banner_url:bannerUrl,
+        icon_storage_path:iconPath,
+        banner_storage_path:bannerPath
       };
-      const oldMetadata=local.metadata||{};
       const changed=
         local.name!==nextName||
         (local.display_name||null)!==nextDisplayName||
         (local.description||null)!==nextDescription||
         (local.color||null)!==nextColor||
-        (oldMetadata.pk_uuid||null)!==(metadata.pk_uuid||null)||
-        (oldMetadata.pk_icon_url||null)!==(metadata.pk_icon_url||null)||
-        (oldMetadata.pk_banner_url||null)!==(metadata.pk_banner_url||null)||
-        (oldMetadata.icon_storage_path||null)!==(metadata.icon_storage_path||null)||
-        (oldMetadata.banner_storage_path||null)!==(metadata.banner_storage_path||null);
+        (local.icon_storage_path||null)!==(iconPath||null)||
+        JSON.stringify(oldMetadata)!==JSON.stringify(metadata);
 
       if(changed){
         await admin("/rest/v1/groups?id=eq."+encodeURIComponent(local.id),{
@@ -858,10 +935,13 @@ async function actionImportPkGroups(user:any){
             display_name:nextDisplayName,
             description:nextDescription,
             color:nextColor,
+            icon_url:null,
+            icon_source:null,
+            icon_storage_path:iconPath,
             metadata
           })
         });
-        local={...local,name:nextName,display_name:nextDisplayName,description:nextDescription,color:nextColor,metadata};
+        local={...local,name:nextName,display_name:nextDisplayName,description:nextDescription,color:nextColor,icon_storage_path:iconPath,metadata};
         updated++;
       }else{
         unchanged++;
@@ -869,11 +949,13 @@ async function actionImportPkGroups(user:any){
     }
     if(!local?.id)continue;
 
+    const desiredMemberIds=new Set<string>();
     const refs=Array.isArray(g.members)?g.members:[];
     for(const ref of refs){
       const key=typeof ref==="string"?ref:(ref?.id||ref?.uuid||"");
       const memberId=memberMap.get(String(key));
       if(!memberId){unresolved++;continue}
+      desiredMemberIds.add(String(memberId));
       const linkKey=String(memberId)+":"+String(local.id);
       if(linkSet.has(linkKey))continue;
       await admin("/rest/v1/member_groups",{
@@ -883,16 +965,32 @@ async function actionImportPkGroups(user:any){
       linkSet.add(linkKey);
       membershipsAdded++;
     }
+
+    const currentForGroup=(existingLinks||[]).filter((x:any)=>String(x.group_id)===String(local.id));
+    for(const link of currentForGroup){
+      if(desiredMemberIds.has(String(link.member_id)))continue;
+      await admin("/rest/v1/member_groups?user_id=eq."+encodeURIComponent(user.id)+"&member_id=eq."+encodeURIComponent(link.member_id)+"&group_id=eq."+encodeURIComponent(local.id),{
+        method:"DELETE",
+        headers:{Prefer:"return=minimal"}
+      });
+      linkSet.delete(String(link.member_id)+":"+String(local.id));
+      membershipsRemoved++;
+    }
   }
 
   return {
-    total:(pkGroups||[]).length,
+    memberTotal:(pkMembers||[]).length,
+    membersUpdated,
+    membersUnchanged,
+    memberMediaCopied,
+    groupTotal:(pkGroups||[]).length,
     added,
     updated,
     unchanged,
     membershipsAdded,
+    membershipsRemoved,
     unresolved,
-    metadataUpdated,
+    groupMediaCopied,
     systemName:importedSystem.name||importedSystem.display_name||null,
     systemId:importedSystem.id||null
   };
