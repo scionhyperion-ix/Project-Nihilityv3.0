@@ -1897,7 +1897,10 @@ async function actionBackupRestore(user:any,body:any){
   if(String(body?.confirmation||"")!=="RESTORE")throw new ClientError("Type RESTORE to confirm this replacement.",400);
   const validated=await validateBackup(body?.backup);
   const mediaPaths=(body?.mediaPaths&&typeof body.mediaPaths==="object"&&!Array.isArray(body.mediaPaths))?body.mediaPaths:{};
-  const manifest=new Map<string,string>((Array.isArray(body.backup?.media)?body.backup.media:[]).map((x:any)=>[String(x.key||""),String(x.kind||"")]));
+  const manifest=new Map<string,string>();
+  for(const item of (Array.isArray(body.backup?.media)?body.backup.media:[])){
+    manifest.set(String(item?.key||""),String(item?.kind||""));
+  }
   const keep=new Set<string>();
   for(const [key,rawPath] of Object.entries(mediaPaths)){
     const kind=manifest.get(key);
@@ -1926,10 +1929,8 @@ async function actionBackupRestore(user:any,body:any){
   };
 }
 
-async function readLimitedBytes(req:Request,maxBytes:number){
-  const declared=Number(req.headers.get("content-length")||0);
-  if(Number.isFinite(declared)&&declared>maxBytes)throw new ClientError("Backup request is too large",413);
-  const reader=req.body?.getReader();
+async function readLimitedStream(stream:ReadableStream<Uint8Array>|null,maxBytes:number){
+  const reader=stream?.getReader();
   if(!reader)return new Uint8Array();
   const chunks:Uint8Array[]=[];let total=0;
   while(true){
@@ -1945,6 +1946,11 @@ async function readLimitedBytes(req:Request,maxBytes:number){
   for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length}
   return bytes;
 }
+async function readLimitedBytes(req:Request,maxBytes:number){
+  const declared=Number(req.headers.get("content-length")||0);
+  if(Number.isFinite(declared)&&declared>maxBytes)throw new ClientError("Backup request is too large",413);
+  return readLimitedStream(req.body,maxBytes);
+}
 async function readBackupRequest(req:Request){
   const type=(req.headers.get("content-type")||"").split(";")[0].trim().toLowerCase();
   let bytes:Uint8Array;
@@ -1956,7 +1962,7 @@ async function readBackupRequest(req:Request){
     }catch{
       throw new ClientError("Unable to decompress backup request");
     }
-    bytes=await readLimitedBytes(new Request("https://local.invalid",{method:"POST",body:stream as any,duplex:"half" as any}),BACKUP_MAX_JSON_BYTES);
+    bytes=await readLimitedStream(stream,BACKUP_MAX_JSON_BYTES);
   }else if(type==="application/json"){
     bytes=await readLimitedBytes(req,BACKUP_MAX_JSON_BYTES);
   }else{
