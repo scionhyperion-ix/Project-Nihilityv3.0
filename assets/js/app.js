@@ -3,6 +3,7 @@
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const state={user:null,profile:null,members:[],fronts:[],frontMembers:[],integration:null,pkConnected:false,pkImported:false,route:'home'};
 let frontMutationVersion=0;
+let pendingPkSyncComparison=null;
 
 const THEME_KEY='nihility_appearance_theme';
 const THEMES=[
@@ -505,9 +506,100 @@ async function disconnectPk(){
     renderSettings();renderHome();
   }catch(error){message.textContent=error.message}
 }
+function pkSyncItemNames(bucket){
+  const items=Array.isArray(bucket?.items)?bucket.items:[];
+  if(!items.length)return'None';
+  const names=items.map(item=>item.name||item.pkId||item.localId||'Unknown');
+  const suffix=(bucket.count||0)>items.length?' +'+((bucket.count||0)-items.length)+' more':'';
+  return names.join(', ')+suffix;
+}
+function addPkSyncPreviewSection(container,title,rows){
+  const section=document.createElement('section');section.className='pk-sync-preview-section';
+  const heading=document.createElement('h4');heading.textContent=title;section.append(heading);
+  rows.forEach(([labelText,bucket])=>{
+    const row=document.createElement('div');row.className='pk-sync-preview-row';
+    const copy=document.createElement('div');
+    const strong=document.createElement('strong');strong.textContent=labelText;
+    const small=document.createElement('small');small.textContent=pkSyncItemNames(bucket);
+    copy.append(strong,small);
+    const count=document.createElement('span');count.className='soft-pill';count.textContent=String(bucket?.count||0);
+    row.append(copy,count);section.append(row);
+  });
+  container.append(section);
+}
+function renderPkSyncPreview(comparison){
+  const box=$('#pkSyncPreview');box.replaceChildren();
+  addPkSyncPreviewSection(box,'Members',[
+    ['PluralKit has, Nihility lacks',comparison.members.missingInNihility],
+    ['Nihility has, PluralKit lacks',comparison.members.missingInPk],
+    ['Changes coming from PluralKit',comparison.members.toNihility],
+    ['Changes going to PluralKit',comparison.members.toPk],
+    ['Conflicts needing a choice',comparison.members.conflicts]
+  ]);
+  addPkSyncPreviewSection(box,'Groups',[
+    ['PluralKit has, Nihility lacks',comparison.groups.missingInNihility],
+    ['Nihility has, PluralKit lacks',comparison.groups.missingInPk],
+    ['Changes coming from PluralKit',comparison.groups.toNihility],
+    ['Changes going to PluralKit',comparison.groups.toPk],
+    ['Conflicts needing a choice',comparison.groups.conflicts]
+  ]);
+  addPkSyncPreviewSection(box,'Group memberships',[
+    ['Changes coming from PluralKit',comparison.memberships.toNihility],
+    ['Changes going to PluralKit',comparison.memberships.toPk],
+    ['Conflicts needing a choice',comparison.memberships.conflicts]
+  ]);
+  $('#pkSyncMediaNote').textContent=comparison.mediaNote||'';
+}
+async function openPkSyncPreview(){
+  const message=$('#pkMessage'),button=$('#importPkButton');
+  if(button){button.disabled=true;button.textContent='Checking...'}
+  message.textContent='Checking both Nihility and PluralKit before syncing...';
+  try{
+    const comparison=await nihilityApi.secure('pk_sync_compare');
+    pendingPkSyncComparison=comparison;
+    renderPkSyncPreview(comparison);
+    $('#pkSyncDialog').showModal();
+    message.textContent='Review what differs on each side before applying the sync.';
+  }catch(error){message.textContent=error.message}
+  finally{if(button){button.disabled=false;button.textContent='Sync PK'}}
+}
+async function applyPkSync(){
+  if(!pendingPkSyncComparison)return;
+  const button=$('#applyPkSyncButton'),message=$('#pkSyncMessage');
+  const policy=$('input[name="pkSyncConflictPolicy"]:checked')?.value||'skip';
+  if(button){button.disabled=true;button.textContent='Syncing...'}
+  message.textContent='Rechecking both sides and applying safe changes...';
+  try{
+    const result=await nihilityApi.secure('pk_sync_apply',{conflictPolicy:policy});
+    const remaining=(result.comparison?.members?.conflicts?.count||0)+(result.comparison?.groups?.conflicts?.count||0)+(result.comparison?.memberships?.conflicts?.count||0);
+    await nihilityApi.rest('imports',{method:'POST',body:{user_id:state.user.id,source:'pluralkit',summary:{
+      two_way_sync:true,
+      members_created_in_nihility:result.members?.createdInNihility||0,
+      members_created_in_pk:result.members?.createdInPk||0,
+      member_fields_to_nihility:result.members?.toNihility||0,
+      member_fields_to_pk:result.members?.toPk||0,
+      groups_created_in_nihility:result.groups?.createdInNihility||0,
+      groups_created_in_pk:result.groups?.createdInPk||0,
+      group_fields_to_nihility:result.groups?.toNihility||0,
+      group_fields_to_pk:result.groups?.toPk||0,
+      memberships_to_nihility:result.memberships?.toNihility||0,
+      memberships_to_pk:result.memberships?.toPk||0,
+      conflicts_skipped:result.conflictsSkipped||0,
+      blocked:Array.isArray(result.blocked)?result.blocked.length:0
+    }},prefer:'return=minimal'});
+    pendingPkSyncComparison=null;
+    $('#pkSyncDialog').close();
+    await loadData();
+    const blocked=Array.isArray(result.blocked)?result.blocked.length:0;
+    $('#pkMessage').textContent='Sync complete.'+(remaining?' '+remaining+' conflict'+(remaining===1?'':'s')+' remain unresolved.':'')+(blocked?' '+blocked+' change'+(blocked===1?' was':'s were')+' blocked by PluralKit limits.':'');
+    toast('PK sync complete',remaining?'Some conflicts were left for review.':'Both sides were reconciled.');
+  }catch(error){message.textContent=error.message}
+  finally{if(button){button.disabled=false;button.textContent='Apply sync'}}
+}
 async function importPk(){
   const message=$('#pkMessage'),button=$('#importPkButton'),wasImported=state.pkImported;
-  if(button){button.disabled=true;button.textContent=wasImported?'Syncing...':'Importing...'}
+  if(wasImported)return openPkSyncPreview();
+  if(button){button.disabled=true;button.textContent='Importing...'}
   message.textContent='Comparing PluralKit with Nihility...';
   try{
     const comparison=await nihilityApi.secure('pk_compare');
@@ -677,6 +769,7 @@ $('#openFrontManager').onclick=()=>openFront('replace');$('#chooseAnyMemberButto
 $('#createMemberButton').onclick=()=>openMember();$('#memberSearch').oninput=renderMembers;$('#memberForm').onsubmit=saveMember;$('#deleteMemberButton').onclick=deleteMember;$('#closeMemberDialog').onclick=$('#cancelMemberButton').onclick=()=>$('#memberDialog').close();$('#memberColorPicker').oninput=e=>$('#memberColor').value=e.target.value.toUpperCase();$('#memberColor').oninput=e=>{const c=hex(e.target.value);if(c)$('#memberColorPicker').value=c};
 $('#frontForm').onsubmit=saveFront;$('#closeFrontDialog').onclick=$('#cancelFrontButton').onclick=()=>$('#frontDialog').close();$('#frontMemberSearch').oninput=()=>buildFrontPicker($$('#frontMemberPicker input:checked').map(i=>i.value));$('#customFrontTimeEnabled').onchange=e=>$('#customFrontTimeRow').hidden=!e.target.checked;
 $('#connectPkButton').onclick=connectPk;$('#disconnectPkButton').onclick=disconnectPk;$('#importPkButton').onclick=importPk;
+$('#closePkSyncDialog').onclick=$('#cancelPkSyncButton').onclick=()=>$('#pkSyncDialog').close();$('#applyPkSyncButton').onclick=applyPkSync;
 document.querySelectorAll('input[name="themeMode"]').forEach(i=>i.onchange=()=>applyTheme(i.value));
 $('#profileForm').onsubmit=saveProfile;
 $('#profileBannerUrl').addEventListener('input',()=>{

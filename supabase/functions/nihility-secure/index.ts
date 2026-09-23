@@ -576,6 +576,429 @@ async function actionMirror(user:any,body:any){
   await pk(token,"/systems/@me/switches",{method:"POST",body:JSON.stringify(payload)});
   return {shared:true};
 }
+
+const MEMBER_SYNC_FIELDS=["name","display_name","pronouns","color","description","birthday","proxy_tags","keep_proxy"];
+const GROUP_SYNC_FIELDS=["name","display_name","description","color"];
+
+function syncText(value:any){
+  if(value===undefined||value===null)return null;
+  const text=String(value);
+  return text===""?null:text;
+}
+function syncColor(value:any){
+  const text=String(value||"").replace(/^#/,"").toLowerCase();
+  return text||null;
+}
+function syncProxyTags(value:any){
+  if(!Array.isArray(value))return [];
+  return value.map((tag:any)=>({
+    prefix:tag?.prefix==null?null:String(tag.prefix),
+    suffix:tag?.suffix==null?null:String(tag.suffix)
+  }));
+}
+function canonicalPkMember(m:any){
+  return {
+    name:String(m?.name||m?.display_name||m?.id||""),
+    display_name:syncText(m?.display_name),
+    pronouns:syncText(m?.pronouns),
+    color:syncColor(m?.color),
+    description:syncText(m?.description),
+    birthday:syncText(m?.birthday),
+    proxy_tags:syncProxyTags(m?.proxy_tags),
+    keep_proxy:Boolean(m?.keep_proxy)
+  };
+}
+function canonicalLocalMember(m:any){
+  return {
+    name:String(m?.name||m?.display_name||m?.id||""),
+    display_name:syncText(m?.display_name),
+    pronouns:syncText(m?.pronouns),
+    color:syncColor(m?.color),
+    description:syncText(m?.description),
+    birthday:syncText(m?.birthday),
+    proxy_tags:syncProxyTags(m?.metadata?.proxy_tags),
+    keep_proxy:Boolean(m?.metadata?.keep_proxy)
+  };
+}
+function canonicalPkGroup(g:any){
+  return {
+    name:String(g?.name||g?.display_name||g?.id||""),
+    display_name:syncText(g?.display_name),
+    description:syncText(g?.description),
+    color:syncColor(g?.color)
+  };
+}
+function canonicalLocalGroup(g:any){
+  return {
+    name:String(g?.name||g?.display_name||g?.id||""),
+    display_name:syncText(g?.display_name),
+    description:syncText(g?.description),
+    color:syncColor(g?.color)
+  };
+}
+function syncEqual(a:any,b:any){return JSON.stringify(a)===JSON.stringify(b)}
+function analyzeSyncFields(local:any,remote:any,baseline:any,fields:string[]){
+  const pull:string[]=[],push:string[]=[],conflicts:string[]=[],same:string[]=[];
+  for(const field of fields){
+    const lv=local[field],rv=remote[field];
+    if(syncEqual(lv,rv)){same.push(field);continue}
+    const hasBaseline=baseline&&Object.prototype.hasOwnProperty.call(baseline,field);
+    if(hasBaseline){
+      const bv=baseline[field];
+      if(syncEqual(lv,bv)&&!syncEqual(rv,bv)){pull.push(field);continue}
+      if(syncEqual(rv,bv)&&!syncEqual(lv,bv)){push.push(field);continue}
+    }
+    conflicts.push(field);
+  }
+  return {pull,push,conflicts,same};
+}
+function labelSyncItem(item:any){return item?.display_name||item?.name||item?.id||"Unnamed"}
+function trimSyncItems(items:any[],limit=20){return items.slice(0,limit)}
+function memberPkPayload(fields:any){
+  const payload:any={};
+  for(const key of MEMBER_SYNC_FIELDS)if(Object.prototype.hasOwnProperty.call(fields,key))payload[key]=fields[key];
+  return payload;
+}
+function groupPkPayload(fields:any){
+  const payload:any={};
+  for(const key of GROUP_SYNC_FIELDS)if(Object.prototype.hasOwnProperty.call(fields,key))payload[key]=fields[key];
+  return payload;
+}
+function validatePkMemberPayload(payload:any){
+  if(payload.name&&String(payload.name).length>100)return "Member name exceeds PluralKit's 100-character limit";
+  if(payload.display_name&&String(payload.display_name).length>100)return "Member display name exceeds PluralKit's 100-character limit";
+  if(payload.pronouns&&String(payload.pronouns).length>100)return "Member pronouns exceed PluralKit's 100-character limit";
+  if(payload.description&&String(payload.description).length>1000)return "Member description exceeds PluralKit's 1000-character limit";
+  return null;
+}
+function validatePkGroupPayload(payload:any){
+  if(payload.name&&String(payload.name).length>100)return "Group name exceeds PluralKit's 100-character limit";
+  if(payload.display_name&&String(payload.display_name).length>100)return "Group display name exceeds PluralKit's 100-character limit";
+  if(payload.description&&String(payload.description).length>1000)return "Group description exceeds PluralKit's 1000-character limit";
+  return null;
+}
+async function loadPkTwoWayState(user:any,token:string){
+  const [pkMembers,pkGroups,localMembers,localGroups,links]=await Promise.all([
+    pk(token,"/systems/@me/members"),
+    pk(token,"/systems/@me/groups?with_members=true"),
+    admin("/rest/v1/members?user_id=eq."+encodeURIComponent(user.id)+"&archived_at=is.null&select=id,name,display_name,pronouns,color,description,birthday,avatar_storage_path,banner_storage_path,pk_id,metadata,updated_at"),
+    admin("/rest/v1/groups?user_id=eq."+encodeURIComponent(user.id)+"&select=id,name,display_name,description,color,icon_storage_path,pk_id,metadata,updated_at"),
+    admin("/rest/v1/member_groups?user_id=eq."+encodeURIComponent(user.id)+"&select=member_id,group_id")
+  ]);
+
+  const localMemberByRemote=new Map<string,any>();
+  for(const m of localMembers||[]){
+    if(m.pk_id)localMemberByRemote.set(String(m.pk_id),m);
+    if(m.metadata?.pk_uuid)localMemberByRemote.set(String(m.metadata.pk_uuid),m);
+  }
+  const pkMemberByKey=new Map<string,any>();
+  for(const m of pkMembers||[]){
+    if(m.id)pkMemberByKey.set(String(m.id),m);
+    if(m.uuid)pkMemberByKey.set(String(m.uuid),m);
+  }
+  const localGroupByRemote=new Map<string,any>();
+  for(const g of localGroups||[]){
+    if(g.pk_id)localGroupByRemote.set(String(g.pk_id),g);
+    if(g.metadata?.pk_uuid)localGroupByRemote.set(String(g.metadata.pk_uuid),g);
+  }
+  const pkGroupByKey=new Map<string,any>();
+  for(const g of pkGroups||[]){
+    if(g.id)pkGroupByKey.set(String(g.id),g);
+    if(g.uuid)pkGroupByKey.set(String(g.uuid),g);
+  }
+
+  return {pkMembers:pkMembers||[],pkGroups:pkGroups||[],localMembers:localMembers||[],localGroups:localGroups||[],links:links||[],localMemberByRemote,pkMemberByKey,localGroupByRemote,pkGroupByKey};
+}
+function findPkForLocal(local:any,map:Map<string,any>){
+  return (local?.pk_id&&map.get(String(local.pk_id)))||(local?.metadata?.pk_uuid&&map.get(String(local.metadata.pk_uuid)))||null;
+}
+function findLocalForPk(remote:any,map:Map<string,any>){
+  return (remote?.id&&map.get(String(remote.id)))||(remote?.uuid&&map.get(String(remote.uuid)))||null;
+}
+function remoteGroupMemberLocalIds(group:any,state:any){
+  const ids:string[]=[];
+  for(const ref of Array.isArray(group?.members)?group.members:[]){
+    const key=typeof ref==="string"?ref:(ref?.id||ref?.uuid||"");
+    const local=findLocalForPk({id:key,uuid:key},state.localMemberByRemote);
+    if(local?.id)ids.push(String(local.id));
+  }
+  return [...new Set(ids)].sort();
+}
+function localGroupMemberIds(group:any,state:any){
+  return [...new Set((state.links||[]).filter((x:any)=>String(x.group_id)===String(group.id)).map((x:any)=>String(x.member_id)))].sort();
+}
+function analyzeMembership(localIds:string[],remoteIds:string[],baseline:any){
+  if(syncEqual(localIds,remoteIds))return "same";
+  if(Array.isArray(baseline)){
+    if(syncEqual(localIds,baseline)&&!syncEqual(remoteIds,baseline))return "pull";
+    if(syncEqual(remoteIds,baseline)&&!syncEqual(localIds,baseline))return "push";
+  }
+  return "conflict";
+}
+async function buildPkSyncComparison(user:any,token:string){
+  const state=await loadPkTwoWayState(user,token);
+  const missingInNihilityMembers=state.pkMembers.filter((m:any)=>!findLocalForPk(m,state.localMemberByRemote));
+  const missingInPkMembers=state.localMembers.filter((m:any)=>!findPkForLocal(m,state.pkMemberByKey));
+  const missingInNihilityGroups=state.pkGroups.filter((g:any)=>!findLocalForPk(g,state.localGroupByRemote));
+  const missingInPkGroups=state.localGroups.filter((g:any)=>!findPkForLocal(g,state.pkGroupByKey));
+
+  const memberPull:any[]=[],memberPush:any[]=[],memberConflicts:any[]=[];
+  for(const local of state.localMembers){
+    const remote=findPkForLocal(local,state.pkMemberByKey);if(!remote)continue;
+    const analysis=analyzeSyncFields(canonicalLocalMember(local),canonicalPkMember(remote),local.metadata?.pk_sync_v1?.fields,MEMBER_SYNC_FIELDS);
+    const item={localId:local.id,pkId:remote.id,name:labelSyncItem(local),fields:[] as string[]};
+    if(analysis.pull.length){memberPull.push({...item,fields:analysis.pull})}
+    if(analysis.push.length){memberPush.push({...item,fields:analysis.push})}
+    if(analysis.conflicts.length){memberConflicts.push({...item,fields:analysis.conflicts})}
+  }
+
+  const groupPull:any[]=[],groupPush:any[]=[],groupConflicts:any[]=[];
+  const membershipPull:any[]=[],membershipPush:any[]=[],membershipConflicts:any[]=[];
+  for(const local of state.localGroups){
+    const remote=findPkForLocal(local,state.pkGroupByKey);if(!remote)continue;
+    const analysis=analyzeSyncFields(canonicalLocalGroup(local),canonicalPkGroup(remote),local.metadata?.pk_sync_v1?.fields,GROUP_SYNC_FIELDS);
+    const item={localId:local.id,pkId:remote.id,name:labelSyncItem(local),fields:[] as string[]};
+    if(analysis.pull.length)groupPull.push({...item,fields:analysis.pull});
+    if(analysis.push.length)groupPush.push({...item,fields:analysis.push});
+    if(analysis.conflicts.length)groupConflicts.push({...item,fields:analysis.conflicts});
+
+    const localIds=localGroupMemberIds(local,state);
+    const remoteIds=remoteGroupMemberLocalIds(remote,state);
+    const membership=analyzeMembership(localIds,remoteIds,local.metadata?.pk_sync_v1?.member_ids);
+    if(membership==="pull")membershipPull.push(item);
+    else if(membership==="push")membershipPush.push(item);
+    else if(membership==="conflict")membershipConflicts.push(item);
+  }
+
+  return {
+    counts:{
+      pkMembers:state.pkMembers.length,
+      nihilityMembers:state.localMembers.length,
+      pkGroups:state.pkGroups.length,
+      nihilityGroups:state.localGroups.length
+    },
+    members:{
+      missingInNihility:{count:missingInNihilityMembers.length,items:trimSyncItems(missingInNihilityMembers.map((m:any)=>({pkId:m.id,name:labelSyncItem(m)})))},
+      missingInPk:{count:missingInPkMembers.length,items:trimSyncItems(missingInPkMembers.map((m:any)=>({localId:m.id,name:labelSyncItem(m)})))},
+      toNihility:{count:memberPull.length,items:trimSyncItems(memberPull)},
+      toPk:{count:memberPush.length,items:trimSyncItems(memberPush)},
+      conflicts:{count:memberConflicts.length,items:trimSyncItems(memberConflicts)}
+    },
+    groups:{
+      missingInNihility:{count:missingInNihilityGroups.length,items:trimSyncItems(missingInNihilityGroups.map((g:any)=>({pkId:g.id,name:labelSyncItem(g)})))},
+      missingInPk:{count:missingInPkGroups.length,items:trimSyncItems(missingInPkGroups.map((g:any)=>({localId:g.id,name:labelSyncItem(g)})))},
+      toNihility:{count:groupPull.length,items:trimSyncItems(groupPull)},
+      toPk:{count:groupPush.length,items:trimSyncItems(groupPush)},
+      conflicts:{count:groupConflicts.length,items:trimSyncItems(groupConflicts)}
+    },
+    memberships:{
+      toNihility:{count:membershipPull.length,items:trimSyncItems(membershipPull)},
+      toPk:{count:membershipPush.length,items:trimSyncItems(membershipPush)},
+      conflicts:{count:membershipConflicts.length,items:trimSyncItems(membershipConflicts)}
+    },
+    mediaNote:"Two-way sync covers member/group details and group memberships. Private image files are left unchanged because PluralKit requires publicly accessible image URLs."
+  };
+}
+async function actionPkSyncCompare(user:any){
+  const token=await getSecret(user.id);
+  return buildPkSyncComparison(user,token);
+}
+async function importPkMemberForSync(user:any,pm:any){
+  let avatarPath=null,bannerPath=null;
+  const avatar=pm.avatar_url||null,banner=pm.banner||pm.banner_url||null;
+  if(avatar){try{avatarPath=await storeImage(user.id,"avatar",avatar)}catch{}}
+  if(banner){try{bannerPath=await storeImage(user.id,"banner",banner)}catch{}}
+  const fields=canonicalPkMember(pm);
+  const rows=await admin("/rest/v1/members",{
+    method:"POST",headers:{Prefer:"return=representation"},
+    body:JSON.stringify({
+      user_id:user.id,...fields,
+      proxy_tags:undefined,keep_proxy:undefined,
+      avatar_url:null,avatar_source:avatarPath?"supabase":null,avatar_storage_path:avatarPath,
+      banner_url:null,banner_source:bannerPath?"supabase":null,banner_storage_path:bannerPath,
+      pk_id:pm.id,metadata:{pk_uuid:pm.uuid||null,pk_avatar_url:avatar,pk_banner_url:banner,proxy_tags:fields.proxy_tags,keep_proxy:fields.keep_proxy,pk_sync_v1:{fields}},archived_at:null
+    })
+  });
+  return rows?.[0]||null;
+}
+async function importPkGroupForSync(user:any,pg:any){
+  let iconPath=null,bannerPath=null;
+  const icon=pg.icon||pg.icon_url||null,banner=pg.banner||pg.banner_url||null;
+  if(icon){try{iconPath=await storeImage(user.id,"avatar",icon)}catch{}}
+  if(banner){try{bannerPath=await storeImage(user.id,"banner",banner)}catch{}}
+  const fields=canonicalPkGroup(pg);
+  const rows=await admin("/rest/v1/groups",{
+    method:"POST",headers:{Prefer:"return=representation"},
+    body:JSON.stringify({
+      user_id:user.id,...fields,
+      icon_url:null,icon_source:null,icon_storage_path:iconPath,pk_id:pg.id,
+      metadata:{pk_uuid:pg.uuid||null,pk_icon_url:icon,pk_banner_url:banner,icon_storage_path:iconPath,banner_storage_path:bannerPath,pk_sync_v1:{fields,origin:"pk"}}
+    })
+  });
+  return rows?.[0]||null;
+}
+async function createPkMemberFromLocal(user:any,token:string,local:any){
+  const fields=canonicalLocalMember(local),payload=memberPkPayload(fields);
+  const blocked=validatePkMemberPayload(payload);if(blocked)return {blocked};
+  const created=await pk(token,"/members",{method:"POST",body:JSON.stringify(payload)});
+  const metadata={...(local.metadata||{}),pk_uuid:created?.uuid||null,pk_sync_v1:{fields:canonicalPkMember(created)}};
+  await admin("/rest/v1/members?id=eq."+encodeURIComponent(local.id),{
+    method:"PATCH",headers:{Prefer:"return=minimal"},
+    body:JSON.stringify({pk_id:created.id,metadata})
+  });
+  return {created};
+}
+async function createPkGroupFromLocal(user:any,token:string,local:any){
+  const fields=canonicalLocalGroup(local),payload=groupPkPayload(fields);
+  const blocked=validatePkGroupPayload(payload);if(blocked)return {blocked};
+  const created=await pk(token,"/groups",{method:"POST",body:JSON.stringify(payload)});
+  const metadata={...(local.metadata||{}),pk_uuid:created?.uuid||null,pk_sync_v1:{fields:canonicalPkGroup(created),origin:"nihility"}};
+  await admin("/rest/v1/groups?id=eq."+encodeURIComponent(local.id),{
+    method:"PATCH",headers:{Prefer:"return=minimal"},
+    body:JSON.stringify({pk_id:created.id,metadata})
+  });
+  return {created};
+}
+async function actionPkSyncApply(user:any,body:any){
+  const token=await getSecret(user.id);
+  const conflictPolicy=["skip","nihility","pk"].includes(String(body?.conflictPolicy))?String(body.conflictPolicy):"skip";
+  let state=await loadPkTwoWayState(user,token);
+  const result:any={members:{toNihility:0,toPk:0,createdInNihility:0,createdInPk:0},groups:{toNihility:0,toPk:0,createdInNihility:0,createdInPk:0},memberships:{toNihility:0,toPk:0},conflictsSkipped:0,blocked:[] as string[]};
+
+  for(const remote of state.pkMembers){
+    if(findLocalForPk(remote,state.localMemberByRemote))continue;
+    await importPkMemberForSync(user,remote);result.members.createdInNihility++;
+  }
+  for(const local of state.localMembers){
+    if(findPkForLocal(local,state.pkMemberByKey))continue;
+    const made=await createPkMemberFromLocal(user,token,local);
+    if(made.blocked)result.blocked.push(labelSyncItem(local)+": "+made.blocked);
+    else result.members.createdInPk++;
+  }
+
+  state=await loadPkTwoWayState(user,token);
+  for(const remote of state.pkGroups){
+    if(findLocalForPk(remote,state.localGroupByRemote))continue;
+    await importPkGroupForSync(user,remote);result.groups.createdInNihility++;
+  }
+  for(const local of state.localGroups){
+    if(findPkForLocal(local,state.pkGroupByKey))continue;
+    const made=await createPkGroupFromLocal(user,token,local);
+    if(made.blocked)result.blocked.push(labelSyncItem(local)+": "+made.blocked);
+    else result.groups.createdInPk++;
+  }
+
+  state=await loadPkTwoWayState(user,token);
+  for(const local of state.localMembers){
+    const remote=findPkForLocal(local,state.pkMemberByKey);if(!remote)continue;
+    const localFields=canonicalLocalMember(local),remoteFields=canonicalPkMember(remote),baseline=local.metadata?.pk_sync_v1?.fields||{};
+    const analysis=analyzeSyncFields(localFields,remoteFields,baseline,MEMBER_SYNC_FIELDS);
+    const localPatch:any={},remotePatch:any={},nextBaseline:any={...baseline};
+    const metadata:any={...(local.metadata||{})};
+    let localChanged=false,remoteChanged=false;
+    for(const field of MEMBER_SYNC_FIELDS){
+      let mode="same";
+      if(analysis.pull.includes(field))mode="pull";
+      else if(analysis.push.includes(field))mode="push";
+      else if(analysis.conflicts.includes(field))mode=conflictPolicy==="pk"?"pull":conflictPolicy==="nihility"?"push":"conflict";
+      if(mode==="conflict"){result.conflictsSkipped++;continue}
+      const value=mode==="pull"?remoteFields[field]:localFields[field];
+      if(mode==="pull"){
+        if(field==="proxy_tags"||field==="keep_proxy"){metadata[field]=value}
+        else localPatch[field]=value;
+        localChanged=true;result.members.toNihility++;
+      }else if(mode==="push"){
+        remotePatch[field]=value;remoteChanged=true;result.members.toPk++;
+      }
+      nextBaseline[field]=value;
+    }
+    if(Object.keys(remotePatch).length){
+      const blocked=validatePkMemberPayload(remotePatch);
+      if(blocked){
+        result.blocked.push(labelSyncItem(local)+": "+blocked);
+        for(const field of Object.keys(remotePatch))delete nextBaseline[field];
+        remoteChanged=false;
+      }else await pk(token,"/members/"+encodeURIComponent(remote.id),{method:"PATCH",body:JSON.stringify(remotePatch)});
+    }
+    metadata.pk_sync_v1={...(metadata.pk_sync_v1||{}),fields:nextBaseline};
+    if(localChanged||remoteChanged||!syncEqual(local.metadata?.pk_sync_v1?.fields,nextBaseline)){
+      localPatch.metadata=metadata;
+      await admin("/rest/v1/members?id=eq."+encodeURIComponent(local.id),{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify(localPatch)});
+    }
+  }
+
+  state=await loadPkTwoWayState(user,token);
+  for(const local of state.localGroups){
+    const remote=findPkForLocal(local,state.pkGroupByKey);if(!remote)continue;
+    const localFields=canonicalLocalGroup(local),remoteFields=canonicalPkGroup(remote),baseline=local.metadata?.pk_sync_v1?.fields||{};
+    const analysis=analyzeSyncFields(localFields,remoteFields,baseline,GROUP_SYNC_FIELDS);
+    const localPatch:any={},remotePatch:any={},nextBaseline:any={...baseline};
+    const metadata:any={...(local.metadata||{})};
+    let localChanged=false,remoteChanged=false;
+    for(const field of GROUP_SYNC_FIELDS){
+      let mode="same";
+      if(analysis.pull.includes(field))mode="pull";
+      else if(analysis.push.includes(field))mode="push";
+      else if(analysis.conflicts.includes(field))mode=conflictPolicy==="pk"?"pull":conflictPolicy==="nihility"?"push":"conflict";
+      if(mode==="conflict"){result.conflictsSkipped++;continue}
+      const value=mode==="pull"?remoteFields[field]:localFields[field];
+      if(mode==="pull"){localPatch[field]=value;localChanged=true;result.groups.toNihility++}
+      else if(mode==="push"){remotePatch[field]=value;remoteChanged=true;result.groups.toPk++}
+      nextBaseline[field]=value;
+    }
+    if(Object.keys(remotePatch).length){
+      const blocked=validatePkGroupPayload(remotePatch);
+      if(blocked){
+        result.blocked.push(labelSyncItem(local)+": "+blocked);
+        for(const field of Object.keys(remotePatch))delete nextBaseline[field];
+        remoteChanged=false;
+      }else await pk(token,"/groups/"+encodeURIComponent(remote.id),{method:"PATCH",body:JSON.stringify(remotePatch)});
+    }
+    metadata.pk_sync_v1={...(metadata.pk_sync_v1||{}),fields:nextBaseline};
+    if(localChanged||remoteChanged||!syncEqual(local.metadata?.pk_sync_v1?.fields,nextBaseline)){
+      localPatch.metadata=metadata;
+      await admin("/rest/v1/groups?id=eq."+encodeURIComponent(local.id),{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify(localPatch)});
+    }
+  }
+
+  state=await loadPkTwoWayState(user,token);
+  const memberByLocalId=new Map<string,any>((state.localMembers||[]).map((m:any)=>[String(m.id),m]));
+  for(const local of state.localGroups){
+    const remote=findPkForLocal(local,state.pkGroupByKey);if(!remote)continue;
+    const localIds=localGroupMemberIds(local,state);
+    const remoteIds=remoteGroupMemberLocalIds(remote,state);
+    const baseline=local.metadata?.pk_sync_v1?.member_ids;
+    let direction=analyzeMembership(localIds,remoteIds,baseline);
+    const origin=local.metadata?.pk_sync_v1?.origin;
+    if(direction==="conflict"&&!Array.isArray(baseline)&&origin==="pk")direction="pull";
+    else if(direction==="conflict"&&!Array.isArray(baseline)&&origin==="nihility")direction="push";
+    else if(direction==="conflict")direction=conflictPolicy==="pk"?"pull":conflictPolicy==="nihility"?"push":"conflict";
+    let finalIds=localIds;
+    if(direction==="pull"){
+      const wanted=new Set(remoteIds);
+      for(const link of (state.links||[]).filter((x:any)=>String(x.group_id)===String(local.id))){
+        if(!wanted.has(String(link.member_id)))await admin("/rest/v1/member_groups?user_id=eq."+encodeURIComponent(user.id)+"&member_id=eq."+encodeURIComponent(link.member_id)+"&group_id=eq."+encodeURIComponent(local.id),{method:"DELETE",headers:{Prefer:"return=minimal"}});
+      }
+      const current=new Set(localIds);
+      for(const memberId of remoteIds)if(!current.has(memberId))await admin("/rest/v1/member_groups",{method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify({user_id:user.id,member_id:memberId,group_id:local.id})});
+      finalIds=remoteIds;result.memberships.toNihility++;
+    }else if(direction==="push"){
+      const refs=localIds.map(id=>memberByLocalId.get(id)?.pk_id).filter(Boolean);
+      await pk(token,"/groups/"+encodeURIComponent(remote.id)+"/members/overwrite",{method:"POST",body:JSON.stringify(refs)});
+      finalIds=localIds;result.memberships.toPk++;
+    }else if(direction==="conflict"){
+      result.conflictsSkipped++;continue;
+    }else finalIds=localIds;
+
+    const nextSync={...(local.metadata?.pk_sync_v1||{}),member_ids:finalIds};delete nextSync.origin;
+    const metadata={...(local.metadata||{}),pk_sync_v1:nextSync};
+    await admin("/rest/v1/groups?id=eq."+encodeURIComponent(local.id),{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({metadata})});
+  }
+
+  result.comparison=await buildPkSyncComparison(user,token);
+  return result;
+}
+
 async function actionComparePk(user:any){
   const token=await getSecret(user.id);
   const [pkMembers,localMembers]=await Promise.all([
@@ -1086,6 +1509,8 @@ const ACTION_LIMITS:Record<string,{limit:number,window:number}> = {
   pk_compare:{limit:30,window:60},
   pk_import:{limit:120,window:60},
   pk_import_groups:{limit:10,window:60},
+  pk_sync_compare:{limit:30,window:60},
+  pk_sync_apply:{limit:10,window:60},
   pk_get_system:{limit:60,window:60},
   pk_update_system:{limit:20,window:60},
   pk_import_fronts:{limit:120,window:60},
@@ -1094,7 +1519,7 @@ const ACTION_LIMITS:Record<string,{limit:number,window:number}> = {
   password_range:{limit:12,window:60},
 };
 const AUDITED_ACTIONS=new Set([
-  "pk_connect","pk_disconnect","pk_mirror_front","pk_import","pk_import_groups",
+  "pk_connect","pk_disconnect","pk_mirror_front","pk_import","pk_import_groups","pk_sync_apply",
   "pk_update_system","pk_import_fronts","import_media","upload_media"
 ]);
 async function consumeRateLimit(userId:string,action:string){
@@ -1205,6 +1630,8 @@ Deno.serve(async(req)=>{
     else if(action==="pk_compare")result=await actionComparePk(user);
     else if(action==="pk_import")result=await actionImportPk(user,body);
     else if(action==="pk_import_groups")result=await actionImportPkGroups(user);
+    else if(action==="pk_sync_compare")result=await actionPkSyncCompare(user);
+    else if(action==="pk_sync_apply")result=await actionPkSyncApply(user,body);
     else if(action==="pk_get_system")result=await actionGetPkSystem(user);
     else if(action==="pk_update_system")result=await actionUpdatePkSystem(user,body);
     else if(action==="pk_import_fronts")result=await actionImportPkFronts(user,body);
