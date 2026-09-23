@@ -838,9 +838,9 @@ async function applyBackupRestore(){
     await loadData();renderAll();
     const counts=result?.result||{};
     message.textContent='Restore complete. '+[
-      counts.members_inserted||0+' members',
-      counts.groups_inserted||0+' groups',
-      counts.fronts_inserted||0+' fronts'
+      (counts.members_inserted||0)+' members',
+      (counts.groups_inserted||0)+' groups',
+      (counts.fronts_inserted||0)+' fronts'
     ].join(', ')+'.';
     $('#restoreBackupFile').value='';clearBackupPreview();
     toast('Backup restored',mode==='replace'?'Current Nihility data was replaced safely.':'Missing backup records were merged.');
