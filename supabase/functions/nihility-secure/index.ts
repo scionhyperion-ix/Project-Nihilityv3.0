@@ -38,7 +38,7 @@ class ClientError extends Error {
 
 function cors(origin:string|null){
   const headers:Record<string,string>={
-    "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-nihility-action, x-media-kind",
+    "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-nihility-action, x-media-kind, x-backup-mode, x-backup-preview-hash",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Vary": "Origin",
     "Content-Type": "application/json",
@@ -102,6 +102,214 @@ async function admin(path:string,init:RequestInit={}){
   }
   return data;
 }
+async function adminAll(path:string,pageSize=1000){
+  const out:any[]=[];
+  for(let start=0;;start+=pageSize){
+    const headers=new Headers();
+    headers.set("apikey",SERVICE_KEY);
+    headers.set("Authorization","Bearer "+SERVICE_KEY);
+    headers.set("Range",start+"-"+(start+pageSize-1));
+    const r=await fetch(SUPABASE_URL+path,{headers});
+    const text=await r.text();
+    let data:any=null;
+    try{data=text?JSON.parse(text):[]}catch{data=[]}
+    if(!r.ok){
+      console.error("Supabase paged admin request failed",r.status,path);
+      throw new Error("Database operation failed");
+    }
+    if(!Array.isArray(data))throw new Error("Unexpected database response");
+    out.push(...data);
+    if(data.length<pageSize)break;
+    if(out.length>500000)throw new ClientError("Backup exceeds supported row limits",413);
+  }
+  return out;
+}
+
+const BACKUP_MAX_BYTES=25*1024*1024;
+const UUID_RE=/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
+function ownedStoragePath(userId:string,value:any){
+  const path=typeof value==="string"?value:"";
+  return path&&path.startsWith(userId+"/")&&path.length<=512?path:null;
+}
+function sanitizeBackupForUser(userId:string,input:any){
+  if(!input||typeof input!=="object"||Array.isArray(input))throw new ClientError("Invalid Nihility backup",400);
+  if(input.format!=="project-nihility-backup"||Number(input.version)!==1)throw new ClientError("Unsupported Nihility backup",400);
+  const data=input.data;
+  if(!data||typeof data!=="object"||Array.isArray(data))throw new ClientError("Backup data is missing",400);
+
+  const limits:any={members:10000,groups:5000,member_groups:100000,fronts:200000,front_members:500000,imports:50000};
+  const arrays:any={};
+  for(const key of Object.keys(limits)){
+    if(!Array.isArray(data[key]))throw new ClientError("Backup "+key+" data is malformed",400);
+    if(data[key].length>limits[key])throw new ClientError("Backup exceeds Nihility account limits",413);
+    arrays[key]=data[key].map((row:any)=>{
+      if(!row||typeof row!=="object"||Array.isArray(row))throw new ClientError("Backup contains malformed rows",400);
+      return {...row};
+    });
+  }
+
+  const requireUniqueIds=(rows:any[],label:string)=>{
+    const ids=new Set<string>();
+    for(const row of rows){
+      const id=String(row.id||"");
+      if(!UUID_RE.test(id))throw new ClientError("Backup contains an invalid "+label+" identifier",400);
+      if(ids.has(id))throw new ClientError("Backup contains duplicate "+label+" identifiers",400);
+      ids.add(id);
+    }
+    return ids;
+  };
+  const memberIds=requireUniqueIds(arrays.members,"member");
+  const groupIds=requireUniqueIds(arrays.groups,"group");
+  const frontIds=requireUniqueIds(arrays.fronts,"front");
+  requireUniqueIds(arrays.imports,"import");
+
+  const memberGroupKeys=new Set<string>();
+  for(const row of arrays.member_groups){
+    const memberId=String(row.member_id||""),groupId=String(row.group_id||"");
+    if(!memberIds.has(memberId)||!groupIds.has(groupId))throw new ClientError("Backup contains a broken member-group link",400);
+    const key=memberId+":"+groupId;
+    if(memberGroupKeys.has(key))throw new ClientError("Backup contains duplicate member-group links",400);
+    memberGroupKeys.add(key);
+  }
+  const frontMemberKeys=new Set<string>();
+  for(const row of arrays.front_members){
+    const frontId=String(row.front_id||""),memberId=String(row.member_id||"");
+    if(!frontIds.has(frontId)||!memberIds.has(memberId))throw new ClientError("Backup contains a broken front-member link",400);
+    const joined=String(row.joined_at||"");
+    if(!joined||!Number.isFinite(Date.parse(joined)))throw new ClientError("Backup contains an invalid front-member timestamp",400);
+    const key=frontId+":"+memberId+":"+joined;
+    if(frontMemberKeys.has(key))throw new ClientError("Backup contains duplicate front-member links",400);
+    frontMemberKeys.add(key);
+  }
+
+  for(const row of arrays.members){
+    if(typeof row.name!=="string"||!row.name.trim()||row.name.length>200)throw new ClientError("Backup contains an invalid member name",400);
+    row.avatar_storage_path=ownedStoragePath(userId,row.avatar_storage_path);
+    row.banner_storage_path=ownedStoragePath(userId,row.banner_storage_path);
+    delete row.user_id;delete row.avatar_url;delete row.banner_url;delete row.avatar_source;delete row.banner_source;
+  }
+  for(const row of arrays.groups){
+    if(typeof row.name!=="string"||!row.name.trim()||row.name.length>200)throw new ClientError("Backup contains an invalid group name",400);
+    row.icon_storage_path=ownedStoragePath(userId,row.icon_storage_path);
+    if(row.metadata&&typeof row.metadata==="object"&&!Array.isArray(row.metadata)){
+      row.metadata={...row.metadata};
+      if("icon_storage_path" in row.metadata)row.metadata.icon_storage_path=ownedStoragePath(userId,row.metadata.icon_storage_path);
+      if("banner_storage_path" in row.metadata)row.metadata.banner_storage_path=ownedStoragePath(userId,row.metadata.banner_storage_path);
+    }
+    delete row.user_id;delete row.icon_url;delete row.icon_source;
+  }
+  for(const row of arrays.fronts){
+    const start=String(row.started_at||"");
+    if(!Number.isFinite(Date.parse(start)))throw new ClientError("Backup contains an invalid front timestamp",400);
+    if(row.ended_at&&(!Number.isFinite(Date.parse(String(row.ended_at)))||Date.parse(String(row.ended_at))<Date.parse(start))){
+      throw new ClientError("Backup contains an invalid front time range",400);
+    }
+    delete row.user_id;
+  }
+  for(const row of [...arrays.member_groups,...arrays.front_members,...arrays.imports])delete row.user_id;
+
+  let appSettings:any=null;
+  if(data.app_settings!=null){
+    if(typeof data.app_settings!=="object"||Array.isArray(data.app_settings))throw new ClientError("Backup settings are malformed",400);
+    appSettings=structuredClone(data.app_settings);
+    delete appSettings.user_id;
+    const sys=appSettings?.settings?.system_profile;
+    if(sys&&typeof sys==="object"){
+      if("avatar_storage_path" in sys)sys.avatar_storage_path=ownedStoragePath(userId,sys.avatar_storage_path);
+      if("banner_storage_path" in sys)sys.banner_storage_path=ownedStoragePath(userId,sys.banner_storage_path);
+    }
+  }
+  const profile=input.profile&&typeof input.profile==="object"&&!Array.isArray(input.profile)?{
+    display_name:typeof input.profile.display_name==="string"?input.profile.display_name.slice(0,200):null,
+    avatar_storage_path:ownedStoragePath(userId,input.profile.avatar_storage_path),
+    banner_storage_path:ownedStoragePath(userId,input.profile.banner_storage_path)
+  }:null;
+
+  const backup={
+    format:"project-nihility-backup",
+    version:1,
+    exported_at:typeof input.exported_at==="string"?input.exported_at:null,
+    profile,
+    data:{...arrays,app_settings:appSettings}
+  };
+  const summary={
+    members:arrays.members.length,
+    archived_members:arrays.members.filter((m:any)=>Boolean(m.archived_at)).length,
+    groups:arrays.groups.length,
+    member_groups:arrays.member_groups.length,
+    fronts:arrays.fronts.length,
+    front_members:arrays.front_members.length,
+    imports:arrays.imports.length,
+    has_settings:Boolean(appSettings)
+  };
+  return{backup,summary};
+}
+async function sha256Hex(bytes:Uint8Array){
+  const digest=await crypto.subtle.digest("SHA-256",bytes);
+  return Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,"0")).join("");
+}
+async function parseBackupRequest(req:Request,userId:string){
+  const type=(req.headers.get("content-type")||"").split(";")[0].trim().toLowerCase();
+  if(type!=="application/json")throw new ClientError("Backup must be a JSON file",415);
+  const bytes=await readRawBody(req,BACKUP_MAX_BYTES);
+  if(!bytes.length)throw new ClientError("Backup file is empty",400);
+  let parsed:any;
+  try{parsed=JSON.parse(new TextDecoder().decode(bytes))}catch{throw new ClientError("Backup file is not valid JSON",400)}
+  const validated=sanitizeBackupForUser(userId,parsed);
+  return{...validated,hash:await sha256Hex(bytes),bytes};
+}
+async function actionBackupExport(user:any){
+  const uid=encodeURIComponent(user.id);
+  const [profile,members,groups,memberGroups,fronts,frontMembers,imports,settings]=await Promise.all([
+    admin("/rest/v1/profiles?user_id=eq."+uid+"&select=display_name,avatar_storage_path,banner_storage_path&limit=1"),
+    adminAll("/rest/v1/members?user_id=eq."+uid+"&select=id,name,display_name,pronouns,color,description,birthday,pk_id,tupper_id,metadata,created_at,updated_at,avatar_storage_path,banner_storage_path,archived_at&order=created_at.asc"),
+    adminAll("/rest/v1/groups?user_id=eq."+uid+"&select=id,name,display_name,description,color,pk_id,tupper_id,metadata,created_at,updated_at,icon_storage_path&order=created_at.asc"),
+    adminAll("/rest/v1/member_groups?user_id=eq."+uid+"&select=member_id,group_id,created_at&order=created_at.asc"),
+    adminAll("/rest/v1/fronts?user_id=eq."+uid+"&select=id,started_at,ended_at,note,source,external_id,created_at&order=started_at.asc"),
+    adminAll("/rest/v1/front_members?user_id=eq."+uid+"&select=front_id,member_id,joined_at,left_at&order=joined_at.asc"),
+    adminAll("/rest/v1/imports?user_id=eq."+uid+"&select=id,source,summary,created_at&order=created_at.asc"),
+    admin("/rest/v1/app_settings?user_id=eq."+uid+"&select=settings,updated_at&limit=1")
+  ]);
+  const backup={
+    format:"project-nihility-backup",
+    version:1,
+    exported_at:new Date().toISOString(),
+    profile:profile?.[0]||null,
+    data:{
+      members,groups,member_groups:memberGroups,fronts,front_members:frontMembers,
+      imports,app_settings:settings?.[0]||null
+    },
+    exclusions:[
+      "authentication credentials","account role and email","account invites",
+      "integration credentials","security logs","private media file bytes"
+    ]
+  };
+  const size=new TextEncoder().encode(JSON.stringify(backup)).length;
+  if(size>BACKUP_MAX_BYTES)throw new ClientError("This backup is too large for the current export format",413);
+  return{backup,size};
+}
+async function actionBackupRestorePreview(user:any,req:Request){
+  const parsed=await parseBackupRequest(req,user.id);
+  return{
+    hash:parsed.hash,
+    summary:parsed.summary,
+    exported_at:parsed.backup.exported_at,
+    media_note:"Private media files are not embedded. Existing media paths are restored only when they belong to this same Nihility account."
+  };
+}
+async function actionBackupRestoreApply(user:any,req:Request){
+  const parsed=await parseBackupRequest(req,user.id);
+  const expected=String(req.headers.get("x-backup-preview-hash")||"").toLowerCase();
+  if(!expected||expected!==parsed.hash)throw new ClientError("Backup changed after preview. Preview it again before restoring.",409);
+  const mode=String(req.headers.get("x-backup-mode")||"merge").toLowerCase();
+  if(mode!=="merge"&&mode!=="replace")throw new ClientError("Invalid restore mode",400);
+  const result=await admin("/rest/v1/rpc/restore_nihility_backup",{
+    method:"POST",
+    body:JSON.stringify({p_user_id:user.id,p_backup:parsed.backup,p_mode:mode})
+  });
+  return{restored:true,mode,summary:parsed.summary,result};
+}
+
 function decodeJwtPayload(token:string){
   const parts=token.split(".");
   if(parts.length!==3)throw new ClientError("Invalid or expired session",401);
@@ -1553,10 +1761,14 @@ const ACTION_LIMITS:Record<string,{limit:number,window:number}> = {
   upload_media:{limit:60,window:60},
   password_range:{limit:12,window:60},
   delete_member:{limit:10,window:60},
+  backup_export:{limit:6,window:60},
+  backup_restore_preview:{limit:8,window:60},
+  backup_restore_apply:{limit:2,window:60},
 };
 const AUDITED_ACTIONS=new Set([
   "pk_connect","pk_disconnect","pk_mirror_front","pk_import","pk_import_groups","pk_sync_apply",
-  "pk_update_system","pk_import_fronts","import_media","upload_media","delete_member"
+  "pk_update_system","pk_import_fronts","import_media","upload_media","delete_member",
+  "backup_export","backup_restore_apply"
 ]);
 async function consumeRateLimit(userId:string,action:string){
   const spec=ACTION_LIMITS[action]||{limit:30,window:60};
@@ -1650,6 +1862,15 @@ Deno.serve(async(req)=>{
       await recordSecurityEvent(user.id,"edge."+action,true,{origin:origin||null});
       return json(result,200,origin);
     }
+    if(headerAction==="backup_restore_preview"||headerAction==="backup_restore_apply"){
+      action=headerAction;
+      await consumeRateLimit(user.id,action);
+      const result=action==="backup_restore_preview"
+        ?await actionBackupRestorePreview(user,req)
+        :await actionBackupRestoreApply(user,req);
+      if(AUDITED_ACTIONS.has(action))await recordSecurityEvent(user.id,"edge."+action,true,{origin:origin||null,mode:req.headers.get("x-backup-mode")||null});
+      return json(result,200,origin);
+    }
 
     const contentType=(req.headers.get("content-type")||"").split(";")[0].trim().toLowerCase();
     if(contentType!=="application/json")throw new ClientError("JSON content type required",415);
@@ -1674,6 +1895,7 @@ Deno.serve(async(req)=>{
     else if(action==="import_media")result=await actionImportMedia(user,body);
     else if(action==="password_range")result=await actionPasswordRange(body);
     else if(action==="delete_member")result=await actionDeleteMember(user,body);
+    else if(action==="backup_export")result=await actionBackupExport(user);
     else throw new ClientError("Unknown action",400);
 
     if(AUDITED_ACTIONS.has(action)){
