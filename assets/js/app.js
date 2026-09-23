@@ -3,6 +3,7 @@
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const state={user:null,profile:null,members:[],fronts:[],frontMembers:[],integration:null,pkConnected:false,route:'home'};
 let frontMutationVersion=0;
+let pkMirrorQueue=Promise.resolve();
 
 const THEME_KEY='nihility_appearance_theme';
 const THEMES=[
@@ -202,6 +203,7 @@ async function hydrateHomeMedia(){
 }
 
 async function loadData(){
+  const frontVersion=frontMutationVersion;
   const data=await Promise.all([
     nihilityApi.rest('members',{query:'select=*&order=name.asc'}),
     nihilityApi.rest('fronts',{query:'select=*&order=started_at.desc&limit=100'}),
@@ -209,8 +211,10 @@ async function loadData(){
     nihilityApi.rest('external_integrations',{query:'provider=eq.pluralkit&select=*'})
   ]);
   state.members=data[0]||[];
-  state.fronts=data[1]||[];
-  state.frontMembers=data[2]||[];
+  if(frontVersion===frontMutationVersion){
+    state.fronts=data[1]||[];
+    state.frontMembers=data[2]||[];
+  }
   state.integration=data[3]?.[0]||null;
   state.pkConnected=Boolean(state.integration);
   await hydrateHomeMedia();
@@ -373,6 +377,13 @@ async function mirrorFrontToPk(memberIds,timestamp){
   if(chosen.some(m=>!m.pk_id))return{shared:false,reason:'Some selected members are not linked to PluralKit.'};
   return nihilityApi.secure('pk_mirror_front',{memberIds,timestamp});
 }
+function queueFrontMirror(memberIds,timestamp){
+  pkMirrorQueue=pkMirrorQueue
+    .catch(()=>{})
+    .then(()=>mirrorFrontToPk(memberIds,timestamp))
+    .then(shared=>{if(shared?.reason)toast('Front saved locally',shared.reason)})
+    .catch(error=>toast('Front saved locally','PluralKit sharing failed: '+error.message,'error'));
+}
 function applyCommittedFront(frontId,memberIds,startedAt){
   const previousActive=state.fronts.filter(f=>!f.ended_at);
   previousActive.forEach(f=>{f.ended_at=startedAt});
@@ -432,9 +443,7 @@ async function logFront(memberIds,timestamp){
 
   // PluralKit sharing is intentionally non-blocking. Nihility is the
   // authoritative local write, so the UI should not wait on a remote API.
-  void mirrorFrontToPk(memberIds,startedAt)
-    .then(shared=>{if(shared?.reason)toast('Front saved locally',shared.reason)})
-    .catch(error=>toast('Front saved locally','PluralKit sharing failed: '+error.message,'error'));
+  queueFrontMirror(memberIds,startedAt);
 
   // Reconcile just the two fronting tables in the background instead of
   // re-downloading 600+ members, integrations and private media.
