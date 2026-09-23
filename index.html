@@ -18,7 +18,7 @@
   <link rel="stylesheet" href="assets/rainbowpk/site-features.css?v=1">
   <link rel="stylesheet" href="assets/rainbowpk/member-color-picker.css?v=1">
   <link rel="stylesheet" href="assets/rainbowpk/app-theme-shell.css?v=1">
-  <link rel="stylesheet" href="assets/css/nihility-rainbow-adapter.css?v=8">
+  <link rel="stylesheet" href="assets/css/nihility-rainbow-adapter.css?v=9">
   <link rel="stylesheet" href="assets/css/nihility-editors.css?v=7">
   <link rel="stylesheet" href="assets/rainbowpk/member-sort.css?v=1">
   <link rel="stylesheet" href="assets/rainbowpk/member-view-menu.css?v=1">
@@ -307,9 +307,28 @@
     </form>
   </dialog>
 
+  <dialog id="pkSyncDialog" class="modal-dialog pk-sync-dialog">
+    <div class="modal-card pk-sync-card">
+      <div class="modal-heading">
+        <div><p class="eyebrow">Two-way PluralKit sync</p><h3>Review differences</h3><p class="muted">Nihility checks both sides first. Nothing is changed until you apply the sync.</p></div>
+        <button id="closePkSyncDialog" class="icon-button" type="button" aria-label="Close">×</button>
+      </div>
+      <div id="pkSyncPreview" class="pk-sync-preview"></div>
+      <p id="pkSyncMediaNote" class="muted pk-sync-media-note"></p>
+      <fieldset class="pk-sync-conflict-policy">
+        <legend>When the same field changed on both sides</legend>
+        <label class="radio-card"><input type="radio" name="pkSyncConflictPolicy" value="skip" checked><span><strong>Skip conflicts</strong><small>Safest. Sync everything unambiguous and leave conflicts untouched.</small></span></label>
+        <label class="radio-card"><input type="radio" name="pkSyncConflictPolicy" value="nihility"><span><strong>Prefer Nihility</strong><small>For conflicting fields, push the Nihility value to PluralKit.</small></span></label>
+        <label class="radio-card"><input type="radio" name="pkSyncConflictPolicy" value="pk"><span><strong>Prefer PluralKit</strong><small>For conflicting fields, pull the PluralKit value into Nihility.</small></span></label>
+      </fieldset>
+      <p id="pkSyncMessage" class="form-message"></p>
+      <div class="modal-footer"><button id="cancelPkSyncButton" class="secondary-button" type="button">Cancel</button><button id="applyPkSyncButton" class="primary-button" type="button">Apply sync</button></div>
+    </div>
+  </dialog>
+
   <script src="assets/js/config.js?v=2" defer></script>
   <script src="assets/js/api.js?v=13" defer></script>
-  <script src="assets/js/app.js?v=35" defer></script>
+  <script src="assets/js/app.js?v=36" defer></script>
   <script src="assets/js/rainbow-features.js?v=13" defer></script>
   <script src="assets/js/system-controls.js?v=3" defer></script>
 </body>
