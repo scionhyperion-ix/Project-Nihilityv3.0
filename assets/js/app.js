@@ -1,7 +1,7 @@
 'use strict';
 
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
-const state={user:null,profile:null,members:[],fronts:[],frontMembers:[],integration:null,pkConnected:false,route:'home'};
+const state={user:null,profile:null,members:[],fronts:[],frontMembers:[],integration:null,pkConnected:false,pkImported:false,route:'home'};
 let frontMutationVersion=0;
 
 const THEME_KEY='nihility_appearance_theme';
@@ -207,7 +207,8 @@ async function loadData(){
     nihilityApi.rest('members',{query:'select=*&order=name.asc'}),
     nihilityApi.rest('fronts',{query:'select=*&order=started_at.desc&limit=100'}),
     nihilityApi.rest('front_members',{query:'select=*&order=joined_at.desc'}),
-    nihilityApi.rest('external_integrations',{query:'provider=eq.pluralkit&select=*'})
+    nihilityApi.rest('external_integrations',{query:'provider=eq.pluralkit&select=*'}),
+    nihilityApi.rest('imports',{query:'source=eq.pluralkit&select=id&limit=1'})
   ]);
   state.members=data[0]||[];
   if(frontVersion===frontMutationVersion){
@@ -216,6 +217,7 @@ async function loadData(){
   }
   state.integration=data[3]?.[0]||null;
   state.pkConnected=Boolean(state.integration);
+  state.pkImported=Boolean(data[4]?.length);
   await hydrateHomeMedia();
 }
 function renderAll(){renderHeader();renderHome();renderMembers();renderHistory();renderSettings();renderProfile()}
@@ -316,6 +318,7 @@ function renderHistory(){
 }
 function renderSettings(){
   renderThemeOptions();const connected=Boolean(state.integration&&state.pkConnected);$('#pkDisconnected').hidden=connected;$('#pkConnected').hidden=!connected;
+  const importButton=$('#importPkButton');if(importButton)importButton.textContent=state.pkImported?'Sync PK':'Import system';
   if(state.integration){$('#pkSystemName').textContent=state.integration.external_system_name||'PluralKit system';$('#pkSystemId').textContent=state.integration.external_system_id||'...'}
 }
 function renderProfile(){
@@ -503,7 +506,9 @@ async function disconnectPk(){
   }catch(error){message.textContent=error.message}
 }
 async function importPk(){
-  const message=$('#pkMessage');message.textContent='Comparing PluralKit with Nihility...';
+  const message=$('#pkMessage'),button=$('#importPkButton'),wasImported=state.pkImported;
+  if(button){button.disabled=true;button.textContent=wasImported?'Syncing...':'Importing...'}
+  message.textContent='Comparing PluralKit with Nihility...';
   try{
     const comparison=await nihilityApi.secure('pk_compare');
     const missing=Array.isArray(comparison.missingMemberIds)?comparison.missingMemberIds:[];
@@ -541,9 +546,11 @@ async function importPk(){
       front_members_unresolved:unresolved
     }},prefer:'return=minimal'});
 
-    message.textContent='Comparison complete: '+missing.length+' missing member'+(missing.length===1?'':'s')+' found, '+added+' imported, '+frontAdded+' new front-history entr'+(frontAdded===1?'y':'ies')+' added.'+(unresolved?' '+unresolved+' historical member links could not be matched.':'');
+    state.pkImported=true;
+    message.textContent=(wasImported?'Sync complete: ':'Import complete: ')+missing.length+' missing member'+(missing.length===1?'':'s')+' found, '+added+' imported, '+frontAdded+' new front-history entr'+(frontAdded===1?'y':'ies')+' added.'+(unresolved?' '+unresolved+' historical member links could not be matched.':'');
     await loadData();
   }catch(error){message.textContent=error.message}
+  finally{if(button){button.disabled=false;button.textContent=state.pkImported?'Sync PK':'Import system'}}
 }
 
 async function saveProfile(e){
