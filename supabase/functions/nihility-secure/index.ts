@@ -633,7 +633,7 @@ async function actionImportPk(user:any,body:any){
         pronouns:m.pronouns||null,color:m.color||null,description:m.description||null,birthday:m.birthday||null,
         avatar_url:null,avatar_source:avatarPath?"supabase":null,avatar_storage_path:avatarPath,
         banner_url:null,banner_source:bannerPath?"supabase":null,banner_storage_path:bannerPath,
-        pk_id:m.id,metadata:{pk_uuid:m.uuid||null,proxy_tags:Array.isArray(m.proxy_tags)?m.proxy_tags:[],keep_proxy:Boolean(m.keep_proxy)},archived_at:null
+        pk_id:m.id,metadata:{pk_uuid:m.uuid||null,pk_avatar_url:avatar,pk_banner_url:banner,proxy_tags:Array.isArray(m.proxy_tags)?m.proxy_tags:[],keep_proxy:Boolean(m.keep_proxy)},archived_at:null
       })
     });
     added++;
@@ -766,7 +766,7 @@ async function actionImportPkGroups(user:any){
   });
 
   const localMembers=await admin("/rest/v1/members?user_id=eq."+encodeURIComponent(user.id)+"&select=id,name,display_name,pronouns,color,description,birthday,avatar_storage_path,banner_storage_path,pk_id,metadata,archived_at");
-  const localGroups=await admin("/rest/v1/groups?user_id=eq."+encodeURIComponent(user.id)+"&select=id,name,display_name,description,color,pk_id,metadata");
+  const localGroups=await admin("/rest/v1/groups?user_id=eq."+encodeURIComponent(user.id)+"&select=id,name,display_name,description,color,icon_storage_path,pk_id,metadata");
   const existingLinks=await admin("/rest/v1/member_groups?user_id=eq."+encodeURIComponent(user.id)+"&select=member_id,group_id");
 
   const memberMap=new Map<string,string>();
