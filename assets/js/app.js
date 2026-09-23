@@ -2,6 +2,8 @@
 
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const state={user:null,profile:null,members:[],fronts:[],frontMembers:[],integration:null,pkConnected:false,route:'home'};
+let frontMutationVersion=0;
+let pkMirrorQueue=Promise.resolve();
 
 const THEME_KEY='nihility_appearance_theme';
 const THEMES=[
@@ -201,6 +203,7 @@ async function hydrateHomeMedia(){
 }
 
 async function loadData(){
+  const frontVersion=frontMutationVersion;
   const data=await Promise.all([
     nihilityApi.rest('members',{query:'select=*&order=name.asc'}),
     nihilityApi.rest('fronts',{query:'select=*&order=started_at.desc&limit=100'}),
@@ -208,8 +211,10 @@ async function loadData(){
     nihilityApi.rest('external_integrations',{query:'provider=eq.pluralkit&select=*'})
   ]);
   state.members=data[0]||[];
-  state.fronts=data[1]||[];
-  state.frontMembers=data[2]||[];
+  if(frontVersion===frontMutationVersion){
+    state.fronts=data[1]||[];
+    state.frontMembers=data[2]||[];
+  }
   state.integration=data[3]?.[0]||null;
   state.pkConnected=Boolean(state.integration);
   await hydrateHomeMedia();
@@ -372,10 +377,77 @@ async function mirrorFrontToPk(memberIds,timestamp){
   if(chosen.some(m=>!m.pk_id))return{shared:false,reason:'Some selected members are not linked to PluralKit.'};
   return nihilityApi.secure('pk_mirror_front',{memberIds,timestamp});
 }
+function queueFrontMirror(memberIds,timestamp){
+  pkMirrorQueue=pkMirrorQueue
+    .catch(()=>{})
+    .then(()=>mirrorFrontToPk(memberIds,timestamp))
+    .then(shared=>{if(shared?.reason)toast('Front saved locally',shared.reason)})
+    .catch(error=>toast('Front saved locally','PluralKit sharing failed: '+error.message,'error'));
+}
+function applyCommittedFront(frontId,memberIds,startedAt){
+  const previousActive=state.fronts.filter(f=>!f.ended_at);
+  previousActive.forEach(f=>{f.ended_at=startedAt});
+  const previousIds=new Set(previousActive.map(f=>f.id));
+  state.frontMembers.forEach(link=>{
+    if(previousIds.has(link.front_id)&&!link.left_at)link.left_at=startedAt;
+  });
+
+  const front={
+    id:frontId,
+    user_id:state.user?.id||null,
+    started_at:startedAt,
+    ended_at:null,
+    note:null,
+    source:'nihility',
+    external_id:null,
+    created_at:startedAt
+  };
+  state.fronts=[front,...state.fronts.filter(f=>f.id!==frontId)]
+    .sort((a,b)=>new Date(b.started_at)-new Date(a.started_at))
+    .slice(0,100);
+
+  const links=memberIds.map(memberId=>({
+    user_id:state.user?.id||null,
+    front_id:frontId,
+    member_id:memberId,
+    joined_at:startedAt,
+    left_at:null
+  }));
+  state.frontMembers=[...links,...state.frontMembers];
+
+  renderHome();
+  renderHistory();
+}
+async function refreshFrontState(version=frontMutationVersion){
+  try{
+    const [fronts,frontMembers]=await Promise.all([
+      nihilityApi.rest('fronts',{query:'select=*&order=started_at.desc&limit=100'}),
+      nihilityApi.rest('front_members',{query:'select=*&order=joined_at.desc'})
+    ]);
+    if(version!==frontMutationVersion)return;
+    state.fronts=fronts||[];
+    state.frontMembers=frontMembers||[];
+    renderHome();
+    renderHistory();
+  }catch(error){
+    console.warn('Unable to refresh front state',error);
+  }
+}
 async function logFront(memberIds,timestamp){
-  await nihilityApi.rpc('log_front',{p_member_ids:memberIds,p_started_at:timestamp||new Date().toISOString(),p_note:null});
-  try{const shared=await mirrorFrontToPk(memberIds,timestamp);if(shared.reason)toast('Front saved locally',shared.reason)}catch(error){toast('Front saved locally','PluralKit sharing failed: '+error.message,'error')}
-  await loadData();
+  const startedAt=timestamp||new Date().toISOString();
+  const version=++frontMutationVersion;
+  const result=await nihilityApi.rpc('log_front',{p_member_ids:memberIds,p_started_at:startedAt,p_note:null});
+  const frontId=typeof result==='string'?result:String(result?.id||'');
+  if(frontId)applyCommittedFront(frontId,memberIds,startedAt);
+  else void refreshFrontState(version);
+
+  // PluralKit sharing is intentionally non-blocking. Nihility is the
+  // authoritative local write, so the UI should not wait on a remote API.
+  queueFrontMirror(memberIds,startedAt);
+
+  // Reconcile just the two fronting tables in the background instead of
+  // re-downloading 600+ members, integrations and private media.
+  void refreshFrontState(version);
 }
 async function saveFront(e){
   e.preventDefault();const err=$('#frontError');err.hidden=true;
