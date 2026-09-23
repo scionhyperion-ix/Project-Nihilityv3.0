@@ -185,6 +185,23 @@
   min-width:92px;
   white-space:nowrap;
 }
+.current-front-members .front-person-interactive{
+  cursor:pointer;
+  transition:background-color .16s ease,border-color .16s ease,transform .16s ease,box-shadow .16s ease;
+}
+.current-front-members .front-person-interactive:hover{
+  background:color-mix(in srgb,var(--theme-surface-hover) 88%,transparent);
+  border-color:var(--line-strong);
+  transform:translateY(-1px);
+}
+.current-front-members .front-person-interactive:focus-visible{
+  outline:2px solid var(--accent);
+  outline-offset:2px;
+  border-color:var(--accent);
+}
+.current-front-members .front-person-interactive:active{
+  transform:translateY(0);
+}
 
 @media(max-width:760px){
   .current-front-members .front-person{

@@ -244,7 +244,13 @@ function renderHome(){
   }else{
     $('#currentFrontHeading').textContent=members.length===1?label(members[0]):(members.length+' co-fronters');
     members.forEach(m=>{
-      const row=document.createElement('div');row.className='front-person timed-front-person';
+      const row=document.createElement('div');row.className='front-person timed-front-person front-person-interactive';
+      row.setAttribute('role','button');
+      row.tabIndex=0;
+      row.setAttribute('aria-label','Open '+label(m)+' profile');
+      row.title='View or edit '+label(m);
+      row.onclick=()=>openMember(m);
+      row.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();openMember(m)}};
       row.append(avatarEl(m,'timeline-avatar'));
       const copy=document.createElement('div');copy.className='front-person-copy';
       const name=document.createElement('strong');name.textContent=label(m);
