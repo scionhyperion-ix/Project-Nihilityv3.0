@@ -832,7 +832,7 @@ async function importPkGroupForSync(user:any,pg:any){
     body:JSON.stringify({
       user_id:user.id,...fields,
       icon_url:null,icon_source:null,icon_storage_path:iconPath,pk_id:pg.id,
-      metadata:{pk_uuid:pg.uuid||null,pk_icon_url:icon,pk_banner_url:banner,icon_storage_path:iconPath,banner_storage_path:bannerPath,pk_sync_v1:{fields}}
+      metadata:{pk_uuid:pg.uuid||null,pk_icon_url:icon,pk_banner_url:banner,icon_storage_path:iconPath,banner_storage_path:bannerPath,pk_sync_v1:{fields,origin:"pk"}}
     })
   });
   return rows?.[0]||null;
@@ -852,7 +852,7 @@ async function createPkGroupFromLocal(user:any,token:string,local:any){
   const fields=canonicalLocalGroup(local),payload=groupPkPayload(fields);
   const blocked=validatePkGroupPayload(payload);if(blocked)return {blocked};
   const created=await pk(token,"/groups",{method:"POST",body:JSON.stringify(payload)});
-  const metadata={...(local.metadata||{}),pk_uuid:created?.uuid||null,pk_sync_v1:{fields:canonicalPkGroup(created)}};
+  const metadata={...(local.metadata||{}),pk_uuid:created?.uuid||null,pk_sync_v1:{fields:canonicalPkGroup(created),origin:"nihility"}};
   await admin("/rest/v1/groups?id=eq."+encodeURIComponent(local.id),{
     method:"PATCH",headers:{Prefer:"return=minimal"},
     body:JSON.stringify({pk_id:created.id,metadata})
@@ -969,7 +969,10 @@ async function actionPkSyncApply(user:any,body:any){
     const remoteIds=remoteGroupMemberLocalIds(remote,state);
     const baseline=local.metadata?.pk_sync_v1?.member_ids;
     let direction=analyzeMembership(localIds,remoteIds,baseline);
-    if(direction==="conflict")direction=conflictPolicy==="pk"?"pull":conflictPolicy==="nihility"?"push":"conflict";
+    const origin=local.metadata?.pk_sync_v1?.origin;
+    if(direction==="conflict"&&!Array.isArray(baseline)&&origin==="pk")direction="pull";
+    else if(direction==="conflict"&&!Array.isArray(baseline)&&origin==="nihility")direction="push";
+    else if(direction==="conflict")direction=conflictPolicy==="pk"?"pull":conflictPolicy==="nihility"?"push":"conflict";
     let finalIds=localIds;
     if(direction==="pull"){
       const wanted=new Set(remoteIds);
@@ -987,7 +990,8 @@ async function actionPkSyncApply(user:any,body:any){
       result.conflictsSkipped++;continue;
     }else finalIds=localIds;
 
-    const metadata={...(local.metadata||{}),pk_sync_v1:{...(local.metadata?.pk_sync_v1||{}),member_ids:finalIds}};
+    const nextSync={...(local.metadata?.pk_sync_v1||{}),member_ids:finalIds};delete nextSync.origin;
+    const metadata={...(local.metadata||{}),pk_sync_v1:nextSync};
     await admin("/rest/v1/groups?id=eq."+encodeURIComponent(local.id),{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({metadata})});
   }
 
