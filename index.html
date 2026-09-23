@@ -286,7 +286,11 @@
 
           <p id="memberError" class="form-error" hidden></p>
           <div class="modal-footer modal-footer-split member-editor-footer">
-            <button id="deleteMemberButton" class="text-button danger-text" type="button" hidden>Archive</button>
+            <div class="member-lifecycle-actions">
+              <button id="deleteMemberButton" class="text-button danger-text" type="button" hidden>Archive</button>
+              <button id="restoreMemberButton" class="secondary-button" type="button" hidden>Restore</button>
+              <button id="permanentDeleteMemberButton" class="secondary-button danger-button" type="button" hidden>Delete permanently</button>
+            </div>
             <div>
               <button id="cancelMemberButton" class="secondary-button" type="button">Cancel</button>
               <button class="primary-button" type="submit">Save member</button>
@@ -328,8 +332,8 @@
 
   <script src="assets/js/config.js?v=2" defer></script>
   <script src="assets/js/api.js?v=13" defer></script>
-  <script src="assets/js/app.js?v=37" defer></script>
-  <script src="assets/js/rainbow-features.js?v=13" defer></script>
+  <script src="assets/js/app.js?v=38" defer></script>
+  <script src="assets/js/rainbow-features.js?v=14" defer></script>
   <script src="assets/js/system-controls.js?v=3" defer></script>
 </body>
 </html>
