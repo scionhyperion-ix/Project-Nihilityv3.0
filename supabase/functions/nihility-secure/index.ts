@@ -549,7 +549,7 @@ async function actionConnect(user:any,body:any){
   });
   await admin("/rest/v1/external_integrations?on_conflict=user_id,provider",{
     method:"POST",headers:{Prefer:"resolution=merge-duplicates,return=minimal"},
-    body:JSON.stringify({user_id:user.id,provider:"pluralkit",external_system_id:system.id||null,external_system_name:system.name||system.id||"PluralKit system",share_fronting_updates:true,connected_at:new Date().toISOString()})
+    body:JSON.stringify({user_id:user.id,provider:"pluralkit",external_system_id:system.id||null,external_system_name:system.name||system.id||"PluralKit system",share_fronting_updates:false,connected_at:new Date().toISOString()})
   });
   return {connected:true,system:{id:system.id||null,name:system.name||null}};
 }
@@ -559,7 +559,7 @@ async function actionStatus(user:any){
 }
 async function actionDisconnect(user:any){
   await admin("/rest/v1/integration_secrets?user_id=eq."+encodeURIComponent(user.id)+"&provider=eq.pluralkit",{method:"DELETE"});
-  await admin("/rest/v1/external_integrations?user_id=eq."+encodeURIComponent(user.id)+"&provider=eq.pluralkit",{method:"PATCH",body:JSON.stringify({share_fronting_updates:false})});
+  await admin("/rest/v1/external_integrations?user_id=eq."+encodeURIComponent(user.id)+"&provider=eq.pluralkit",{method:"DELETE"});
   return {connected:false};
 }
 async function actionMirror(user:any,body:any){
