@@ -526,6 +526,41 @@ async function storeImage(userId:string,kind:string,url:string){
   const img=await safeImage(url,kind);
   return storeImageBytes(userId,kind,img.bytes,img.type);
 }
+async function deleteStoredMedia(userId:string,kind:string,path:string|null|undefined){
+  if(!path)return;
+  const cfg=BUCKETS[kind];
+  if(!cfg)return;
+  const normalized=String(path);
+  if(!normalized.startsWith(userId+"/"))throw new Error("Refusing to delete media outside user namespace");
+  const response=await fetch(SUPABASE_URL+"/storage/v1/object/"+encodeURIComponent(cfg.name)+"/"+normalized.split("/").map(encodeURIComponent).join("/"),{
+    method:"DELETE",
+    headers:{apikey:SERVICE_KEY,Authorization:"Bearer "+SERVICE_KEY}
+  });
+  if(!response.ok&&response.status!==404){
+    console.warn("Unable to delete member media",cfg.name,response.status);
+  }
+}
+async function actionDeleteMember(user:any,body:any){
+  const memberId=String(body.memberId||"").trim();
+  if(!/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/.test(memberId)){
+    throw new ClientError("Invalid member",400);
+  }
+  const rows=await admin("/rest/v1/members?user_id=eq."+encodeURIComponent(user.id)+"&id=eq."+encodeURIComponent(memberId)+"&select=id,name,avatar_storage_path,banner_storage_path&limit=1");
+  const member=rows?.[0];
+  if(!member)throw new ClientError("Member not found",404);
+
+  await admin("/rest/v1/members?user_id=eq."+encodeURIComponent(user.id)+"&id=eq."+encodeURIComponent(memberId),{
+    method:"DELETE",
+    headers:{Prefer:"return=minimal"}
+  });
+
+  await Promise.allSettled([
+    deleteStoredMedia(user.id,"avatar",member.avatar_storage_path),
+    deleteStoredMedia(user.id,"banner",member.banner_storage_path)
+  ]);
+  return {deleted:true,memberId};
+}
+
 async function actionUploadMedia(user:any,req:Request){
   const kind=String(req.headers.get("x-media-kind")||"");
   const cfg=BUCKETS[kind];
@@ -1517,10 +1552,11 @@ const ACTION_LIMITS:Record<string,{limit:number,window:number}> = {
   import_media:{limit:30,window:60},
   upload_media:{limit:60,window:60},
   password_range:{limit:12,window:60},
+  delete_member:{limit:10,window:60},
 };
 const AUDITED_ACTIONS=new Set([
   "pk_connect","pk_disconnect","pk_mirror_front","pk_import","pk_import_groups","pk_sync_apply",
-  "pk_update_system","pk_import_fronts","import_media","upload_media"
+  "pk_update_system","pk_import_fronts","import_media","upload_media","delete_member"
 ]);
 async function consumeRateLimit(userId:string,action:string){
   const spec=ACTION_LIMITS[action]||{limit:30,window:60};
@@ -1637,6 +1673,7 @@ Deno.serve(async(req)=>{
     else if(action==="pk_import_fronts")result=await actionImportPkFronts(user,body);
     else if(action==="import_media")result=await actionImportMedia(user,body);
     else if(action==="password_range")result=await actionPasswordRange(body);
+    else if(action==="delete_member")result=await actionDeleteMember(user,body);
     else throw new ClientError("Unknown action",400);
 
     if(AUDITED_ACTIONS.has(action)){

@@ -188,3 +188,5 @@ dialog{padding:0}.modal-card{border-radius:18px;padding:20px}.modal-header{margi
 .login-card .security-note p{margin:4px 0 0;font-size:.76rem;line-height:1.4;color:var(--muted)}
 .login-card .login-form{margin-bottom:0}
 .login-card #loginMessage:empty{display:none}
+
+.member-card.archived-member{opacity:.78;filter:saturate(.72)}.member-archived-badge{position:absolute;top:12px;right:12px;padding:5px 8px;border:1px solid var(--line-strong);border-radius:999px;background:rgba(10,11,20,.82);color:var(--muted);font-size:.68rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase}.member-lifecycle-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.member-lifecycle-actions .danger-button{background:rgba(255,87,112,.06)}

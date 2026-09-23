@@ -308,7 +308,9 @@ function renderHome(){
 }
 function renderMembers(){
   const q=$('#memberSearch').value.trim().toLowerCase();
-  const list=activeMembers().filter(m=>[m.name,m.display_name,m.pronouns].filter(Boolean).some(v=>v.toLowerCase().includes(q)));
+  const status=$('#memberStatusFilter')?.value||'active';
+  const source=status==='archived'?state.members.filter(m=>m.archived_at):status==='all'?state.members:activeMembers();
+  const list=source.filter(m=>[m.name,m.display_name,m.pronouns].filter(Boolean).some(v=>v.toLowerCase().includes(q)));
   $('#memberGrid').replaceChildren();$('#membersEmpty').hidden=list.length>0;
   list.forEach(m=>{const card=document.createElement('button');card.className='member-card';const top=document.createElement('div');top.className='member-card-top';top.append(avatarEl(m));const copy=document.createElement('div');copy.className='member-card-name';const h=document.createElement('h3');h.textContent=label(m);const p=document.createElement('p');p.textContent=m.pronouns||m.name;copy.append(h,p);top.append(copy);card.append(top);if(m.description){const d=document.createElement('p');d.className='member-card-desc';d.textContent=m.description;card.append(d)}const bar=document.createElement('span');bar.className='member-color-bar';bar.style.background=m.color?'#'+m.color:'var(--accent)';card.append(bar);card.onclick=()=>openMember(m);$('#memberGrid').append(card)});
 }
@@ -340,10 +342,10 @@ function renderProfile(){
   renderHeader();
 }
 
-function resetMemberForm(){$('#memberForm').reset();$('#memberId').value='';$('#memberColorPicker').value='#8b7cf6';$('#memberError').hidden=true;$('#deleteMemberButton').hidden=true}
+function resetMemberForm(){$('#memberForm').reset();$('#memberId').value='';$('#memberColorPicker').value='#8b7cf6';$('#memberError').hidden=true;$('#deleteMemberButton').hidden=true;$('#restoreMemberButton').hidden=true;$('#permanentDeleteMemberButton').hidden=true}
 function openMember(m=null){
   resetMemberForm();$('#memberDialogTitle').textContent=m?'Edit member':'New member';
-  if(m){$('#memberId').value=m.id;$('#memberName').value=m.name||'';$('#memberDisplayName').value=m.display_name||'';$('#memberPronouns').value=m.pronouns||'';$('#memberDescription').value=m.description||'';$('#memberAvatarUrl').value=m.avatar_source==='external'?(m.avatar_url||''):'';$('#memberBannerUrl').value=m.banner_source==='external'?(m.banner_url||''):'';const c=hex(m.color);$('#memberColor').value=c;if(c)$('#memberColorPicker').value=c;$('#deleteMemberButton').hidden=false}
+  if(m){$('#memberId').value=m.id;$('#memberName').value=m.name||'';$('#memberDisplayName').value=m.display_name||'';$('#memberPronouns').value=m.pronouns||'';$('#memberDescription').value=m.description||'';$('#memberAvatarUrl').value=m.avatar_source==='external'?(m.avatar_url||''):'';$('#memberBannerUrl').value=m.banner_source==='external'?(m.banner_url||''):'';const c=hex(m.color);$('#memberColor').value=c;if(c)$('#memberColorPicker').value=c;$('#memberDialogTitle').textContent=m.archived_at?'Archived member':'Edit member';$('#deleteMemberButton').hidden=Boolean(m.archived_at);$('#restoreMemberButton').hidden=!m.archived_at;$('#permanentDeleteMemberButton').hidden=false}
   $('#memberDialog').showModal();
 }
 async function maybeUpload(kind,input){
@@ -365,7 +367,7 @@ async function saveMember(e){
     const importedBannerPath=!bu&&be?await importExternalMedia('banner',be):null;
     const newAvatarPath=au?.path||importedAvatarPath||old?.avatar_storage_path||null;
     const newBannerPath=bu?.path||importedBannerPath||old?.banner_storage_path||null;
-    const body={user_id:state.user.id,name:$('#memberName').value.trim(),display_name:$('#memberDisplayName').value.trim()||null,pronouns:$('#memberPronouns').value.trim()||null,color:c?c.slice(1).toLowerCase():null,description:$('#memberDescription').value.trim()||null,avatar_url:null,avatar_source:newAvatarPath?'supabase':null,avatar_storage_path:newAvatarPath,banner_url:null,banner_source:newBannerPath?'supabase':null,banner_storage_path:newBannerPath,pk_id:old?.pk_id||null,tupper_id:old?.tupper_id||null,archived_at:null};
+    const body={user_id:state.user.id,name:$('#memberName').value.trim(),display_name:$('#memberDisplayName').value.trim()||null,pronouns:$('#memberPronouns').value.trim()||null,color:c?c.slice(1).toLowerCase():null,description:$('#memberDescription').value.trim()||null,avatar_url:null,avatar_source:newAvatarPath?'supabase':null,avatar_storage_path:newAvatarPath,banner_url:null,banner_source:newBannerPath?'supabase':null,banner_storage_path:newBannerPath,pk_id:old?.pk_id||null,tupper_id:old?.tupper_id||null,archived_at:old?.archived_at||null};
     if(!body.name)throw new Error('Name is required.');
     if(id)await nihilityApi.rest('members',{method:'PATCH',query:'id=eq.'+encodeURIComponent(id),body,prefer:'return=minimal'});else await nihilityApi.rest('members',{method:'POST',body,prefer:'return=minimal'});
     if(old?.avatar_storage_path&&old.avatar_storage_path!==body.avatar_storage_path)await safeDelete('avatar',old.avatar_storage_path);if(old?.banner_storage_path&&old.banner_storage_path!==body.banner_storage_path)await safeDelete('banner',old.banner_storage_path);
@@ -377,7 +379,27 @@ async function deleteMember(){
   if(!id||!confirm('Archive this Nihility member? Their historical front records will be kept.'))return;
   await nihilityApi.rest('members',{method:'PATCH',query:'id=eq.'+encodeURIComponent(id),body:{archived_at:new Date().toISOString()},prefer:'return=minimal'});
   $('#memberDialog').close();
-  toast('Member archived','Historical front records were preserved.');
+  toast('Member archived','You can find them under Members, then Status, Archived.');
+  await loadData();
+}
+async function restoreMember(){
+  const id=$('#memberId').value;
+  if(!id)return;
+  await nihilityApi.rest('members',{method:'PATCH',query:'id=eq.'+encodeURIComponent(id),body:{archived_at:null},prefer:'return=minimal'});
+  $('#memberDialog').close();
+  toast('Member restored','They are active again.');
+  await loadData();
+}
+async function permanentlyDeleteMember(){
+  const id=$('#memberId').value;
+  const member=state.members.find(m=>m.id===id);
+  if(!id||!member)return;
+  const name=label(member);
+  if(!confirm('Permanently delete '+name+'? This cannot be undone and removes their group memberships and links from front history. Archive instead if you want to preserve history.'))return;
+  if(!confirm('Delete '+name+' forever?'))return;
+  await nihilityApi.secure('delete_member',{memberId:id});
+  $('#memberDialog').close();
+  toast('Member permanently deleted',name+' was removed from Nihility.');
   await loadData();
 }
 
@@ -766,7 +788,7 @@ async function signOut(){
 $('#signOutButton').onclick=signOut;$('#deniedSignOut').onclick=signOut;$('#sidebarProfileButton').onclick=()=>setRoute('profile');
 $$('[data-route]').forEach(b=>b.onclick=()=>setRoute(b.dataset.route));$$('[data-route-link]').forEach(b=>b.onclick=()=>setRoute(b.dataset.routeLink));
 $('#openFrontManager').onclick=()=>openFront('replace');$('#chooseAnyMemberButton').onclick=()=>openFront('replace');$('#newFrontButton').onclick=()=>openFront('replace');$('#addCoFronterButton').onclick=()=>openFront('add');$('#transferFrontToPkButton').onclick=transferCurrentFrontToPk;$('#switchOutButton').onclick=switchOut;
-$('#createMemberButton').onclick=()=>openMember();$('#memberSearch').oninput=()=>renderMembers();$('#memberForm').onsubmit=saveMember;$('#deleteMemberButton').onclick=deleteMember;$('#closeMemberDialog').onclick=$('#cancelMemberButton').onclick=()=>$('#memberDialog').close();$('#memberColorPicker').oninput=e=>$('#memberColor').value=e.target.value.toUpperCase();$('#memberColor').oninput=e=>{const c=hex(e.target.value);if(c)$('#memberColorPicker').value=c};
+$('#createMemberButton').onclick=()=>openMember();$('#memberSearch').oninput=()=>renderMembers();$('#memberForm').onsubmit=saveMember;$('#deleteMemberButton').onclick=deleteMember;$('#restoreMemberButton').onclick=restoreMember;$('#permanentDeleteMemberButton').onclick=permanentlyDeleteMember;$('#closeMemberDialog').onclick=$('#cancelMemberButton').onclick=()=>$('#memberDialog').close();$('#memberColorPicker').oninput=e=>$('#memberColor').value=e.target.value.toUpperCase();$('#memberColor').oninput=e=>{const c=hex(e.target.value);if(c)$('#memberColorPicker').value=c};
 $('#frontForm').onsubmit=saveFront;$('#closeFrontDialog').onclick=$('#cancelFrontButton').onclick=()=>$('#frontDialog').close();$('#frontMemberSearch').oninput=()=>buildFrontPicker($$('#frontMemberPicker input:checked').map(i=>i.value));$('#customFrontTimeEnabled').onchange=e=>$('#customFrontTimeRow').hidden=!e.target.checked;
 $('#connectPkButton').onclick=connectPk;$('#disconnectPkButton').onclick=disconnectPk;$('#importPkButton').onclick=importPk;
 $('#closePkSyncDialog').onclick=$('#cancelPkSyncButton').onclick=()=>$('#pkSyncDialog').close();$('#applyPkSyncButton').onclick=applyPkSync;

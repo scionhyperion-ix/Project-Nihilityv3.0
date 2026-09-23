@@ -4,6 +4,7 @@
   const MEMBER_SORT_KEY='nihility_member_sort';
   const MEMBER_VIEW_KEY='nihility_member_view';
   const MEMBER_GROUP_KEY='nihility_member_group';
+  const MEMBER_STATUS_KEY='nihility_member_status';
   const HISTORY_VIEW_KEY='nihility_history_view';
   const HISTORY_SORT_KEY='nihility_history_sort';
   const HISTORY_RANGE_KEY='nihility_history_range';
@@ -120,6 +121,14 @@
     const create=document.querySelector('#createMemberButton');
     if(!toolbar||!create)return;
 
+    if(!document.querySelector('#memberStatusFilter')){
+      const status=makeSelect('memberStatusFilter','Status',[
+        ['active','Active'],['archived','Archived'],['all','All']
+      ]);
+      status.select.value=localStorage.getItem(MEMBER_STATUS_KEY)||'active';
+      status.select.onchange=()=>{localStorage.setItem(MEMBER_STATUS_KEY,status.select.value);renderMembers()};
+      toolbar.insertBefore(status.label,create);
+    }
     if(!document.querySelector('#memberSort')){
       const sort=makeSelect('memberSort','Sort',[
         ['az','A to Z'],['za','Z to A'],['newest','Recently added'],['oldest','Oldest first']
@@ -158,6 +167,11 @@
     s.value=[...s.options].some(o=>o.value===current)?current:'all';
   }
 
+  function addArchivedBadge(card,m){
+    if(!m?.archived_at)return;
+    card.classList.add('archived-member');
+    const badge=document.createElement('span');badge.className='member-archived-badge';badge.textContent='Archived';card.append(badge);
+  }
   function makeStandardMemberCard(m){
     const card=document.createElement('button');card.type='button';card.className='member-card';
     const top=document.createElement('div');top.className='member-card-top';top.append(avatarEl(m));
@@ -169,7 +183,7 @@
     if(m.description){const d=document.createElement('p');d.className='member-card-desc';d.textContent=m.description;card.append(d)}
     const gs=groupsForMember(m.id);
     if(gs.length){const wrap=document.createElement('div');wrap.className='member-card-groups';gs.slice(0,4).forEach(g=>{const s=document.createElement('span');s.textContent=groupName(g);wrap.append(s)});card.append(wrap)}
-    const bar=document.createElement('span');bar.className='member-color-bar';bar.style.background=m.color?'#'+m.color:'var(--accent)';card.append(bar);
+    const bar=document.createElement('span');bar.className='member-color-bar';bar.style.background=m.color?'#'+m.color:'var(--accent)';card.append(bar);addArchivedBadge(card,m);
     card.onclick=()=>openMember(m);return card;
   }
   function makeTileMemberCard(m){
@@ -183,7 +197,7 @@
     const pron=document.createElement('span');pron.className='member-tile-pronouns';pron.textContent=m.pronouns||'No pronouns';details.append(pron);
     const desc=document.createElement('p');desc.className='member-tile-description';desc.textContent=m.description||'No description';details.append(desc);
     card.append(header,media,details);
-    const bar=document.createElement('span');bar.className='member-color-bar';bar.style.background=m.color?'#'+m.color:'var(--accent)';card.append(bar);
+    const bar=document.createElement('span');bar.className='member-color-bar';bar.style.background=m.color?'#'+m.color:'var(--accent)';card.append(bar);addArchivedBadge(card,m);
     card.onclick=()=>openMember(m);return card;
   }
 
@@ -191,14 +205,20 @@
     installMemberToolbar();
     const q=(document.querySelector('#memberSearch')?.value||'').trim().toLowerCase();
     const group=document.querySelector('#memberGroupFilter')?.value||'all';
+    const status=document.querySelector('#memberStatusFilter')?.value||localStorage.getItem(MEMBER_STATUS_KEY)||'active';
     const view=document.querySelector('#memberViewSelect')?.value||localStorage.getItem(MEMBER_VIEW_KEY)||'cards';
-    const list=sortedMembers(activeMembers().filter(m=>{
+    const source=status==='archived'?state.members.filter(m=>m.archived_at):status==='all'?state.members:activeMembers();
+    const list=sortedMembers(source.filter(m=>{
       if(group!=='all'&&!memberGroupIds(m.id).includes(group))return false;
       if(!q)return true;
       return [m.name,m.display_name,m.pronouns,m.description,m.birthday].filter(Boolean).some(v=>String(v).toLowerCase().includes(q));
     }));
     const grid=document.querySelector('#memberGrid');grid.dataset.memberView=view;grid.replaceChildren();
-    document.querySelector('#membersEmpty').hidden=list.length>0;
+    const empty=document.querySelector('#membersEmpty');
+    empty.hidden=list.length>0;
+    const emptyTitle=empty.querySelector('h3'),emptyCopy=empty.querySelector('p');
+    if(emptyTitle)emptyTitle.textContent=status==='archived'?'No archived members found':'No members found';
+    if(emptyCopy)emptyCopy.textContent=status==='archived'?'Archived members will appear here.':'Create a member or import a copy from PluralKit.';
     list.forEach(m=>grid.append(view==='tiles'?makeTileMemberCard(m):makeStandardMemberCard(m)));
   };
 
@@ -341,7 +361,7 @@
       const newAvatarPath=au?.path||importedAvatarPath||old?.avatar_storage_path||null;
       const newBannerPath=bu?.path||importedBannerPath||old?.banner_storage_path||null;
       const metadata={...(old?.metadata||{}),proxy_tags:collectProxyTags(),keep_proxy:Boolean(document.querySelector('#memberKeepProxy')?.checked)};
-      const body={user_id:state.user.id,name:document.querySelector('#memberName').value.trim(),display_name:document.querySelector('#memberDisplayName').value.trim()||null,pronouns:document.querySelector('#memberPronouns').value.trim()||null,color:c?c.slice(1).toLowerCase():null,description:document.querySelector('#memberDescription').value.trim()||null,birthday:document.querySelector('#memberBirthday').value||null,avatar_url:null,avatar_source:newAvatarPath?'supabase':null,avatar_storage_path:newAvatarPath,banner_url:null,banner_source:newBannerPath?'supabase':null,banner_storage_path:newBannerPath,pk_id:old?.pk_id||null,tupper_id:old?.tupper_id||null,metadata,archived_at:null};
+      const body={user_id:state.user.id,name:document.querySelector('#memberName').value.trim(),display_name:document.querySelector('#memberDisplayName').value.trim()||null,pronouns:document.querySelector('#memberPronouns').value.trim()||null,color:c?c.slice(1).toLowerCase():null,description:document.querySelector('#memberDescription').value.trim()||null,birthday:document.querySelector('#memberBirthday').value||null,avatar_url:null,avatar_source:newAvatarPath?'supabase':null,avatar_storage_path:newAvatarPath,banner_url:null,banner_source:newBannerPath?'supabase':null,banner_storage_path:newBannerPath,pk_id:old?.pk_id||null,tupper_id:old?.tupper_id||null,metadata,archived_at:old?.archived_at||null};
       if(!body.name)throw new Error('Name is required.');
       let memberId=id;
       if(id)await nihilityApi.rest('members',{method:'PATCH',query:'id=eq.'+encodeURIComponent(id),body,prefer:'return=minimal'});
