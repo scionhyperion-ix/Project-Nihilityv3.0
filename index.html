@@ -161,6 +161,38 @@
             <p id="pkMessage" class="form-message"></p>
           </article>
           
+          <article class="panel section-panel backup-panel">
+            <p class="eyebrow">Data safety</p>
+            <h3>Backup and restore</h3>
+            <p class="muted">Export your Nihility records as a portable JSON backup. Authentication, account roles, invites, integration credentials, security logs, and private media file bytes are never included.</p>
+            <div class="backup-actions">
+              <button id="exportBackupButton" class="secondary-button" type="button">Download backup</button>
+            </div>
+            <div class="backup-restore-box">
+              <label>Backup file<input id="restoreBackupFile" type="file" accept="application/json,.json"></label>
+              <label>Restore mode
+                <select id="backupRestoreMode">
+                  <option value="merge">Merge missing records</option>
+                  <option value="replace">Replace current Nihility data</option>
+                </select>
+              </label>
+              <div id="restoreConfirmWrap" class="backup-confirm" hidden>
+                <label>Confirmation<input id="restoreConfirmPhrase" autocomplete="off" spellcheck="false" placeholder="Type RESTORE"></label>
+                <small>Replace mode deletes your current members, groups, front history, import history, and app settings before restoring the backup. It does not change authentication or integration credentials.</small>
+              </div>
+              <div class="button-row">
+                <button id="previewBackupButton" class="secondary-button" type="button">Preview backup</button>
+                <button id="restoreBackupButton" class="primary-button" type="button" disabled>Restore backup</button>
+              </div>
+              <div id="backupPreview" class="backup-preview" hidden>
+                <strong id="backupPreviewSummary">Backup summary</strong>
+                <span id="backupPreviewDate"></span>
+                <small id="backupPreviewMedia"></small>
+              </div>
+            </div>
+            <p id="backupMessage" class="form-message"></p>
+          </article>
+
           <article class="panel section-panel"><p class="eyebrow">Data ownership</p><h3>Nihility is primary</h3><div class="prose-stack"><p>Imported members become independent Nihility records.</p><p>Editing a Nihility member does not rewrite PluralKit.</p><p>Fronting changes stay in Nihility unless you manually transfer the current front to PluralKit.</p></div></article>
         </div>
       </section>
@@ -331,8 +363,8 @@
   </dialog>
 
   <script src="assets/js/config.js?v=2" defer></script>
-  <script src="assets/js/api.js?v=13" defer></script>
-  <script src="assets/js/app.js?v=38" defer></script>
+  <script src="assets/js/api.js?v=14" defer></script>
+  <script src="assets/js/app.js?v=39" defer></script>
   <script src="assets/js/rainbow-features.js?v=14" defer></script>
   <script src="assets/js/system-controls.js?v=3" defer></script>
 </body>
