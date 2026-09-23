@@ -3,7 +3,6 @@
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const state={user:null,profile:null,members:[],fronts:[],frontMembers:[],integration:null,pkConnected:false,route:'home'};
 let frontMutationVersion=0;
-let pkMirrorQueue=Promise.resolve();
 
 const THEME_KEY='nihility_appearance_theme';
 const THEMES=[
@@ -231,6 +230,12 @@ function renderHeader(){
 }
 function renderHome(){
   const front=activeFront(),members=front?frontMembers(front.id):[];
+  const transferButton=$('#transferFrontToPkButton');
+  if(transferButton){
+    transferButton.hidden=!state.pkConnected;
+    transferButton.disabled=Boolean(front&&members.some(m=>!m.pk_id));
+    transferButton.title=transferButton.disabled?'Every current fronter must be linked to PluralKit before transfer.':'Send the current Nihility front state to PluralKit now.';
+  }
   $('#currentFrontMembers').replaceChildren();
   const rainbowSubtitle=$('#rainbowFrontSubtitle');if(rainbowSubtitle)rainbowSubtitle.textContent=!members.length?'No one is currently fronting':members.length===1?(label(members[0])+' is currently fronting'):(members.length+' members are currently fronting');
   if(!front||!members.length){
@@ -304,8 +309,8 @@ function renderHistory(){
   state.fronts.forEach(f=>{const row=document.createElement('div');row.className='history-row';const date=document.createElement('div');date.className='history-date';date.textContent=fmt(f.started_at);const members=document.createElement('div');members.className='history-members';const ms=frontMembers(f.id);if(!ms.length){const pill=document.createElement('span');pill.className='mini-member-pill';pill.textContent='Switch out';members.append(pill)}else ms.forEach(m=>{const pill=document.createElement('span');pill.className='mini-member-pill';pill.textContent=label(m);members.append(pill)});row.append(date,members);$('#historyList').append(row)});
 }
 function renderSettings(){
-  renderThemeOptions();  const connected=Boolean(state.integration&&state.pkConnected);$('#pkDisconnected').hidden=connected;$('#pkConnected').hidden=!connected;
-  if(state.integration){$('#pkSystemName').textContent=state.integration.external_system_name||'PluralKit system';$('#pkSystemId').textContent=state.integration.external_system_id||'...';$('#shareFrontingToggle').checked=state.integration.share_fronting_updates!==false}
+  renderThemeOptions();const connected=Boolean(state.integration&&state.pkConnected);$('#pkDisconnected').hidden=connected;$('#pkConnected').hidden=!connected;
+  if(state.integration){$('#pkSystemName').textContent=state.integration.external_system_name||'PluralKit system';$('#pkSystemId').textContent=state.integration.external_system_id||'...'}
 }
 function renderProfile(){
   if(!state.profile)return;
@@ -372,17 +377,29 @@ function buildFrontPicker(selected=[]){
 }
 function openFront(mode='replace',pre=[]){$('input[name="frontMode"][value="'+mode+'"]').checked=true;$('#frontMemberSearch').value='';$('#frontError').hidden=true;$('#customFrontTimeEnabled').checked=false;$('#customFrontTimeRow').hidden=true;buildFrontPicker(pre);$('#frontDialog').showModal()}
 async function mirrorFrontToPk(memberIds,timestamp){
-  if(!state.integration?.share_fronting_updates||!state.pkConnected)return{shared:false};
+  if(!state.pkConnected)return{shared:false,reason:'PluralKit is not connected.'};
   const chosen=memberIds.map(id=>state.members.find(m=>m.id===id)).filter(Boolean);
-  if(chosen.some(m=>!m.pk_id))return{shared:false,reason:'Some selected members are not linked to PluralKit.'};
+  if(chosen.length!==memberIds.length||chosen.some(m=>!m.pk_id))return{shared:false,reason:'Every current fronter must be linked to PluralKit before transfer.'};
   return nihilityApi.secure('pk_mirror_front',{memberIds,timestamp});
 }
-function queueFrontMirror(memberIds,timestamp){
-  pkMirrorQueue=pkMirrorQueue
-    .catch(()=>{})
-    .then(()=>mirrorFrontToPk(memberIds,timestamp))
-    .then(shared=>{if(shared?.reason)toast('Front saved locally',shared.reason)})
-    .catch(error=>toast('Front saved locally','PluralKit sharing failed: '+error.message,'error'));
+async function transferCurrentFrontToPk(){
+  const button=$('#transferFrontToPkButton');
+  if(!state.pkConnected)return toast('PluralKit not connected','Connect PluralKit in Settings first.','error');
+  const front=activeFront();
+  const memberIds=front?frontMembers(front.id).map(m=>m.id):[];
+  if(front&&memberIds.length&&memberIds.some(id=>!state.members.find(m=>m.id===id)?.pk_id)){
+    return toast('Cannot transfer front','One or more current fronters are not linked to PluralKit.','error');
+  }
+  if(button){button.disabled=true;button.textContent='Transferring...'}
+  try{
+    const result=await mirrorFrontToPk(memberIds,new Date().toISOString());
+    if(result?.reason)throw new Error(result.reason);
+    toast('Transferred to PluralKit',memberIds.length?('Sent '+memberIds.length+' current fronter'+(memberIds.length===1?'':'s')+'.'):'Sent a switch-out state.');
+  }catch(error){
+    toast('PluralKit transfer failed',error.message,'error');
+  }finally{
+    if(button){button.disabled=false;button.textContent='Transfer to PK'}
+  }
 }
 function applyCommittedFront(frontId,memberIds,startedAt){
   const previousActive=state.fronts.filter(f=>!f.ended_at);
@@ -441,12 +458,8 @@ async function logFront(memberIds,timestamp){
   if(frontId)applyCommittedFront(frontId,memberIds,startedAt);
   else void refreshFrontState(version);
 
-  // PluralKit sharing is intentionally non-blocking. Nihility is the
-  // authoritative local write, so the UI should not wait on a remote API.
-  queueFrontMirror(memberIds,startedAt);
-
-  // Reconcile just the two fronting tables in the background instead of
-  // re-downloading 600+ members, integrations and private media.
+  // Nihility is authoritative. PluralKit is only updated when the user
+  // explicitly transfers the current front from the Home card.
   void refreshFrontState(version);
 }
 async function saveFront(e){
@@ -456,7 +469,7 @@ async function saveFront(e){
     const mode=$('input[name="frontMode"]:checked')?.value||'replace';let ids=selected;
     if(mode==='add'){const current=activeFront();ids=[...new Set([...(current?frontMembers(current.id).map(m=>m.id):[]),...selected])]}
     let ts=null;if($('#customFrontTimeEnabled').checked){const raw=$('#customFrontTime').value;if(!raw)throw new Error('Enter a valid start time.');ts=new Date(raw).toISOString()}
-    await logFront(ids,ts);$('#frontDialog').close();toast('Front updated',state.integration?.share_fronting_updates?'Nihility saved first. External sharing was attempted.':'Saved only to Nihility.');
+    await logFront(ids,ts);$('#frontDialog').close();toast('Front updated','Saved to Nihility.');
   }catch(error){err.textContent=error.message;err.hidden=false}
 }
 async function quickFront(m){if(!confirm('Start a new front with '+label(m)+' fronting?'))return;await logFront([m.id],null);toast('Front updated',label(m)+' is now fronting.')}
@@ -483,7 +496,6 @@ async function disconnectPk(){
     renderSettings();renderHome();
   }catch(error){message.textContent=error.message}
 }
-async function toggleShare(){if(!state.integration)return;const value=$('#shareFrontingToggle').checked;await nihilityApi.rest('external_integrations',{method:'PATCH',query:'provider=eq.pluralkit',body:{share_fronting_updates:value},prefer:'return=minimal'});state.integration.share_fronting_updates=value;renderHome();toast('Front sharing '+(value?'enabled':'disabled'))}
 async function importPk(){
   const message=$('#pkMessage');message.textContent='Comparing PluralKit with Nihility...';
   try{
@@ -628,10 +640,10 @@ async function signOut(){
 }
 $('#signOutButton').onclick=signOut;$('#deniedSignOut').onclick=signOut;$('#sidebarProfileButton').onclick=()=>setRoute('profile');
 $$('[data-route]').forEach(b=>b.onclick=()=>setRoute(b.dataset.route));$$('[data-route-link]').forEach(b=>b.onclick=()=>setRoute(b.dataset.routeLink));
-$('#openFrontManager').onclick=()=>openFront('replace');$('#chooseAnyMemberButton').onclick=()=>openFront('replace');$('#newFrontButton').onclick=()=>openFront('replace');$('#addCoFronterButton').onclick=()=>openFront('add');$('#switchOutButton').onclick=switchOut;
+$('#openFrontManager').onclick=()=>openFront('replace');$('#chooseAnyMemberButton').onclick=()=>openFront('replace');$('#newFrontButton').onclick=()=>openFront('replace');$('#addCoFronterButton').onclick=()=>openFront('add');$('#transferFrontToPkButton').onclick=transferCurrentFrontToPk;$('#switchOutButton').onclick=switchOut;
 $('#createMemberButton').onclick=()=>openMember();$('#memberSearch').oninput=renderMembers;$('#memberForm').onsubmit=saveMember;$('#deleteMemberButton').onclick=deleteMember;$('#closeMemberDialog').onclick=$('#cancelMemberButton').onclick=()=>$('#memberDialog').close();$('#memberColorPicker').oninput=e=>$('#memberColor').value=e.target.value.toUpperCase();$('#memberColor').oninput=e=>{const c=hex(e.target.value);if(c)$('#memberColorPicker').value=c};
 $('#frontForm').onsubmit=saveFront;$('#closeFrontDialog').onclick=$('#cancelFrontButton').onclick=()=>$('#frontDialog').close();$('#frontMemberSearch').oninput=()=>buildFrontPicker($$('#frontMemberPicker input:checked').map(i=>i.value));$('#customFrontTimeEnabled').onchange=e=>$('#customFrontTimeRow').hidden=!e.target.checked;
-$('#connectPkButton').onclick=connectPk;$('#disconnectPkButton').onclick=disconnectPk;$('#shareFrontingToggle').onchange=toggleShare;$('#importPkButton').onclick=importPk;
+$('#connectPkButton').onclick=connectPk;$('#disconnectPkButton').onclick=disconnectPk;$('#importPkButton').onclick=importPk;
 document.querySelectorAll('input[name="themeMode"]').forEach(i=>i.onchange=()=>applyTheme(i.value));
 $('#profileForm').onsubmit=saveProfile;
 $('#profileBannerUrl').addEventListener('input',()=>{
