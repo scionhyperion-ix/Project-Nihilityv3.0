@@ -129,7 +129,10 @@ const BACKUP_MAX_BYTES=25*1024*1024;
 const UUID_RE=/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
 function ownedStoragePath(userId:string,value:any){
   const path=typeof value==="string"?value:"";
-  return path&&path.startsWith(userId+"/")&&path.length<=512?path:null;
+  if(!path||path.length>512||!path.startsWith(userId+"/")||/[\u0000-\u001f\u007f]/.test(path))return null;
+  const parts=path.split("/");
+  if(parts.some(part=>!part||part==="."||part===".."))return null;
+  return path;
 }
 function sanitizeBackupForUser(userId:string,input:any){
   if(!input||typeof input!=="object"||Array.isArray(input))throw new ClientError("Invalid Nihility backup",400);
@@ -200,11 +203,17 @@ function sanitizeBackupForUser(userId:string,input:any){
   }
   for(const row of arrays.fronts){
     const start=String(row.started_at||"");
-    if(!Number.isFinite(Date.parse(start)))throw new ClientError("Backup contains an invalid front timestamp",400);
-    if(row.ended_at&&(!Number.isFinite(Date.parse(String(row.ended_at)))||Date.parse(String(row.ended_at))<Date.parse(start))){
+    const startMs=Date.parse(start);
+    if(!Number.isFinite(startMs))throw new ClientError("Backup contains an invalid front timestamp",400);
+    if(startMs>Date.now()+5*60*1000)throw new ClientError("Backup contains a front timestamp in the future",400);
+    if(row.ended_at&&(!Number.isFinite(Date.parse(String(row.ended_at)))||Date.parse(String(row.ended_at))<startMs)){
       throw new ClientError("Backup contains an invalid front time range",400);
     }
+    if(row.source!=null&&!["nihility","pluralkit","tupperbox"].includes(String(row.source)))throw new ClientError("Backup contains an invalid front source",400);
     delete row.user_id;
+  }
+  for(const row of arrays.imports){
+    if(!["nihility","pluralkit","tupperbox"].includes(String(row.source||"")))throw new ClientError("Backup contains an invalid import source",400);
   }
   for(const row of [...arrays.member_groups,...arrays.front_members,...arrays.imports])delete row.user_id;
 
