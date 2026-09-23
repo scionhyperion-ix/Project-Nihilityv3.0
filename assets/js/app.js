@@ -4,6 +4,7 @@ const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const state={user:null,profile:null,members:[],fronts:[],frontMembers:[],integration:null,pkConnected:false,pkImported:false,route:'home'};
 let frontMutationVersion=0;
 let pendingPkSyncComparison=null;
+let pendingBackupRestore=null;
 
 const THEME_KEY='nihility_appearance_theme';
 const THEMES=[
@@ -762,6 +763,90 @@ async function boot(){
 $('#loginForm').onsubmit=async e=>{e.preventDefault();const m=$('#loginMessage'),email=$('#emailInput').value.trim(),password=$('#passwordInput').value;if(!password){m.textContent='Enter your password, or use the magic-link button.';return}m.textContent='Signing in...';try{await nihilityApi.signInWithPassword(email,password);location.reload()}catch(error){m.textContent=error.message}};
 $('#magicLinkButton').onclick=async()=>{const m=$('#loginMessage'),email=$('#emailInput').value.trim();if(!email){m.textContent='Enter your email first.';return}m.textContent='Sending...';try{await nihilityApi.sendMagicLink(email);m.textContent='Check your email, then open the sign-in link in this browser.'}catch(error){m.textContent=error.message}};
 $('#forgotPasswordButton').onclick=async()=>{const m=$('#loginMessage'),email=$('#emailInput').value.trim();if(!email){m.textContent='Enter your email first.';return}m.textContent='Sending password reset...';try{await nihilityApi.sendPasswordReset(email);m.textContent='Check your email, then open the reset link in this browser.'}catch(error){m.textContent=error.message}};
+function backupFilename(exportedAt){
+  const date=exportedAt?new Date(exportedAt):new Date();
+  const stamp=Number.isFinite(date.getTime())?date.toISOString().replace(/[:.]/g,'-'):'backup';
+  return 'project-nihility-backup-'+stamp+'.json';
+}
+async function exportBackup(){
+  const button=$('#exportBackupButton'),message=$('#backupMessage');
+  button.disabled=true;message.textContent='Preparing encrypted-account data export...';
+  try{
+    const result=await nihilityApi.secure('backup_export');
+    const backup=result?.backup;
+    if(!backup)throw new Error('Backup export returned no data.');
+    const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const link=document.createElement('a');
+    link.href=url;link.download=backupFilename(backup.exported_at);
+    document.body.append(link);link.click();link.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+    message.textContent='Backup downloaded. Authentication, invites, integration secrets, security logs, and media file bytes are intentionally excluded.';
+  }catch(error){message.textContent=error.message}
+  finally{button.disabled=false}
+}
+function clearBackupPreview(){
+  pendingBackupRestore=null;
+  const box=$('#backupPreview');
+  if(box)box.hidden=true;
+  const restore=$('#restoreBackupButton');
+  if(restore)restore.disabled=true;
+  const phrase=$('#restoreConfirmPhrase');
+  if(phrase)phrase.value='';
+}
+function backupSummaryText(summary){
+  return [
+    (summary.members||0)+' members',
+    (summary.archived_members||0)+' archived',
+    (summary.groups||0)+' groups',
+    (summary.fronts||0)+' fronts',
+    (summary.front_members||0)+' front-member links'
+  ].join(' • ');
+}
+async function previewBackup(){
+  const input=$('#restoreBackupFile'),file=input.files?.[0],message=$('#backupMessage');
+  clearBackupPreview();
+  if(!file){message.textContent='Choose a Nihility backup JSON file first.';return}
+  if(file.size>25*1024*1024){message.textContent='Backup files are limited to 25 MB in this version.';return}
+  const button=$('#previewBackupButton');button.disabled=true;message.textContent='Validating backup securely...';
+  try{
+    const preview=await nihilityApi.secureFile('backup_restore_preview',file);
+    pendingBackupRestore={file,hash:preview.hash,summary:preview.summary,exportedAt:preview.exported_at};
+    $('#backupPreviewSummary').textContent=backupSummaryText(preview.summary||{});
+    $('#backupPreviewDate').textContent=preview.exported_at?'Exported '+fmt(preview.exported_at):'Export date unavailable';
+    $('#backupPreviewMedia').textContent=preview.media_note||'Private media bytes are not embedded in this backup.';
+    $('#backupPreview').hidden=false;
+    $('#restoreBackupButton').disabled=false;
+    message.textContent='Backup passed validation. Review the restore mode before applying it.';
+  }catch(error){message.textContent=error.message}
+  finally{button.disabled=false}
+}
+async function applyBackupRestore(){
+  const message=$('#backupMessage');
+  if(!pendingBackupRestore){message.textContent='Preview the backup first.';return}
+  const mode=$('#backupRestoreMode').value;
+  if(mode==='replace'){
+    if($('#restoreConfirmPhrase').value.trim()!=='RESTORE'){
+      message.textContent='Type RESTORE exactly before replacing current data.';return;
+    }
+    if(!confirm('Replace your current Nihility members, groups, front history, import history, and app settings with this backup? Authentication and integration credentials are not changed.'))return;
+  }else if(!confirm('Merge missing records from this backup into Nihility? Existing records with the same IDs will be kept.'))return;
+
+  const button=$('#restoreBackupButton');button.disabled=true;message.textContent='Restoring backup in a database transaction...';
+  try{
+    const result=await nihilityApi.secureFile('backup_restore_apply',pendingBackupRestore.file,{mode,previewHash:pendingBackupRestore.hash});
+    await loadData();renderAll();
+    const counts=result?.result||{};
+    message.textContent='Restore complete. '+[
+      counts.members_inserted||0+' members',
+      counts.groups_inserted||0+' groups',
+      counts.fronts_inserted||0+' fronts'
+    ].join(', ')+'.';
+    $('#restoreBackupFile').value='';clearBackupPreview();
+    toast('Backup restored',mode==='replace'?'Current Nihility data was replaced safely.':'Missing backup records were merged.');
+  }catch(error){message.textContent=error.message;button.disabled=false}
+}
+
 async function verifyNewPassword(password,message){
   if(password.length<12){message.textContent='Use at least 12 characters for your password.';return false}
   if(!/[a-z]/.test(password)||!/[A-Z]/.test(password)||!/\d/.test(password)||!/[^A-Za-z0-9]/.test(password)){
@@ -791,6 +876,7 @@ $('#openFrontManager').onclick=()=>openFront('replace');$('#chooseAnyMemberButto
 $('#createMemberButton').onclick=()=>openMember();$('#memberSearch').oninput=()=>renderMembers();$('#memberForm').onsubmit=saveMember;$('#deleteMemberButton').onclick=deleteMember;$('#restoreMemberButton').onclick=restoreMember;$('#permanentDeleteMemberButton').onclick=permanentlyDeleteMember;$('#closeMemberDialog').onclick=$('#cancelMemberButton').onclick=()=>$('#memberDialog').close();$('#memberColorPicker').oninput=e=>$('#memberColor').value=e.target.value.toUpperCase();$('#memberColor').oninput=e=>{const c=hex(e.target.value);if(c)$('#memberColorPicker').value=c};
 $('#frontForm').onsubmit=saveFront;$('#closeFrontDialog').onclick=$('#cancelFrontButton').onclick=()=>$('#frontDialog').close();$('#frontMemberSearch').oninput=()=>buildFrontPicker($$('#frontMemberPicker input:checked').map(i=>i.value));$('#customFrontTimeEnabled').onchange=e=>$('#customFrontTimeRow').hidden=!e.target.checked;
 $('#connectPkButton').onclick=connectPk;$('#disconnectPkButton').onclick=disconnectPk;$('#importPkButton').onclick=importPk;
+$('#exportBackupButton').onclick=exportBackup;$('#previewBackupButton').onclick=previewBackup;$('#restoreBackupButton').onclick=applyBackupRestore;$('#restoreBackupFile').onchange=()=>{clearBackupPreview();$('#backupMessage').textContent='Backup selected. Preview it before restoring.'};$('#backupRestoreMode').onchange=()=>{$('#restoreConfirmWrap').hidden=$('#backupRestoreMode').value!=='replace'};
 $('#closePkSyncDialog').onclick=$('#cancelPkSyncButton').onclick=()=>$('#pkSyncDialog').close();$('#applyPkSyncButton').onclick=applyPkSync;
 document.querySelectorAll('input[name="themeMode"]').forEach(i=>i.onchange=()=>applyTheme(i.value));
 $('#profileForm').onsubmit=saveProfile;
