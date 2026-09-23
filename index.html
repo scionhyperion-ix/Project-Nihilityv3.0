@@ -116,7 +116,7 @@
           <article class="panel current-front-panel">
             <div class="panel-heading"><div><p class="eyebrow">Current front</p><h3 id="currentFrontHeading">Nobody is fronting</h3></div><span id="frontDuration" class="soft-pill">--</span></div>
             <div id="currentFrontMembers" class="current-front-members"></div>
-            <div class="panel-actions"><button id="addCoFronterButton" class="secondary-button" type="button">Add co-fronter</button><button id="switchOutButton" class="text-button danger-text" type="button">Switch out</button></div>
+            <div class="panel-actions"><button id="addCoFronterButton" class="secondary-button" type="button">Add co-fronter</button><button id="transferFrontToPkButton" class="secondary-button" type="button" hidden>Transfer to PK</button><button id="switchOutButton" class="text-button danger-text" type="button">Switch out</button></div>
           </article>
 
           <article class="panel system-summary-panel">
@@ -128,7 +128,7 @@
 
         <article class="panel section-panel">
           <div class="panel-heading split-heading"><div><p class="eyebrow">Quick front</p><h3>Frequent members</h3></div><button id="chooseAnyMemberButton" class="text-button" type="button">Choose member</button></div>
-          <p class="muted section-copy">Selecting a member starts a new Nihility front. PluralKit is updated too when front sharing is enabled.</p>
+          <p class="muted section-copy">Selecting a member starts a new Nihility front. PluralKit is only updated when you manually transfer the current front.</p>
           <div id="frequentMembers" class="member-chip-grid"></div>
         </article>
 
@@ -157,11 +157,11 @@
           <article class="panel section-panel">
             <p class="eyebrow">Integrations</p><h3>PluralKit</h3><p class="muted">Optional. Nihility keeps its own data after import.</p>
             <div id="pkDisconnected"><label>PluralKit token<input id="pkTokenInput" type="password" autocomplete="off" placeholder="Paste token from pk;token"></label><div class="security-note"><strong>Server protected</strong><p>The token is encrypted by Nihility's backend and is not saved in this browser.</p></div><button id="connectPkButton" class="secondary-button" type="button">Connect PluralKit</button></div>
-            <div id="pkConnected" hidden><dl class="detail-list"><div><dt>System</dt><dd id="pkSystemName">Connected</dd></div><div><dt>System ID</dt><dd id="pkSystemId">...</dd></div></dl><label class="toggle-row"><span><strong>Share fronting updates</strong><small>New Nihility fronts are mirrored to PluralKit when linked.</small></span><input id="shareFrontingToggle" type="checkbox" checked></label><div class="button-row"><button id="importPkButton" class="secondary-button" type="button">Import system</button><button id="disconnectPkButton" class="text-button danger-text" type="button">Disconnect</button></div></div>
+            <div id="pkConnected" hidden><dl class="detail-list"><div><dt>System</dt><dd id="pkSystemName">Connected</dd></div><div><dt>System ID</dt><dd id="pkSystemId">...</dd></div></dl><p class="muted">Fronts stay in Nihility until you press <strong>Transfer to PK</strong> on the Home current-front card.</p><div class="button-row"><button id="importPkButton" class="secondary-button" type="button">Import system</button><button id="disconnectPkButton" class="text-button danger-text" type="button">Disconnect</button></div></div>
             <p id="pkMessage" class="form-message"></p>
           </article>
           
-          <article class="panel section-panel"><p class="eyebrow">Data ownership</p><h3>Nihility is primary</h3><div class="prose-stack"><p>Imported members become independent Nihility records.</p><p>Editing a Nihility member does not rewrite PluralKit.</p><p>Front sharing is the only automatic external update.</p></div></article>
+          <article class="panel section-panel"><p class="eyebrow">Data ownership</p><h3>Nihility is primary</h3><div class="prose-stack"><p>Imported members become independent Nihility records.</p><p>Editing a Nihility member does not rewrite PluralKit.</p><p>Fronting changes stay in Nihility unless you manually transfer the current front to PluralKit.</p></div></article>
         </div>
       </section>
 
@@ -309,7 +309,7 @@
 
   <script src="assets/js/config.js?v=2" defer></script>
   <script src="assets/js/api.js?v=13" defer></script>
-  <script src="assets/js/app.js?v=31" defer></script>
+  <script src="assets/js/app.js?v=32" defer></script>
   <script src="assets/js/rainbow-features.js?v=13" defer></script>
   <script src="assets/js/system-controls.js?v=3" defer></script>
 </body>
