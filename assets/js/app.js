@@ -4,6 +4,7 @@ const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const state={user:null,profile:null,members:[],fronts:[],frontMembers:[],integration:null,pkConnected:false,pkImported:false,route:'home'};
 let frontMutationVersion=0;
 let pendingPkSyncComparison=null;
+let pendingBackupRestore=null;
 
 const THEME_KEY='nihility_appearance_theme';
 const THEMES=[
@@ -323,6 +324,7 @@ function renderSettings(){
   renderThemeOptions();const connected=Boolean(state.integration&&state.pkConnected);$('#pkDisconnected').hidden=connected;$('#pkConnected').hidden=!connected;
   const importButton=$('#importPkButton');if(importButton)importButton.textContent=state.pkImported?'Sync PK':'Import system';
   if(state.integration){$('#pkSystemName').textContent=state.integration.external_system_name||'PluralKit system';$('#pkSystemId').textContent=state.integration.external_system_id||'...'}
+  const backupPanel=$('#backupPanel');if(backupPanel)backupPanel.hidden=state.profile?.role!=='owner';
 }
 function renderProfile(){
   if(!state.profile)return;
@@ -340,6 +342,199 @@ function renderProfile(){
     banner.classList.toggle('has-profile-banner',Boolean(url));
   }
   renderHeader();
+}
+
+
+function backupFilename(extension){
+  const now=new Date();
+  const stamp=[
+    now.getFullYear(),
+    String(now.getMonth()+1).padStart(2,'0'),
+    String(now.getDate()).padStart(2,'0')
+  ].join('-')+'_'+[
+    String(now.getHours()).padStart(2,'0'),
+    String(now.getMinutes()).padStart(2,'0')
+  ].join('-');
+  return 'project-nihility-backup_'+stamp+'.'+extension;
+}
+function formatBytes(value){
+  const bytes=Math.max(0,Number(value)||0);
+  if(bytes<1024)return bytes+' B';
+  if(bytes<1024*1024)return (bytes/1024).toFixed(bytes<10240?1:0)+' KB';
+  if(bytes<1024*1024*1024)return (bytes/(1024*1024)).toFixed(bytes<10*1024*1024?1:0)+' MB';
+  return (bytes/(1024*1024*1024)).toFixed(2)+' GB';
+}
+function setBackupExportBusy(busy){
+  const json=$('#exportBackupJsonButton'),media=$('#exportBackupMediaButton'),preview=$('#previewRestoreButton');
+  if(json)json.disabled=busy;
+  if(media)media.disabled=busy;
+  if(preview)preview.disabled=busy||!$('#backupFileInput')?.files?.[0];
+}
+async function exportBackup(includeMedia=false){
+  if(state.profile?.role!=='owner')return;
+  const message=$('#backupMessage');
+  setBackupExportBusy(true);
+  message.textContent='Preparing secure backup...';
+  try{
+    const backup=await nihilityApi.secure('backup_export');
+    if(includeMedia){
+      const result=await nihilityBackup.createMediaZip(
+        backup,
+        (kind,path)=>nihilityApi.privateMediaBlob(kind,path),
+        progress=>{
+          if(progress.phase==='media')message.textContent='Collecting private media... '+Math.min(progress.current+1,progress.total)+' / '+progress.total;
+          else if(progress.phase==='packing')message.textContent='Packing backup... '+progress.current+' / '+progress.total;
+        }
+      );
+      nihilityBackup.download(result.blob,backupFilename('zip'));
+      message.textContent='ZIP backup created with '+(result.total-result.missing)+' of '+result.total+' private media file'+(result.total===1?'':'s')+'.'+(result.missing?' '+result.missing+' media file'+(result.missing===1?' was':'s were')+' unavailable and marked as omitted.':'');
+      toast('Backup created','System data and private media were exported.');
+    }else{
+      const blob=await nihilityBackup.createJsonBackup(backup);
+      nihilityBackup.download(blob,backupFilename('json'));
+      message.textContent='JSON backup created. Private media files are not included in this format.';
+      toast('Backup created','Portable system data was exported.');
+    }
+  }catch(error){
+    message.textContent=error.message;
+  }finally{
+    setBackupExportBusy(false);
+  }
+}
+function backupCountLabel(key){
+  return ({
+    members:'Members',
+    groups:'Groups',
+    member_groups:'Group memberships',
+    fronts:'Front records',
+    front_members:'Fronter timing rows',
+    imports:'Import records'
+  })[key]||key;
+}
+function addBackupPreviewRow(container,labelText,currentValue,backupValue){
+  const row=document.createElement('div');row.className='backup-preview-row';
+  const label=document.createElement('span');label.textContent=labelText;
+  const current=document.createElement('span');current.className='backup-preview-current';current.textContent=String(currentValue??0);
+  const arrow=document.createElement('span');arrow.className='backup-preview-arrow';arrow.textContent='→';
+  const next=document.createElement('strong');next.textContent=String(backupValue??0);
+  row.append(label,current,arrow,next);container.append(row);
+}
+function renderBackupRestorePreview(result,parsed){
+  const box=$('#backupRestorePreview');box.replaceChildren();
+  const meta=document.createElement('div');meta.className='backup-preview-meta';
+  const title=document.createElement('strong');title.textContent='Backup contents';
+  const date=document.createElement('span');
+  const raw=result?.backup?.exported_at;
+  date.textContent=raw&&Number.isFinite(Date.parse(raw))?'Created '+new Date(raw).toLocaleString():'Creation time unavailable';
+  meta.append(title,date);box.append(meta);
+
+  const heading=document.createElement('div');heading.className='backup-preview-columns';
+  const blank=document.createElement('span');blank.textContent='Data';
+  const current=document.createElement('span');current.textContent='Current';
+  const next=document.createElement('span');next.textContent='Backup';
+  heading.append(blank,current,next);box.append(heading);
+
+  const counts=result?.backup?.counts||{};
+  const existing=result?.current||{};
+  ['members','groups','member_groups','fronts','front_members','imports'].forEach(key=>{
+    addBackupPreviewRow(box,backupCountLabel(key),existing[key]||0,counts[key]||0);
+  });
+
+  const media=document.createElement('div');media.className='backup-media-summary';
+  const mediaStrong=document.createElement('strong');mediaStrong.textContent='Private media';
+  const mediaText=document.createElement('span');
+  const total=result?.backup?.media?.total||0;
+  const included=result?.backup?.media?.included||0;
+  mediaText.textContent=parsed?.isZip
+    ?included+' of '+total+' media file'+(total===1?'':'s')+' included'
+    :'Not included in JSON backup';
+  media.append(mediaStrong,mediaText);box.append(media);
+
+  const warnings=(result?.warnings||[]).filter(Boolean);
+  if(warnings.length){
+    const list=document.createElement('ul');list.className='backup-preview-warnings';
+    warnings.forEach(value=>{const item=document.createElement('li');item.textContent=value;list.append(item)});
+    box.append(list);
+  }
+}
+async function previewBackupRestore(){
+  const file=$('#backupFileInput')?.files?.[0];
+  const message=$('#backupMessage');
+  if(!file){message.textContent='Choose a backup file first.';return}
+  const button=$('#previewRestoreButton');
+  button.disabled=true;message.textContent='Reading and validating backup...';
+  try{
+    const parsed=await nihilityBackup.readBackupFile(file);
+    const preview=await nihilityApi.secureBackup('backup_preview',parsed.backup);
+    pendingBackupRestore={parsed,preview,file};
+    renderBackupRestorePreview(preview,parsed);
+    $('#backupRestoreConfirmInput').value='';
+    $('#applyBackupRestoreButton').disabled=true;
+    $('#backupRestoreMessage').textContent='';
+    $('#backupRestoreDialog').showModal();
+    message.textContent='Backup validated. Review the replacement preview before restoring.';
+  }catch(error){
+    pendingBackupRestore=null;
+    message.textContent=error.message;
+  }finally{
+    button.disabled=!file;
+  }
+}
+function closeBackupRestoreDialog(){
+  $('#backupRestoreDialog').close();
+  $('#backupRestoreConfirmInput').value='';
+  $('#applyBackupRestoreButton').disabled=true;
+  $('#backupRestoreMessage').textContent='';
+}
+async function applyBackupRestore(){
+  if(!pendingBackupRestore)return;
+  const confirmInput=$('#backupRestoreConfirmInput');
+  const button=$('#applyBackupRestoreButton');
+  const message=$('#backupRestoreMessage');
+  if(confirmInput.value!=='RESTORE'){message.textContent='Type RESTORE exactly to continue.';return}
+
+  button.disabled=true;confirmInput.disabled=true;
+  const parsed=pendingBackupRestore.parsed;
+  const backup=parsed.backup;
+  const mediaPaths={};
+  const uploaded=[];
+  let restoreRequestStarted=false;
+
+  try{
+    const media=(Array.isArray(backup.media)?backup.media:[]).filter(item=>item?.included===true);
+    for(let i=0;i<media.length;i++){
+      const item=media[i];
+      message.textContent='Verifying and restoring private media... '+(i+1)+' / '+media.length;
+      const blob=await nihilityBackup.verifiedMediaBlob(parsed,item);
+      const result=await nihilityApi.upload(item.kind,blob);
+      mediaPaths[item.key]=result.path;
+      uploaded.push({kind:item.kind,path:result.path});
+    }
+
+    message.textContent='Replacing Nihility data in one database transaction...';
+    restoreRequestStarted=true;
+    const result=await nihilityApi.secureBackup('backup_restore',backup,{confirmation:'RESTORE',mediaPaths});
+
+    pendingBackupRestore=null;
+    closeBackupRestoreDialog();
+    $('#backupFileInput').value='';
+    $('#backupFileSummary').textContent='Choose a Nihility JSON or ZIP backup to inspect it.';
+    $('#previewRestoreButton').disabled=true;
+    $('#backupMessage').textContent='Restore complete: '+(result.members||0)+' members, '+(result.groups||0)+' groups, and '+(result.fronts||0)+' front records restored.';
+    await bootstrapProfile();
+    window.nihilitySystemLiveCache={value:null,at:0};
+    await loadData();
+    setRoute('home');
+    toast('Backup restored','Your portable Nihility data has been replaced from the backup.');
+  }catch(error){
+    message.textContent=error.message;
+    if(!restoreRequestStarted&&uploaded.length){
+      await Promise.allSettled(uploaded.map(item=>nihilityApi.deleteMedia(item.kind,item.path)));
+    }
+  }finally{
+    confirmInput.disabled=false;
+    button.disabled=confirmInput.value!=='RESTORE'||!pendingBackupRestore;
+  }
 }
 
 function resetMemberForm(){$('#memberForm').reset();$('#memberId').value='';$('#memberColorPicker').value='#8b7cf6';$('#memberError').hidden=true;$('#deleteMemberButton').hidden=true;$('#restoreMemberButton').hidden=true;$('#permanentDeleteMemberButton').hidden=true}
@@ -794,6 +989,21 @@ $('#connectPkButton').onclick=connectPk;$('#disconnectPkButton').onclick=disconn
 $('#closePkSyncDialog').onclick=$('#cancelPkSyncButton').onclick=()=>$('#pkSyncDialog').close();$('#applyPkSyncButton').onclick=applyPkSync;
 document.querySelectorAll('input[name="themeMode"]').forEach(i=>i.onchange=()=>applyTheme(i.value));
 $('#profileForm').onsubmit=saveProfile;
+$('#exportBackupJsonButton').onclick=()=>exportBackup(false);
+$('#exportBackupMediaButton').onclick=()=>exportBackup(true);
+$('#backupFileInput').onchange=event=>{
+  pendingBackupRestore=null;
+  const file=event.target.files?.[0]||null;
+  $('#backupFileSummary').textContent=file?(file.name+' · '+formatBytes(file.size)):'Choose a Nihility JSON or ZIP backup to inspect it.';
+  $('#previewRestoreButton').disabled=!file;
+  $('#backupMessage').textContent='';
+};
+$('#previewRestoreButton').onclick=previewBackupRestore;
+$('#closeBackupRestoreDialog').onclick=$('#cancelBackupRestoreButton').onclick=closeBackupRestoreDialog;
+$('#backupRestoreConfirmInput').oninput=event=>{
+  $('#applyBackupRestoreButton').disabled=event.target.value!=='RESTORE'||!pendingBackupRestore;
+};
+$('#applyBackupRestoreButton').onclick=applyBackupRestore;
 $('#profileBannerUrl').addEventListener('input',()=>{
   // External URLs are copied server-side on save. Do not fetch them directly
   // in the browser, which would disclose the user's IP to the image host.
