@@ -190,3 +190,13 @@ dialog{padding:0}.modal-card{border-radius:18px;padding:20px}.modal-header{margi
 .login-card #loginMessage:empty{display:none}
 
 .member-card.archived-member{opacity:.78;filter:saturate(.72)}.member-archived-badge{position:absolute;top:12px;right:12px;padding:5px 8px;border:1px solid var(--line-strong);border-radius:999px;background:rgba(10,11,20,.82);color:var(--muted);font-size:.68rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase}.member-lifecycle-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.member-lifecycle-actions .danger-button{background:rgba(255,87,112,.06)}
+
+.backup-panel{display:grid;gap:12px}
+.backup-panel h3{margin-bottom:0}
+.backup-actions{display:flex;gap:10px;flex-wrap:wrap}
+.backup-restore-box{display:grid;gap:12px;margin-top:4px;padding-top:15px;border-top:1px solid var(--line)}
+.backup-restore-box>label{display:grid;gap:7px}
+.backup-confirm{display:grid;gap:7px;padding:12px;border:1px solid rgba(255,140,155,.2);border-radius:12px;background:rgba(255,87,112,.055)}
+.backup-confirm small,.backup-preview small{color:var(--muted);line-height:1.45}
+.backup-preview{display:grid;gap:5px;padding:12px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.035)}
+.backup-preview span{color:var(--muted);font-size:.8rem}
