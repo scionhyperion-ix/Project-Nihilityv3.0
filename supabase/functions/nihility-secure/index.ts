@@ -796,7 +796,7 @@ async function buildPkSyncComparison(user:any,token:string){
       toPk:{count:membershipPush.length,items:trimSyncItems(membershipPush)},
       conflicts:{count:membershipConflicts.length,items:trimSyncItems(membershipConflicts)}
     },
-    mediaNote:"PluralKit image changes can be pulled into Nihility. Private Nihility uploads are not published to PluralKit."
+    mediaNote:"Two-way sync covers member/group details and group memberships. Private image files are left unchanged because PluralKit requires publicly accessible image URLs."
   };
 }
 async function actionPkSyncCompare(user:any){
@@ -914,19 +914,11 @@ async function actionPkSyncApply(user:any,body:any){
     }
     if(Object.keys(remotePatch).length){
       const blocked=validatePkMemberPayload(remotePatch);
-      if(blocked){result.blocked.push(labelSyncItem(local)+": "+blocked)}
-      else await pk(token,"/members/"+encodeURIComponent(remote.id),{method:"PATCH",body:JSON.stringify(remotePatch)});
-    }
-    const pkAvatar=remote.avatar_url||null,pkBanner=remote.banner||remote.banner_url||null;
-    if((metadata.pk_avatar_url||null)!==pkAvatar){
-      if(pkAvatar){try{localPatch.avatar_storage_path=await storeImage(user.id,"avatar",pkAvatar);localPatch.avatar_source="supabase";localPatch.avatar_url=null}catch{}}
-      else{localPatch.avatar_storage_path=null;localPatch.avatar_source=null;localPatch.avatar_url=null}
-      metadata.pk_avatar_url=pkAvatar;localChanged=true;
-    }
-    if((metadata.pk_banner_url||null)!==pkBanner){
-      if(pkBanner){try{localPatch.banner_storage_path=await storeImage(user.id,"banner",pkBanner);localPatch.banner_source="supabase";localPatch.banner_url=null}catch{}}
-      else{localPatch.banner_storage_path=null;localPatch.banner_source=null;localPatch.banner_url=null}
-      metadata.pk_banner_url=pkBanner;localChanged=true;
+      if(blocked){
+        result.blocked.push(labelSyncItem(local)+": "+blocked);
+        for(const field of Object.keys(remotePatch))delete nextBaseline[field];
+        remoteChanged=false;
+      }else await pk(token,"/members/"+encodeURIComponent(remote.id),{method:"PATCH",body:JSON.stringify(remotePatch)});
     }
     metadata.pk_sync_v1={...(metadata.pk_sync_v1||{}),fields:nextBaseline};
     if(localChanged||remoteChanged||!syncEqual(local.metadata?.pk_sync_v1?.fields,nextBaseline)){
@@ -956,19 +948,11 @@ async function actionPkSyncApply(user:any,body:any){
     }
     if(Object.keys(remotePatch).length){
       const blocked=validatePkGroupPayload(remotePatch);
-      if(blocked){result.blocked.push(labelSyncItem(local)+": "+blocked)}
-      else await pk(token,"/groups/"+encodeURIComponent(remote.id),{method:"PATCH",body:JSON.stringify(remotePatch)});
-    }
-    const pkIcon=remote.icon||remote.icon_url||null,pkBanner=remote.banner||remote.banner_url||null;
-    if((metadata.pk_icon_url||null)!==pkIcon){
-      if(pkIcon){try{localPatch.icon_storage_path=await storeImage(user.id,"avatar",pkIcon)}catch{}}
-      else localPatch.icon_storage_path=null;
-      metadata.pk_icon_url=pkIcon;metadata.icon_storage_path=localPatch.icon_storage_path??metadata.icon_storage_path??null;localChanged=true;
-    }
-    if((metadata.pk_banner_url||null)!==pkBanner){
-      if(pkBanner){try{metadata.banner_storage_path=await storeImage(user.id,"banner",pkBanner)}catch{}}
-      else metadata.banner_storage_path=null;
-      metadata.pk_banner_url=pkBanner;localChanged=true;
+      if(blocked){
+        result.blocked.push(labelSyncItem(local)+": "+blocked);
+        for(const field of Object.keys(remotePatch))delete nextBaseline[field];
+        remoteChanged=false;
+      }else await pk(token,"/groups/"+encodeURIComponent(remote.id),{method:"PATCH",body:JSON.stringify(remotePatch)});
     }
     metadata.pk_sync_v1={...(metadata.pk_sync_v1||{}),fields:nextBaseline};
     if(localChanged||remoteChanged||!syncEqual(local.metadata?.pk_sync_v1?.fields,nextBaseline)){
