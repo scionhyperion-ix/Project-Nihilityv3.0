@@ -519,35 +519,55 @@ async function importPk(){
         const batch=missing.slice(offset,offset+10);
         const result=await nihilityApi.secure('pk_import',{memberIds:batch});
         added+=result.added||0;skipped+=result.skipped||0;mediaCopied+=result.mediaCopied||0;
-        message.textContent='Importing new members... '+Math.min(offset+batch.length,missing.length)+' / '+missing.length;
+        message.textContent=(wasImported?'Syncing':'Importing')+' new members... '+Math.min(offset+batch.length,missing.length)+' / '+missing.length;
       }
-    }else{
-      message.textContent='Members already up to date. Checking front history...';
     }
 
-    let before=null,frontAdded=0,frontSkipped=0,unresolved=0,batches=0;
-    do{
-      message.textContent='Checking front history... '+frontAdded+' new';
-      const result=await nihilityApi.secure('pk_import_fronts',{before,limit:100});
-      frontAdded+=result.added||0;frontSkipped+=result.skipped||0;unresolved+=result.unresolved||0;
-      before=result.nextBefore||null;batches++;
-      if(!result.processed||batches>=100)break;
-    }while(before);
+    message.textContent='Syncing member and group changes...';
+    const directory=await nihilityApi.secure('pk_import_groups');
+
+    let frontAdded=0,frontSkipped=0,unresolvedFronts=0,batches=0;
+    if(!wasImported){
+      let before=null;
+      do{
+        message.textContent='Importing front history... '+frontAdded+' new';
+        const result=await nihilityApi.secure('pk_import_fronts',{before,limit:100});
+        frontAdded+=result.added||0;frontSkipped+=result.skipped||0;unresolvedFronts+=result.unresolved||0;
+        before=result.nextBefore||null;batches++;
+        if(!result.processed||batches>=100)break;
+      }while(before);
+    }
 
     await nihilityApi.rest('imports',{method:'POST',body:{user_id:state.user.id,source:'pluralkit',summary:{
       members_total:comparison.memberTotal||0,
-      members_compared:comparison.memberLinked||0,
       members_missing:missing.length,
       members_added:added,
-      members_skipped:skipped,
-      media_copied:mediaCopied,
+      members_updated:directory.membersUpdated||0,
+      members_unchanged:directory.membersUnchanged||0,
+      member_media_copied:(mediaCopied||0)+(directory.memberMediaCopied||0),
+      groups_total:directory.groupTotal||0,
+      groups_added:directory.added||0,
+      groups_updated:directory.updated||0,
+      groups_unchanged:directory.unchanged||0,
+      group_memberships_added:directory.membershipsAdded||0,
+      group_memberships_removed:directory.membershipsRemoved||0,
+      groups_unresolved:directory.unresolved||0,
       fronts_added:frontAdded,
       fronts_skipped:frontSkipped,
-      front_members_unresolved:unresolved
+      front_members_unresolved:unresolvedFronts
     }},prefer:'return=minimal'});
 
     state.pkImported=true;
-    message.textContent=(wasImported?'Sync complete: ':'Import complete: ')+missing.length+' missing member'+(missing.length===1?'':'s')+' found, '+added+' imported, '+frontAdded+' new front-history entr'+(frontAdded===1?'y':'ies')+' added.'+(unresolved?' '+unresolved+' historical member links could not be matched.':'');
+    const parts=[
+      added+' member'+(added===1?'':'s')+' added',
+      (directory.membersUpdated||0)+' member'+((directory.membersUpdated||0)===1?'':'s')+' updated',
+      (directory.added||0)+' group'+((directory.added||0)===1?'':'s')+' added',
+      (directory.updated||0)+' group'+((directory.updated||0)===1?'':'s')+' updated',
+      (directory.membershipsAdded||0)+' membership'+((directory.membershipsAdded||0)===1?'':'s')+' added',
+      (directory.membershipsRemoved||0)+' membership'+((directory.membershipsRemoved||0)===1?'':'s')+' removed'
+    ];
+    if(!wasImported)parts.push(frontAdded+' front-history entr'+(frontAdded===1?'y':'ies')+' added');
+    message.textContent=(wasImported?'Sync complete: ':'Import complete: ')+parts.join(', ')+'.';
     await loadData();
   }catch(error){message.textContent=error.message}
   finally{if(button){button.disabled=false;button.textContent=state.pkImported?'Sync PK':'Import system'}}
