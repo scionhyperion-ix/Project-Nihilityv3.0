@@ -1656,6 +1656,10 @@ const BACKUP_LIMITS={
   fronts:200000,
   front_members:500000,
   imports:50000,
+  member_field_definitions:64,
+  member_field_values:640000,
+  member_tags:500,
+  member_tag_links:1000000,
   media:40000
 };
 
@@ -1713,7 +1717,8 @@ async function requireBackupOwner(userId:string){
 async function actionBackupExport(user:any){
   await requireBackupOwner(user.id);
   const [
-    members,groups,memberGroups,fronts,frontMembers,settingsRows,imports,profileRows
+    members,groups,memberGroups,fronts,frontMembers,settingsRows,imports,profileRows,
+    fieldDefinitions,fieldValues,tags,tagLinks
   ]=await Promise.all([
     adminAll("/rest/v1/members?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=created_at.asc"),
     adminAll("/rest/v1/groups?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=created_at.asc"),
@@ -1722,7 +1727,11 @@ async function actionBackupExport(user:any){
     adminAll("/rest/v1/front_members?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=joined_at.asc"),
     admin("/rest/v1/app_settings?user_id=eq."+encodeURIComponent(user.id)+"&select=settings&limit=1"),
     adminAll("/rest/v1/imports?user_id=eq."+encodeURIComponent(user.id)+"&select=source,summary,created_at&order=created_at.asc"),
-    admin("/rest/v1/profiles?user_id=eq."+encodeURIComponent(user.id)+"&select=display_name,avatar_url,avatar_storage_path,banner_url,banner_storage_path&limit=1")
+    admin("/rest/v1/profiles?user_id=eq."+encodeURIComponent(user.id)+"&select=display_name,avatar_url,avatar_storage_path,banner_url,banner_storage_path&limit=1"),
+    adminAll("/rest/v1/member_field_definitions?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=position.asc,id.asc"),
+    adminAll("/rest/v1/member_field_values?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=member_id.asc,field_id.asc"),
+    adminAll("/rest/v1/member_tags?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=name.asc"),
+    adminAll("/rest/v1/member_tag_links?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=member_id.asc,tag_id.asc")
   ]);
 
   const media:any[]=[];
@@ -1789,6 +1798,21 @@ async function actionBackupExport(user:any){
     activity:x.activity,
     location:x.location
   }));
+  const portableFieldDefinitions=(fieldDefinitions||[]).map((x:any)=>({
+    backup_id:x.id,key:x.key,label:x.label,description:x.description,
+    field_type:x.field_type,options:x.options||[],position:x.position||0,
+    created_at:x.created_at,updated_at:x.updated_at
+  }));
+  const portableFieldValues=(fieldValues||[]).map((x:any)=>({
+    member_backup_id:x.member_id,field_backup_id:x.field_id,value:x.value,
+    created_at:x.created_at,updated_at:x.updated_at
+  }));
+  const portableTags=(tags||[]).map((x:any)=>({
+    backup_id:x.id,name:x.name,color:x.color,created_at:x.created_at,updated_at:x.updated_at
+  }));
+  const portableTagLinks=(tagLinks||[]).map((x:any)=>({
+    member_backup_id:x.member_id,tag_backup_id:x.tag_id,created_at:x.created_at
+  }));
   const profile=profileRows?.[0]||{};
   const portableProfile={
     display_name:profile.display_name||null,
@@ -1803,6 +1827,10 @@ async function actionBackupExport(user:any){
     member_groups:portableMemberGroups,
     fronts:portableFronts,
     front_members:portableFrontMembers,
+    member_field_definitions:portableFieldDefinitions,
+    member_field_values:portableFieldValues,
+    member_tags:portableTags,
+    member_tag_links:portableTagLinks,
     settings:sanitizedSettings(settingsRows?.[0]?.settings||{},media),
     imports:(imports||[]).map((x:any)=>({source:x.source,summary:x.summary||{},created_at:x.created_at})),
     profile:portableProfile
@@ -1832,6 +1860,33 @@ function requireArray(data:any,key:string,limit:number){
   if(value.length>limit)throw new ClientError("Backup section "+key+" exceeds Nihility limits");
   return value;
 }
+function optionalArray(data:any,key:string,limit:number){
+  const value=data?.[key];
+  if(value===undefined||value===null)return [];
+  if(!Array.isArray(value))throw new ClientError("Backup section "+key+" is invalid");
+  if(value.length>limit)throw new ClientError("Backup section "+key+" exceeds Nihility limits");
+  return value;
+}
+function validCustomValueForDefinition(def:any,value:any){
+  const type=String(def?.field_type||"");
+  if(type==="text")return typeof value==="string"&&value.length<=500;
+  if(type==="long_text")return typeof value==="string"&&value.length<=4000;
+  if(type==="number")return typeof value==="number"&&Number.isFinite(value)&&Math.abs(value)<=1e15;
+  if(type==="boolean")return typeof value==="boolean";
+  if(type==="date")return typeof value==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&Number.isFinite(Date.parse(value+"T00:00:00Z"));
+  const options=Array.isArray(def?.options)?def.options:[];
+  if(type==="select")return typeof value==="string"&&options.includes(value);
+  if(type==="multi_select"){
+    if(!Array.isArray(value)||value.length>50)return false;
+    const seen=new Set<string>();
+    for(const item of value){
+      if(typeof item!=="string"||!options.includes(item)||seen.has(item))return false;
+      seen.add(item);
+    }
+    return true;
+  }
+  return false;
+}
 function validateIds(rows:any[],label:string){
   const seen=new Set<string>();
   for(const row of rows){
@@ -1855,12 +1910,19 @@ async function validateBackup(backup:any){
   const fronts=requireArray(data,"fronts",BACKUP_LIMITS.fronts);
   const frontMembers=requireArray(data,"front_members",BACKUP_LIMITS.front_members);
   const imports=requireArray(data,"imports",BACKUP_LIMITS.imports);
+  const fieldDefinitions=optionalArray(data,"member_field_definitions",BACKUP_LIMITS.member_field_definitions);
+  const fieldValues=optionalArray(data,"member_field_values",BACKUP_LIMITS.member_field_values);
+  const tags=optionalArray(data,"member_tags",BACKUP_LIMITS.member_tags);
+  const tagLinks=optionalArray(data,"member_tag_links",BACKUP_LIMITS.member_tag_links);
   const media=Array.isArray(backup.media)?backup.media:[];
   if(media.length>BACKUP_LIMITS.media)throw new ClientError("Backup media manifest is too large");
 
   const memberIds=validateIds(members,"member");
   const groupIds=validateIds(groups,"group");
   const frontIds=validateIds(fronts,"front");
+  const fieldIds=validateIds(fieldDefinitions,"custom field");
+  const tagIds=validateIds(tags,"tag");
+  const fieldById=new Map(fieldDefinitions.map((x:any)=>[String(x.backup_id),x]));
 
   for(const m of members){
     if(!textLength(m.name,200,true))throw new ClientError("A member name is missing or too long");
@@ -1922,6 +1984,47 @@ async function validateBackup(backup:any){
     frontMemberKeys.add(key);
   }
 
+  for(const def of fieldDefinitions){
+    if(!/^[a-z][a-z0-9_]{0,31}$/.test(String(def.key||"")))throw new ClientError("A custom field key is invalid");
+    if(!textLength(def.label,80,true)||!textLength(def.description,240))throw new ClientError("A custom field label or description exceeds Nihility limits");
+    if(!["text","long_text","number","boolean","date","select","multi_select"].includes(String(def.field_type||"")))throw new ClientError("A custom field type is invalid");
+    const options=Array.isArray(def.options)?def.options:[];
+    if(options.length>100||options.some((x:any)=>typeof x!=="string"||x.trim().length<1||x.length>100))throw new ClientError("A custom field has invalid options");
+    if(new Set(options.map((x:string)=>x.toLowerCase())).size!==options.length)throw new ClientError("A custom field contains duplicate options");
+    const position=Number(def.position||0);
+    if(!Number.isInteger(position)||position<0||position>10000)throw new ClientError("A custom field position is invalid");
+  }
+  const fieldValueKeys=new Set<string>();
+  for(const row of fieldValues){
+    const memberId=String(row?.member_backup_id||"");
+    const fieldId=String(row?.field_backup_id||"");
+    if(!memberIds.has(memberId)||!fieldIds.has(fieldId))throw new ClientError("Backup contains a custom field value with a missing member or field");
+    const key=memberId+":"+fieldId;
+    if(fieldValueKeys.has(key))throw new ClientError("Backup contains a duplicate custom field value");
+    fieldValueKeys.add(key);
+    if(!validCustomValueForDefinition(fieldById.get(fieldId),row?.value))throw new ClientError("Backup contains an invalid custom field value");
+  }
+  const tagNames=new Set<string>();
+  for(const tag of tags){
+    if(!textLength(tag.name,60,true))throw new ClientError("A tag name is missing or too long");
+    const lower=String(tag.name).trim().toLowerCase();
+    if(tagNames.has(lower))throw new ClientError("Backup contains duplicate tag names");
+    tagNames.add(lower);
+    if(tag.color!=null&&tag.color!==""&&!/^[0-9A-Fa-f]{6}$/.test(String(tag.color)))throw new ClientError("A tag color is invalid");
+  }
+  const tagLinkKeys=new Set<string>();
+  const tagCounts=new Map<string,number>();
+  for(const row of tagLinks){
+    const memberId=String(row?.member_backup_id||"");
+    const tagId=String(row?.tag_backup_id||"");
+    if(!memberIds.has(memberId)||!tagIds.has(tagId))throw new ClientError("Backup contains a tag assignment with a missing member or tag");
+    const key=memberId+":"+tagId;
+    if(tagLinkKeys.has(key))throw new ClientError("Backup contains a duplicate tag assignment");
+    tagLinkKeys.add(key);
+    tagCounts.set(memberId,(tagCounts.get(memberId)||0)+1);
+    if((tagCounts.get(memberId)||0)>100)throw new ClientError("A backup member has more than 100 tags");
+  }
+
   const settings=(data.settings&&typeof data.settings==="object"&&!Array.isArray(data.settings))?data.settings:{};
   if(jsonBytes(settings)>131072)throw new ClientError("Backup settings exceed Nihility limits");
   for(const item of imports){
@@ -1952,7 +2055,11 @@ async function validateBackup(backup:any){
       member_groups:memberGroups.length,
       fronts:fronts.length,
       front_members:frontMembers.length,
-      imports:imports.length
+      imports:imports.length,
+      member_field_definitions:fieldDefinitions.length,
+      member_field_values:fieldValues.length,
+      member_tags:tags.length,
+      member_tag_links:tagLinks.length
     },
     media:{total:media.length,included:media.filter((x:any)=>x?.included===true).length}
   };
