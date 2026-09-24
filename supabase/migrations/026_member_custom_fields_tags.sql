@@ -71,7 +71,7 @@ create table if not exists public.member_tag_links (
 create index if not exists member_tag_links_user_idx on public.member_tag_links(user_id);
 create index if not exists member_tag_links_tag_idx on public.member_tag_links(tag_id);
 
-create or replace function private.member_custom_value_is_valid(
+create or replace function public.nihility_member_custom_value_is_valid(
   p_field_type text,
   p_options jsonb,
   p_value jsonb
@@ -124,7 +124,8 @@ exception when numeric_value_out_of_range or invalid_text_representation then
   return false;
 end
 $valuecheck$;
-revoke all on function private.member_custom_value_is_valid(text,jsonb,jsonb) from public,anon,authenticated;
+revoke all on function public.nihility_member_custom_value_is_valid(text,jsonb,jsonb) from public,anon,authenticated;
+grant execute on function public.nihility_member_custom_value_is_valid(text,jsonb,jsonb) to authenticated,service_role;
 
 create or replace function private.validate_member_field_definition()
 returns trigger
@@ -175,7 +176,7 @@ begin
        from public.member_field_values v
        where v.user_id=new.user_id
          and v.field_id=new.id
-         and not private.member_custom_value_is_valid(new.field_type,new.options,v.value)
+         and not public.nihility_member_custom_value_is_valid(new.field_type,new.options,v.value)
      ) then
     raise exception 'This field change would invalidate existing member values';
   end if;
@@ -212,7 +213,7 @@ begin
     raise exception 'Custom field does not belong to this account';
   end if;
 
-  if not private.member_custom_value_is_valid(v_def.field_type,v_def.options,new.value) then
+  if not public.nihility_member_custom_value_is_valid(v_def.field_type,v_def.options,new.value) then
     raise exception 'Custom field value is invalid for its field definition';
   end if;
 
