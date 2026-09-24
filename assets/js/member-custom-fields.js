@@ -267,20 +267,99 @@
 
   function ensureFieldDialog(){
     let d=document.querySelector('#memberFieldDefinitionDialog');if(d)return d;
-    d=document.createElement('dialog');d.id='memberFieldDefinitionDialog';d.className='modal-dialog';
-    d.innerHTML='<form id="memberFieldDefinitionForm" class="modal-card"><div class="modal-heading"><div><p class="eyebrow">Member custom field</p><h3 id="memberFieldDialogTitle">New custom field</h3></div><button class="icon-button field-dialog-close" type="button" aria-label="Close">×</button></div><input id="memberFieldDefinitionId" type="hidden"><div class="form-grid two-col"><label>Label<input id="memberFieldLabel" maxlength="80" required placeholder="Source"></label><label>Search key<input id="memberFieldKey" maxlength="32" required pattern="[a-z][a-z0-9_]{0,31}" placeholder="source"></label><label>Type<select id="memberFieldType"><option value="text">Text</option><option value="long_text">Long text</option><option value="number">Number</option><option value="boolean">Yes / No</option><option value="date">Date</option><option value="select">Select</option><option value="multi_select">Multi-select</option></select></label><label>Position<input id="memberFieldPosition" type="number" min="0" max="10000" value="0"></label></div><label>Description<input id="memberFieldDescription" maxlength="240" placeholder="Optional helper text"></label><label id="memberFieldOptionsRow" hidden>Options<textarea id="memberFieldOptions" rows="6" placeholder="One option per line"></textarea><small>Changing options is blocked if existing values would become invalid.</small></label><p id="memberFieldDialogError" class="form-error" hidden></p><div class="modal-footer"><button class="secondary-button field-dialog-close" type="button">Cancel</button><button class="primary-button" type="submit">Save field</button></div></form>';
+    d=document.createElement('dialog');d.id='memberFieldDefinitionDialog';d.className='modal-dialog member-field-definition-dialog';
+    d.innerHTML='<form id="memberFieldDefinitionForm" class="modal-card member-field-definition-card"><div class="modal-heading"><div><p class="eyebrow">Member custom field</p><h3 id="memberFieldDialogTitle">New custom field</h3></div><button class="icon-button field-dialog-close" type="button" aria-label="Close">×</button></div><input id="memberFieldDefinitionId" type="hidden"><div class="form-grid two-col member-field-definition-grid"><label>Label<input id="memberFieldLabel" maxlength="80" required placeholder="Source"></label><label>Search key<input id="memberFieldKey" maxlength="32" required pattern="[a-z][a-z0-9_]{0,31}" placeholder="source"></label><div class="member-field-definition-field"><span class="member-field-definition-label">Type</span><div class="member-field-type-control"><button id="memberFieldTypeButton" class="member-field-type-button" type="button" aria-haspopup="listbox" aria-expanded="false"><span id="memberFieldTypeButtonLabel">Text</span><span class="member-field-type-chevron" aria-hidden="true">⌄</span></button><select id="memberFieldType" class="member-field-type-native" tabindex="-1" aria-hidden="true"><option value="text">Text</option><option value="long_text">Long text</option><option value="number">Number</option><option value="boolean">Yes / No</option><option value="date">Date</option><option value="select">Select</option><option value="multi_select">Multi-select</option></select><div id="memberFieldTypeMenu" class="member-field-type-menu" role="listbox" aria-label="Field type" hidden></div></div></div><label>Position<input id="memberFieldPosition" type="number" min="0" max="10000" value="0"></label></div><label>Description<input id="memberFieldDescription" maxlength="240" placeholder="Optional helper text"></label><label id="memberFieldOptionsRow" hidden>Options<textarea id="memberFieldOptions" rows="6" placeholder="One option per line"></textarea><small>Changing options is blocked if existing values would become invalid.</small></label><p id="memberFieldDialogError" class="form-error" hidden></p><div class="modal-footer"><button class="secondary-button field-dialog-close" type="button">Cancel</button><button class="primary-button" type="submit">Save field</button></div></form>';
     document.body.append(d);
+
+    const typeSelect=d.querySelector('#memberFieldType');
+    const typeControl=d.querySelector('.member-field-type-control');
+    const typeButton=d.querySelector('#memberFieldTypeButton');
+    const typeButtonLabel=d.querySelector('#memberFieldTypeButtonLabel');
+    const typeMenu=d.querySelector('#memberFieldTypeMenu');
+
+    const closeTypeMenu=()=>{
+      typeMenu.hidden=true;
+      typeControl.classList.remove('is-open');
+      typeButton.setAttribute('aria-expanded','false');
+    };
+    const syncTypePicker=()=>{
+      const selected=typeSelect.options[typeSelect.selectedIndex]||typeSelect.options[0];
+      typeButtonLabel.textContent=selected?.textContent||'Text';
+      typeMenu.querySelectorAll('[data-field-type]').forEach(option=>{
+        const active=option.dataset.fieldType===typeSelect.value;
+        option.classList.toggle('selected',active);
+        option.setAttribute('aria-selected',String(active));
+      });
+    };
+    [...typeSelect.options].forEach(option=>{
+      const item=document.createElement('button');
+      item.type='button';
+      item.className='member-field-type-option';
+      item.dataset.fieldType=option.value;
+      item.setAttribute('role','option');
+      item.textContent=option.textContent;
+      item.onclick=()=>{
+        typeSelect.value=option.value;
+        syncTypePicker();
+        closeTypeMenu();
+        typeSelect.dispatchEvent(new Event('change',{bubbles:true}));
+        typeButton.focus();
+      };
+      typeMenu.append(item);
+    });
+    typeButton.onclick=()=>{
+      const opening=typeMenu.hidden;
+      if(opening){
+        typeMenu.hidden=false;
+        typeControl.classList.add('is-open');
+        typeButton.setAttribute('aria-expanded','true');
+        syncTypePicker();
+      }else closeTypeMenu();
+    };
+    typeButton.onkeydown=event=>{
+      if(!['ArrowDown','ArrowUp'].includes(event.key))return;
+      event.preventDefault();
+      if(typeMenu.hidden)typeButton.click();
+      const options=[...typeMenu.querySelectorAll('.member-field-type-option')];
+      const selectedIndex=Math.max(0,options.findIndex(option=>option.dataset.fieldType===typeSelect.value));
+      options[event.key==='ArrowUp'?Math.max(0,selectedIndex-1):Math.min(options.length-1,selectedIndex+1)]?.focus();
+    };
+    typeMenu.onkeydown=event=>{
+      const options=[...typeMenu.querySelectorAll('.member-field-type-option')];
+      const index=options.indexOf(document.activeElement);
+      if(event.key==='ArrowDown'||event.key==='ArrowUp'){
+        event.preventDefault();
+        const next=event.key==='ArrowDown'?Math.min(options.length-1,index+1):Math.max(0,index-1);
+        options[next]?.focus();
+      }else if(event.key==='Escape'){
+        event.preventDefault();
+        closeTypeMenu();
+        typeButton.focus();
+      }
+    };
+    d.addEventListener('click',event=>{if(!typeControl.contains(event.target))closeTypeMenu()});
+    d.addEventListener('cancel',event=>{
+      if(typeMenu.hidden)return;
+      event.preventDefault();
+      closeTypeMenu();
+      typeButton.focus();
+    });
+    d.addEventListener('close',closeTypeMenu);
+    d.syncMemberFieldTypePicker=syncTypePicker;
+
     d.querySelectorAll('.field-dialog-close').forEach(b=>b.onclick=()=>d.close());
-    d.querySelector('#memberFieldType').onchange=()=>{d.querySelector('#memberFieldOptionsRow').hidden=!['select','multi_select'].includes(d.querySelector('#memberFieldType').value)};
+    typeSelect.onchange=()=>{d.querySelector('#memberFieldOptionsRow').hidden=!['select','multi_select'].includes(typeSelect.value);syncTypePicker()};
     d.querySelector('#memberFieldLabel').oninput=()=>{const key=d.querySelector('#memberFieldKey');if(!key.dataset.touched)key.value=keyify(d.querySelector('#memberFieldLabel').value)};
     d.querySelector('#memberFieldKey').oninput=e=>{e.target.dataset.touched='true';e.target.value=keyify(e.target.value)};
-    d.querySelector('#memberFieldDefinitionForm').onsubmit=saveField;return d;
+    d.querySelector('#memberFieldDefinitionForm').onsubmit=saveField;
+    syncTypePicker();
+    return d;
   }
   function openFieldDialog(def=null){
     const d=ensureFieldDialog();d.querySelector('#memberFieldDialogTitle').textContent=def?'Edit custom field':'New custom field';
     d.querySelector('#memberFieldDefinitionId').value=def?.id||'';d.querySelector('#memberFieldLabel').value=def?.label||'';
     const key=d.querySelector('#memberFieldKey');key.value=def?.key||'';key.dataset.touched=def?'true':'';
-    d.querySelector('#memberFieldType').value=def?.field_type||'text';d.querySelector('#memberFieldPosition').value=String(def?.position||0);
+    d.querySelector('#memberFieldType').value=def?.field_type||'text';d.syncMemberFieldTypePicker?.();d.querySelector('#memberFieldPosition').value=String(def?.position||0);
     d.querySelector('#memberFieldDescription').value=def?.description||'';d.querySelector('#memberFieldOptions').value=Array.isArray(def?.options)?def.options.join('\n'):'';
     d.querySelector('#memberFieldOptionsRow').hidden=!['select','multi_select'].includes(d.querySelector('#memberFieldType').value);
     d.querySelector('#memberFieldDialogError').hidden=true;d.showModal();
