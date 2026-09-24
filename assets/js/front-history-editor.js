@@ -180,7 +180,9 @@
     const dialog=ensureDialog();
     const startedAt=toIso(dialog.querySelector('#historyEditorStart').value);
     const ongoing=dialog.querySelector('#historyEditorOngoing').checked;
-    const endedAt=ongoing?null:toIso(dialog.querySelector('#historyEditorEnd').value);
+    const endValue=dialog.querySelector('#historyEditorEnd').value;
+    if(!ongoing&&!endValue)throw new Error('Enter an end time, or mark the front as ongoing.');
+    const endedAt=ongoing?null:toIso(endValue);
     const source=dialog.querySelector('#historyEditorSource').value;
     const note=dialog.querySelector('#historyEditorNote').value;
     const memberLinks=[...(editorState?.links?.entries()||[])].map(([memberId,item])=>({
