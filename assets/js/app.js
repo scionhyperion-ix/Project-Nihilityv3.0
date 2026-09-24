@@ -422,7 +422,8 @@ function backupCountLabel(key){
     member_field_values:'Custom field values',
     member_tags:'Member tags',
     member_tag_links:'Tag assignments',
-    member_connections:'Member connections'
+    member_connections:'Member connections',
+    system_events:'System timeline events'
   })[key]||key;
 }
 function addBackupPreviewRow(container,labelText,currentValue,backupValue){
@@ -450,7 +451,7 @@ function renderBackupRestorePreview(result,parsed){
 
   const counts=result?.backup?.counts||{};
   const existing=result?.current||{};
-  ['members','groups','member_groups','fronts','front_members','imports','member_field_definitions','member_field_values','member_tags','member_tag_links','member_connections'].forEach(key=>{
+  ['members','groups','member_groups','fronts','front_members','imports','member_field_definitions','member_field_values','member_tags','member_tag_links','member_connections','system_events'].forEach(key=>{
     addBackupPreviewRow(box,backupCountLabel(key),existing[key]||0,counts[key]||0);
   });
 
