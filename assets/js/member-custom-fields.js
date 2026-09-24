@@ -35,6 +35,7 @@
     state.memberFieldValues=values;
     state.memberTags=tags;
     state.memberTagLinks=links;
+    renderAll();
   };
 
   function valuesFor(memberId){return state.memberFieldValues.filter(x=>x.member_id===memberId)}
