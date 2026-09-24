@@ -1873,7 +1873,11 @@ function validCustomValueForDefinition(def:any,value:any){
   if(type==="long_text")return typeof value==="string"&&value.length<=4000;
   if(type==="number")return typeof value==="number"&&Number.isFinite(value)&&Math.abs(value)<=1e15;
   if(type==="boolean")return typeof value==="boolean";
-  if(type==="date")return typeof value==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&Number.isFinite(Date.parse(value+"T00:00:00Z"));
+  if(type==="date"){
+    if(typeof value!=="string"||!/^\d{4}-\d{2}-\d{2}$/.test(value))return false;
+    const date=new Date(value+"T00:00:00Z");
+    return Number.isFinite(date.getTime())&&date.toISOString().slice(0,10)===value;
+  }
   const options=Array.isArray(def?.options)?def.options:[];
   if(type==="select")return typeof value==="string"&&options.includes(value);
   if(type==="multi_select"){
