@@ -2386,9 +2386,8 @@ async function actionJournalStatus(user:any){
     "&select=format_version,cipher_suite,kdf_name,kdf_iterations,kdf_salt,wrap_iv,wrapped_key,recovery_kdf_name,recovery_salt,recovery_iv,recovery_wrapped_key,created_at,updated_at&limit=1"
   );
   const vault=rows?.[0]||null;
-  if(!vault)return{configured:false,vault:null,entry_count:0};
-  const entries=await admin("/rest/v1/journal_entries?user_id=eq."+encodeURIComponent(user.id)+"&select=id");
-  return{configured:true,vault,entry_count:(entries||[]).length};
+  if(!vault)return{configured:false,vault:null};
+  return{configured:true,vault};
 }
 async function actionJournalSetup(user:any,body:any){
   const existing=await admin("/rest/v1/journal_vaults?user_id=eq."+encodeURIComponent(user.id)+"&select=user_id&limit=1");
@@ -2630,6 +2629,16 @@ Deno.serve(async(req)=>{
       await consumeRateLimit(user.id,action);
       const result=await actionUploadMedia(user,req);
       await recordSecurityEvent(user.id,"edge."+action,true,{origin:origin||null});
+      return json(result,200,origin);
+    }
+
+    if(headerAction==="journal_save"){
+      action="journal_save";
+      await consumeRateLimit(user.id,action);
+      const contentType=(req.headers.get("content-type")||"").split(";")[0].trim().toLowerCase();
+      if(contentType!=="application/json")throw new ClientError("JSON content type required",415);
+      const body=await readJsonBody(req,512*1024);
+      const result=await actionJournalSave(user,body);
       return json(result,200,origin);
     }
 
