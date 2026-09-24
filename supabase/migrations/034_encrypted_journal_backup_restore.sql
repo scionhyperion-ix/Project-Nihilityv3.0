@@ -461,13 +461,12 @@ begin
     );
 
     insert into public.journal_entries(
-      id,user_id,payload_version,logical_date,iv,ciphertext,created_at,updated_at
+      id,user_id,payload_version,iv,ciphertext,created_at,updated_at
     )
     select
       (item->>'id')::uuid,
       p_user_id,
       coalesce((item->>'payload_version')::smallint,1),
-      (item->>'logical_date')::date,
       item->>'iv',
       item->>'ciphertext',
       coalesce(nullif(item->>'created_at','')::timestamptz,pg_catalog.now()),
