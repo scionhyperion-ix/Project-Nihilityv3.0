@@ -1386,19 +1386,47 @@ async function saveLocalSystemProfile(user:any,system:any,{copyMedia=false}={}){
   const old=existingSettings?.system_profile||{};
   let avatarPath=old.avatar_storage_path||null;
   let bannerPath=old.banner_storage_path||null;
+  const baseline:any={...(old.pk_media_v1||{})};
+  const cleanup:Array<{kind:string,path:string}>=[];
+
   if(copyMedia&&system.avatar_url){
-    try{avatarPath=await storeImage(user.id,"avatar",system.avatar_url)}catch{}
+    const next=await copyPkImage(user.id,"avatar",system.avatar_url,"system avatar");
+    if(next){
+      if(avatarPath&&avatarPath!==next)cleanup.push({kind:"avatar",path:avatarPath});
+      avatarPath=next;
+      baseline.avatar_url=system.avatar_url;
+      baseline.avatar_storage_path=next;
+    }
+  }else if(copyMedia&&!system.avatar_url&&baseline.avatar_storage_path&&avatarPath===baseline.avatar_storage_path){
+    cleanup.push({kind:"avatar",path:avatarPath});
+    avatarPath=null;
+    baseline.avatar_url=null;
+    baseline.avatar_storage_path=null;
   }
+
   if(copyMedia&&system.banner){
-    try{bannerPath=await storeImage(user.id,"banner",system.banner)}catch{}
+    const next=await copyPkImage(user.id,"banner",system.banner,"system banner");
+    if(next){
+      if(bannerPath&&bannerPath!==next)cleanup.push({kind:"banner",path:bannerPath});
+      bannerPath=next;
+      baseline.banner_url=system.banner;
+      baseline.banner_storage_path=next;
+    }
+  }else if(copyMedia&&!system.banner&&baseline.banner_storage_path&&bannerPath===baseline.banner_storage_path){
+    cleanup.push({kind:"banner",path:bannerPath});
+    bannerPath=null;
+    baseline.banner_url=null;
+    baseline.banner_storage_path=null;
   }
-  const profile={...old,...system,avatar_storage_path:avatarPath,banner_storage_path:bannerPath};
+
+  const profile={...old,...system,avatar_storage_path:avatarPath,banner_storage_path:bannerPath,pk_media_v1:baseline};
   const mergedSettings={...existingSettings,system_profile:profile,system_name:profile.name||null};
   await admin("/rest/v1/app_settings?on_conflict=user_id",{
     method:"POST",
     headers:{Prefer:"resolution=merge-duplicates,return=minimal"},
     body:JSON.stringify({user_id:user.id,settings:mergedSettings})
   });
+  await Promise.allSettled(cleanup.map(item=>deleteStoredMedia(user.id,item.kind,item.path)));
   return profile;
 }
 
