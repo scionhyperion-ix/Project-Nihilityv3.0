@@ -117,7 +117,7 @@ Nihility journaling uses client-side encryption and treats the server as untrust
 - Leaving the Journal route, hiding the tab, signing out, reloading, or the inactivity timeout locks the vault and drops in-memory plaintext state.
 - Titles, bodies, journal logical dates, and linked member IDs are encrypted together. The database sees only opaque entry IDs, ciphertext, IVs, and database create/update timestamps.
 - Entry ciphertext is authenticated with AAD bound to the Nihility account, entry UUID, and payload version, preventing silent row/account substitution.
-- Browser roles have no direct grants or RLS policies on journal storage tables. All journal transport goes through the authenticated `nihility-secure` Edge Function.
+- Browser roles have no direct table grants, and explicit restrictive RLS deny policies block `anon` and `authenticated` even if a grant is added accidentally later. All journal transport goes through the authenticated `nihility-secure` Edge Function.
 - Journal mutation APIs additionally require an in-memory proof derived from the random vault key. A valid Nihility session without the journal key can fetch vault wrapping metadata but cannot list, overwrite, delete, re-key, or erase journal entries.
 - Key mutation/destruction actions are rate-limited and recorded in the separate security-event log without journal contents.
 - Recovery automatically rotates both the passphrase wrapper and recovery wrapper atomically, invalidating the used recovery key.
