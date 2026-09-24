@@ -1043,6 +1043,34 @@ async function actionPkSyncApply(user:any,body:any){
   }
 
   result.comparison=await buildPkSyncComparison(user,token);
+  try{
+    await admin("/rest/v1/system_events",{
+      method:"POST",
+      headers:{Prefer:"return=minimal"},
+      body:JSON.stringify({
+        user_id:user.id,
+        event_type:"integration_synced",
+        occurred_at:new Date().toISOString(),
+        metadata:{
+          source:"pluralkit",
+          members_to_nihility:result.members.toNihility,
+          members_to_pk:result.members.toPk,
+          members_created_in_nihility:result.members.createdInNihility,
+          members_created_in_pk:result.members.createdInPk,
+          groups_to_nihility:result.groups.toNihility,
+          groups_to_pk:result.groups.toPk,
+          groups_created_in_nihility:result.groups.createdInNihility,
+          groups_created_in_pk:result.groups.createdInPk,
+          memberships_to_nihility:result.memberships.toNihility,
+          memberships_to_pk:result.memberships.toPk,
+          conflicts_skipped:result.conflictsSkipped,
+          blocked_count:result.blocked.length
+        }
+      })
+    });
+  }catch{
+    console.warn("Unable to record PluralKit sync timeline summary");
+  }
   return result;
 }
 
@@ -1661,6 +1689,7 @@ const BACKUP_LIMITS={
   member_tags:500,
   member_tag_links:1000000,
   member_connections:10000,
+  system_events:1000000,
   media:40000
 };
 
@@ -1719,7 +1748,7 @@ async function actionBackupExport(user:any){
   await requireBackupOwner(user.id);
   const [
     members,groups,memberGroups,fronts,frontMembers,settingsRows,imports,profileRows,
-    fieldDefinitions,fieldValues,tags,tagLinks,connections
+    fieldDefinitions,fieldValues,tags,tagLinks,connections,systemEvents
   ]=await Promise.all([
     adminAll("/rest/v1/members?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=created_at.asc"),
     adminAll("/rest/v1/groups?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=created_at.asc"),
@@ -1733,7 +1762,8 @@ async function actionBackupExport(user:any){
     adminAll("/rest/v1/member_field_values?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=member_id.asc,field_id.asc"),
     adminAll("/rest/v1/member_tags?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=name.asc"),
     adminAll("/rest/v1/member_tag_links?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=member_id.asc,tag_id.asc"),
-    adminAll("/rest/v1/member_connections?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=created_at.asc")
+    adminAll("/rest/v1/member_connections?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=created_at.asc"),
+    adminAll("/rest/v1/system_events?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=occurred_at.asc,id.asc")
   ]);
 
   const media:any[]=[];
@@ -1823,6 +1853,16 @@ async function actionBackupExport(user:any){
     created_at:x.created_at,
     updated_at:x.updated_at
   }));
+  const portableSystemEvents=(systemEvents||[]).map((x:any)=>({
+    event_type:x.event_type,
+    occurred_at:x.occurred_at,
+    member_backup_id:x.member_id||null,
+    related_member_backup_id:x.related_member_id||null,
+    group_backup_id:x.group_id||null,
+    front_backup_id:x.front_id||null,
+    metadata:(x.metadata&&typeof x.metadata==="object"&&!Array.isArray(x.metadata))?x.metadata:{},
+    created_at:x.created_at
+  }));
   const profile=profileRows?.[0]||{};
   const portableProfile={
     display_name:profile.display_name||null,
@@ -1842,6 +1882,7 @@ async function actionBackupExport(user:any){
     member_tags:portableTags,
     member_tag_links:portableTagLinks,
     member_connections:portableConnections,
+    system_events:portableSystemEvents,
     settings:sanitizedSettings(settingsRows?.[0]?.settings||{},media),
     imports:(imports||[]).map((x:any)=>({source:x.source,summary:x.summary||{},created_at:x.created_at})),
     profile:portableProfile
@@ -1930,6 +1971,7 @@ async function validateBackup(backup:any){
   const tags=optionalArray(data,"member_tags",BACKUP_LIMITS.member_tags);
   const tagLinks=optionalArray(data,"member_tag_links",BACKUP_LIMITS.member_tag_links);
   const connections=optionalArray(data,"member_connections",BACKUP_LIMITS.member_connections);
+  const systemEvents=optionalArray(data,"system_events",BACKUP_LIMITS.system_events);
   const media=Array.isArray(backup.media)?backup.media:[];
   if(media.length>BACKUP_LIMITS.media)throw new ClientError("Backup media manifest is too large");
 
@@ -2058,6 +2100,28 @@ async function validateBackup(backup:any){
     }
   }
 
+  const allowedTimelineTypes=new Set([
+    "front_logged","member_created","member_archived","member_restored",
+    "group_created","member_group_added","member_group_removed",
+    "connection_added","connection_updated","connection_removed",
+    "integration_imported","integration_synced","backup_restored"
+  ]);
+  for(const event of systemEvents){
+    if(!allowedTimelineTypes.has(String(event?.event_type||"")))throw new ClientError("Backup contains an invalid system timeline event");
+    if(!validTimestamp(event?.occurred_at))throw new ClientError("A system timeline timestamp is invalid");
+    if(!validTimestamp(event?.created_at,true))throw new ClientError("A system timeline created timestamp is invalid");
+    const memberId=event?.member_backup_id?String(event.member_backup_id):"";
+    const relatedMemberId=event?.related_member_backup_id?String(event.related_member_backup_id):"";
+    const groupId=event?.group_backup_id?String(event.group_backup_id):"";
+    const frontId=event?.front_backup_id?String(event.front_backup_id):"";
+    if(memberId&&!memberIds.has(memberId))throw new ClientError("Timeline event references a missing member");
+    if(relatedMemberId&&!memberIds.has(relatedMemberId))throw new ClientError("Timeline event references a missing related member");
+    if(groupId&&!groupIds.has(groupId))throw new ClientError("Timeline event references a missing group");
+    if(frontId&&!frontIds.has(frontId))throw new ClientError("Timeline event references a missing front");
+    const metadata=(event?.metadata&&typeof event.metadata==="object"&&!Array.isArray(event.metadata))?event.metadata:{};
+    if(jsonBytes(metadata)>8192)throw new ClientError("A system timeline metadata block exceeds Nihility limits");
+  }
+
   const settings=(data.settings&&typeof data.settings==="object"&&!Array.isArray(data.settings))?data.settings:{};
   if(jsonBytes(settings)>131072)throw new ClientError("Backup settings exceed Nihility limits");
   for(const item of imports){
@@ -2093,7 +2157,8 @@ async function validateBackup(backup:any){
       member_field_values:fieldValues.length,
       member_tags:tags.length,
       member_tag_links:tagLinks.length,
-      member_connections:connections.length
+      member_connections:connections.length,
+      system_events:systemEvents.length
     },
     media:{total:media.length,included:media.filter((x:any)=>x?.included===true).length}
   };
