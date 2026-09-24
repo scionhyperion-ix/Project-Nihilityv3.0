@@ -3252,3 +3252,98 @@ body:has(dialog[open]){
     gap:4px!important;
   }
 }
+
+
+/* Settings v4.1: readable typography with compact controls. */
+#settingsRoute .settings-list-heading h3{
+  font-size:1.08rem!important;
+}
+#settingsRoute .settings-list-heading .muted{
+  font-size:.79rem!important;
+  line-height:1.5!important;
+}
+#settingsRoute .settings-simple-row>span{
+  font-size:.75rem!important;
+}
+#settingsRoute .settings-simple-row>strong{
+  font-size:.8rem!important;
+}
+#settingsRoute .settings-simple-row>small,
+#settingsRoute .settings-simple-row>div>small{
+  font-size:.74rem!important;
+  line-height:1.5!important;
+}
+#settingsRoute .settings-simple-row>div>strong{
+  font-size:.8rem!important;
+}
+#settingsRoute .settings-list-field{
+  font-size:.76rem!important;
+}
+#settingsRoute .settings-list-note{
+  font-size:.73rem!important;
+  line-height:1.5!important;
+}
+#settingsRoute .settings-restore-controls .backup-file-summary{
+  font-size:.72rem!important;
+}
+#settingsRoute .settings-theme-list .theme-option-copy strong{
+  font-size:.78rem!important;
+}
+#settingsRoute .settings-theme-list .theme-check{
+  font-size:.7rem!important;
+}
+#settingsRoute .settings-metadata-search-note{
+  font-size:.72rem!important;
+}
+#settingsRoute .settings-metadata-search-note code{
+  font-size:.68rem!important;
+}
+#settingsRoute .member-metadata-section-heading strong{
+  font-size:.79rem!important;
+}
+#settingsRoute .member-metadata-section-heading small{
+  font-size:.69rem!important;
+}
+#settingsRoute .member-metadata-empty strong{
+  font-size:.74rem!important;
+}
+#settingsRoute .member-metadata-empty p{
+  font-size:.71rem!important;
+  line-height:1.5!important;
+}
+#settingsRoute .member-metadata-row strong,
+#settingsRoute .member-tag-definition-copy strong{
+  font-size:.77rem!important;
+}
+#settingsRoute .member-metadata-row small{
+  font-size:.7rem!important;
+}
+#settingsRoute .member-field-key,
+#settingsRoute .member-field-type{
+  font-size:.66rem!important;
+}
+
+/* Buttons in Settings should support the content, not overpower it. */
+#settingsRoute .secondary-button{
+  padding:7px 10px!important;
+  border-radius:8px!important;
+  font-size:.74rem!important;
+  line-height:1.2!important;
+}
+#settingsRoute .text-button{
+  padding:5px 4px!important;
+  border-radius:7px!important;
+  font-size:.73rem!important;
+  line-height:1.2!important;
+}
+#settingsRoute .compact-metadata-button{
+  padding:4px 2px!important;
+  font-size:.72rem!important;
+}
+#settingsRoute .backup-actions{
+  gap:7px!important;
+}
+#settingsRoute .backup-file-field input[type=file]::file-selector-button{
+  padding:6px 9px!important;
+  font-size:.7rem!important;
+}
