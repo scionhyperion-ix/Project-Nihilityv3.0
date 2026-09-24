@@ -611,6 +611,11 @@ async function syncPkMemberMedia(user:any,local:any,remote:any){
     await admin("/rest/v1/members?id=eq."+encodeURIComponent(local.id),{
       method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify(patch)
     });
+    if(Object.prototype.hasOwnProperty.call(patch,"avatar_storage_path"))local.avatar_storage_path=patch.avatar_storage_path;
+    if(Object.prototype.hasOwnProperty.call(patch,"banner_storage_path"))local.banner_storage_path=patch.banner_storage_path;
+    if(Object.prototype.hasOwnProperty.call(patch,"avatar_source"))local.avatar_source=patch.avatar_source;
+    if(Object.prototype.hasOwnProperty.call(patch,"banner_source"))local.banner_source=patch.banner_source;
+    local.metadata=metadata;
     await Promise.allSettled(cleanup.map(item=>deleteStoredMedia(user.id,item.kind,item.path)));
   }
   return{copied,removed,failed,conflicts};
@@ -662,6 +667,8 @@ async function syncPkGroupMedia(user:any,local:any,remote:any){
     await admin("/rest/v1/groups?id=eq."+encodeURIComponent(local.id),{
       method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify(patch)
     });
+    if(Object.prototype.hasOwnProperty.call(patch,"icon_storage_path"))local.icon_storage_path=patch.icon_storage_path;
+    local.metadata=metadata;
     await Promise.allSettled(cleanup.map(item=>deleteStoredMedia(user.id,item.kind,item.path)));
   }
   return{copied,removed,failed,conflicts};
