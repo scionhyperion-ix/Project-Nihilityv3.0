@@ -183,6 +183,7 @@
     if(m.description){const d=document.createElement('p');d.className='member-card-desc';d.textContent=m.description;card.append(d)}
     const gs=groupsForMember(m.id);
     if(gs.length){const wrap=document.createElement('div');wrap.className='member-card-groups';gs.slice(0,4).forEach(g=>{const s=document.createElement('span');s.textContent=groupName(g);wrap.append(s)});card.append(wrap)}
+    window.nihilityMemberCustom?.decorateCard?.(card,m);
     const bar=document.createElement('span');bar.className='member-color-bar';bar.style.background=m.color?'#'+m.color:'var(--accent)';card.append(bar);addArchivedBadge(card,m);
     card.onclick=()=>openMember(m);return card;
   }
@@ -197,6 +198,7 @@
     const pron=document.createElement('span');pron.className='member-tile-pronouns';pron.textContent=m.pronouns||'No pronouns';details.append(pron);
     const desc=document.createElement('p');desc.className='member-tile-description';desc.textContent=m.description||'No description';details.append(desc);
     card.append(header,media,details);
+    window.nihilityMemberCustom?.decorateCard?.(card,m);
     const bar=document.createElement('span');bar.className='member-color-bar';bar.style.background=m.color?'#'+m.color:'var(--accent)';card.append(bar);addArchivedBadge(card,m);
     card.onclick=()=>openMember(m);return card;
   }
@@ -211,6 +213,7 @@
     const list=sortedMembers(source.filter(m=>{
       if(group!=='all'&&!memberGroupIds(m.id).includes(group))return false;
       if(!q)return true;
+      if(window.nihilityMemberCustom?.matchesMember)return window.nihilityMemberCustom.matchesMember(m,q);
       return [m.name,m.display_name,m.pronouns,m.description,m.birthday].filter(Boolean).some(v=>String(v).toLowerCase().includes(q));
     }));
     const grid=document.querySelector('#memberGrid');grid.dataset.memberView=view;grid.replaceChildren();
@@ -367,6 +370,7 @@
       if(id)await nihilityApi.rest('members',{method:'PATCH',query:'id=eq.'+encodeURIComponent(id),body,prefer:'return=minimal'});
       else{const rows=await nihilityApi.rest('members',{method:'POST',body,prefer:'return=representation'});memberId=rows?.[0]?.id}
       if(memberId)await saveMemberGroups(memberId);
+      if(memberId&&window.nihilityMemberCustom?.saveMemberCustomData)await window.nihilityMemberCustom.saveMemberCustomData(memberId);
       if(old?.avatar_storage_path&&old.avatar_storage_path!==body.avatar_storage_path)await safeDelete('avatar',old.avatar_storage_path);
       if(old?.banner_storage_path&&old.banner_storage_path!==body.banner_storage_path)await safeDelete('banner',old.banner_storage_path);
       document.querySelector('#memberDialog').close();toast(id?'Member updated':'Member created');await loadData();
