@@ -1690,6 +1690,7 @@ const BACKUP_LIMITS={
   member_tag_links:1000000,
   member_connections:10000,
   system_events:1000000,
+  journal_entries:100000,
   media:40000
 };
 
@@ -1748,7 +1749,7 @@ async function actionBackupExport(user:any){
   await requireBackupOwner(user.id);
   const [
     members,groups,memberGroups,fronts,frontMembers,settingsRows,imports,profileRows,
-    fieldDefinitions,fieldValues,tags,tagLinks,connections,systemEvents
+    fieldDefinitions,fieldValues,tags,tagLinks,connections,systemEvents,journalVaultRows,journalEntries
   ]=await Promise.all([
     adminAll("/rest/v1/members?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=created_at.asc"),
     adminAll("/rest/v1/groups?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=created_at.asc"),
@@ -1763,7 +1764,9 @@ async function actionBackupExport(user:any){
     adminAll("/rest/v1/member_tags?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=name.asc"),
     adminAll("/rest/v1/member_tag_links?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=member_id.asc,tag_id.asc"),
     adminAll("/rest/v1/member_connections?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=created_at.asc"),
-    adminAll("/rest/v1/system_events?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=occurred_at.asc,id.asc")
+    adminAll("/rest/v1/system_events?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=occurred_at.asc,id.asc"),
+    admin("/rest/v1/journal_vaults?user_id=eq."+encodeURIComponent(user.id)+"&select=*&limit=1"),
+    adminAll("/rest/v1/journal_entries?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=logical_date.asc,created_at.asc,id.asc")
   ]);
 
   const media:any[]=[];
@@ -1863,6 +1866,31 @@ async function actionBackupExport(user:any){
     metadata:(x.metadata&&typeof x.metadata==="object"&&!Array.isArray(x.metadata))?x.metadata:{},
     created_at:x.created_at
   }));
+  const journalVault=journalVaultRows?.[0]||null;
+  const portableJournalVault=journalVault?{
+    format_version:journalVault.format_version,
+    cipher_suite:journalVault.cipher_suite,
+    kdf_name:journalVault.kdf_name,
+    kdf_iterations:journalVault.kdf_iterations,
+    kdf_salt:journalVault.kdf_salt,
+    wrap_iv:journalVault.wrap_iv,
+    wrapped_key:journalVault.wrapped_key,
+    recovery_kdf_name:journalVault.recovery_kdf_name,
+    recovery_salt:journalVault.recovery_salt,
+    recovery_iv:journalVault.recovery_iv,
+    recovery_wrapped_key:journalVault.recovery_wrapped_key,
+    created_at:journalVault.created_at,
+    updated_at:journalVault.updated_at
+  }:null;
+  const portableJournalEntries=(journalEntries||[]).map((x:any)=>({
+    id:x.id,
+    payload_version:x.payload_version,
+    logical_date:x.logical_date,
+    iv:x.iv,
+    ciphertext:x.ciphertext,
+    created_at:x.created_at,
+    updated_at:x.updated_at
+  }));
   const profile=profileRows?.[0]||{};
   const portableProfile={
     display_name:profile.display_name||null,
@@ -1883,6 +1911,8 @@ async function actionBackupExport(user:any){
     member_tag_links:portableTagLinks,
     member_connections:portableConnections,
     system_events:portableSystemEvents,
+    journal_vault:portableJournalVault,
+    journal_entries:portableJournalEntries,
     settings:sanitizedSettings(settingsRows?.[0]?.settings||{},media),
     imports:(imports||[]).map((x:any)=>({source:x.source,summary:x.summary||{},created_at:x.created_at})),
     profile:portableProfile
@@ -1972,6 +2002,8 @@ async function validateBackup(backup:any){
   const tagLinks=optionalArray(data,"member_tag_links",BACKUP_LIMITS.member_tag_links);
   const connections=optionalArray(data,"member_connections",BACKUP_LIMITS.member_connections);
   const systemEvents=optionalArray(data,"system_events",BACKUP_LIMITS.system_events);
+  const journalEntries=optionalArray(data,"journal_entries",BACKUP_LIMITS.journal_entries);
+  const journalVault=(data.journal_vault&&typeof data.journal_vault==="object"&&!Array.isArray(data.journal_vault))?data.journal_vault:null;
   const media=Array.isArray(backup.media)?backup.media:[];
   if(media.length>BACKUP_LIMITS.media)throw new ClientError("Backup media manifest is too large");
 
@@ -2122,6 +2154,33 @@ async function validateBackup(backup:any){
     if(jsonBytes(metadata)>8192)throw new ClientError("A system timeline metadata block exceeds Nihility limits");
   }
 
+  if(journalEntries.length&&!journalVault)throw new ClientError("Journal entries require journal vault metadata");
+  if(journalVault){
+    if(Number(journalVault.format_version)!==1)throw new ClientError("Unsupported journal vault version");
+    if(String(journalVault.cipher_suite||"")!=="AES-256-GCM")throw new ClientError("Unsupported journal cipher suite");
+    if(String(journalVault.kdf_name||"")!=="PBKDF2-HMAC-SHA-256")throw new ClientError("Unsupported journal passphrase KDF");
+    if(String(journalVault.recovery_kdf_name||"")!=="HKDF-SHA-256")throw new ClientError("Unsupported journal recovery KDF");
+    const iterations=Number(journalVault.kdf_iterations);
+    if(!Number.isInteger(iterations)||iterations<600000||iterations>5000000)throw new ClientError("Journal KDF settings are invalid");
+    journalBase64url(journalVault.kdf_salt,16,128,"journal KDF salt");
+    journalBase64url(journalVault.wrap_iv,16,64,"journal wrap IV");
+    journalBase64url(journalVault.wrapped_key,48,160,"wrapped journal key");
+    journalBase64url(journalVault.recovery_salt,16,128,"journal recovery salt");
+    journalBase64url(journalVault.recovery_iv,16,64,"journal recovery IV");
+    journalBase64url(journalVault.recovery_wrapped_key,48,160,"journal recovery key");
+  }
+  const journalIds=new Set<string>();
+  for(const entry of journalEntries){
+    const id=journalUuid(entry?.id);
+    if(journalIds.has(id))throw new ClientError("Backup contains duplicate journal entry identifiers");
+    journalIds.add(id);
+    if(Number(entry?.payload_version)!==1)throw new ClientError("Unsupported journal entry version");
+    journalDate(entry?.logical_date);
+    journalBase64url(entry?.iv,16,64,"journal entry IV");
+    journalBase64url(entry?.ciphertext,24,350000,"journal ciphertext");
+    if(!validTimestamp(entry?.created_at,true)||!validTimestamp(entry?.updated_at,true))throw new ClientError("A journal timestamp is invalid");
+  }
+
   const settings=(data.settings&&typeof data.settings==="object"&&!Array.isArray(data.settings))?data.settings:{};
   if(jsonBytes(settings)>131072)throw new ClientError("Backup settings exceed Nihility limits");
   for(const item of imports){
@@ -2158,7 +2217,8 @@ async function validateBackup(backup:any){
       member_tags:tags.length,
       member_tag_links:tagLinks.length,
       member_connections:connections.length,
-      system_events:systemEvents.length
+      system_events:systemEvents.length,
+      journal_entries:journalEntries.length
     },
     media:{total:media.length,included:media.filter((x:any)=>x?.included===true).length}
   };
