@@ -98,7 +98,7 @@
       const strong=document.createElement('strong');strong.textContent=label(view.other);
       const relationship=document.createElement('small');relationship.textContent=view.myLabel+' · '+view.theirLabel+' to you';
       copy.append(strong,relationship);identity.append(copy);
-      identity.onclick=()=>openMember(view.other);
+      identity.onclick=()=>{document.querySelector('#memberDialog')?.close();openMember(view.other)};
 
       const controls=document.createElement('div');controls.className='member-connection-controls';
       const edit=document.createElement('button');edit.type='button';edit.className='text-button';edit.textContent='Edit';edit.onclick=()=>openConnectionDialog(view.connection);
@@ -259,7 +259,7 @@
       const circle=svgEl('circle',{cx:x,cy:y,r:35});
       const text=svgEl('text',{x,y:y+4,'text-anchor':'middle'});text.textContent=label(view.other).slice(0,14);
       group.append(circle,text);
-      const open=()=>{d.close();openMember(view.other)};
+      const open=()=>{d.close();document.querySelector('#memberDialog')?.close();openMember(view.other)};
       group.addEventListener('click',open);
       group.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open()}});
       svg.append(group);
