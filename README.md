@@ -105,6 +105,28 @@ The main application intentionally follows the Rainbow layout and interaction st
 
 GitHub Pages must be enabled once in repository Settings before the Pages workflow can deploy. The GitHub App token cannot perform this one-time repository setting change.
 
+## Encrypted journal vault
+
+Nihility journaling uses client-side encryption and treats the server as untrusted for journal contents.
+
+- A random 256-bit journal vault key encrypts every entry with AES-256-GCM in the browser.
+- The vault key is wrapped with a separate journal passphrase using PBKDF2-HMAC-SHA-256 and a per-vault random salt.
+- A separately generated 256-bit recovery secret wraps the same vault key through HKDF-SHA-256 and AES-GCM.
+- The journal passphrase and plaintext recovery secret are never sent to Supabase.
+- The unlocked AES key is imported as a non-extractable Web Crypto key and kept only in browser memory.
+- Leaving the Journal route, hiding the tab, signing out, reloading, or the inactivity timeout locks the vault and drops in-memory plaintext state.
+- Titles, bodies, journal logical dates, and linked member IDs are encrypted together. The database sees only opaque entry IDs, ciphertext, IVs, and database create/update timestamps.
+- Entry ciphertext is authenticated with AAD bound to the Nihility account, entry UUID, and payload version, preventing silent row/account substitution.
+- Browser roles have no direct grants or RLS policies on journal storage tables. All journal transport goes through the authenticated `nihility-secure` Edge Function.
+- Journal mutation APIs additionally require an in-memory proof derived from the random vault key. A valid Nihility session without the journal key can fetch vault wrapping metadata but cannot list, overwrite, delete, re-key, or erase journal entries.
+- Key mutation/destruction actions are rate-limited and recorded in the separate security-event log without journal contents.
+- Recovery automatically rotates both the passphrase wrapper and recovery wrapper atomically, invalidating the used recovery key.
+- Encrypted journal data is included in full Nihility backups as ciphertext and wrapped key material. Journal plaintext is never required for backup or restore.
+- Search occurs locally after decryption. There is no server-side plaintext journal index.
+- v1 intentionally excludes rich HTML and journal attachments to keep the parser, storage, and XSS surface small.
+
+Threat-model limitation: client-side encryption protects confidentiality against database/storage disclosure and ordinary server-side data access, but it cannot protect plaintext while the vault is unlocked from malicious JavaScript already executing in the Nihility origin. Nihility therefore keeps a strict self-only Content Security Policy and does not load third-party journal scripts.
+
 ## System timeline
 
 Nihility has a database-backed chronological system timeline.
