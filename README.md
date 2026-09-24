@@ -47,6 +47,17 @@ PluralKit imports are copy-in only.
 
 Re-importing does not overwrite existing Nihility-owned member records. Existing linked PK members are skipped and only previously unseen PK members are added.
 
+## Backup and restore
+
+The owner can create portable Nihility backups from Settings.
+
+- JSON backups contain members, groups, group memberships, front history, app settings, import history, and safe profile fields.
+- ZIP backups contain the same data plus private media when those files can be read.
+- Restore always validates and previews the backup before replacement.
+- Restore is atomic at the database layer and remaps internal IDs to prevent cross-account ownership problems.
+- Passwords, auth sessions, invitations, integration credentials, and raw security-event logs are never included.
+- Full backup and restore actions are owner-only, rate-limited, and audited.
+
 ## Member archival
 
 Removing a member from active use archives the record instead of deleting it.
