@@ -128,6 +128,14 @@ begin
     if p_ended_at > v_now + interval '5 minutes' then
       raise exception 'Front end time cannot be in the future';
     end if;
+  elsif exists (
+    select 1
+    from public.fronts other
+    where other.user_id = p_user_id
+      and other.id <> p_front_id
+      and other.ended_at is null
+  ) then
+    raise exception 'Another front is already ongoing';
   end if;
 
   if p_note is not null and length(p_note) > 10000 then
@@ -293,13 +301,22 @@ begin
     raise exception 'Front history entry was not found';
   end if;
 
-  v_validation := private.validate_nihility_front_history_correction(
-    p_user_id,p_front_id,p_started_at,p_ended_at,p_note,p_source,p_member_links
-  );
+  begin
+    v_validation := private.validate_nihility_front_history_correction(
+      p_user_id,p_front_id,p_started_at,p_ended_at,p_note,p_source,p_member_links
+    );
+  exception when others then
+    return jsonb_build_object(
+      'error', left(sqlerrm,500),
+      'revision', v_snapshot->>'revision',
+      'front', v_snapshot->'front',
+      'links', v_snapshot->'links'
+    );
+  end;
 
   return v_snapshot || jsonb_build_object('validation',v_validation);
 end
-$$;
+$;
 
 revoke all on function public.preview_nihility_front_history_correction(
   uuid,uuid,timestamptz,timestamptz,text,text,jsonb
@@ -345,12 +362,19 @@ begin
 
   if p_expected_revision is null
      or p_expected_revision <> v_snapshot->>'revision' then
-    raise exception 'This history entry changed since you opened it. Review the latest version before saving.';
+    return jsonb_build_object(
+      'error','This history entry changed since you opened it. Review the latest version before saving.',
+      'stale',true
+    );
   end if;
 
-  v_validation := private.validate_nihility_front_history_correction(
-    p_user_id,p_front_id,p_started_at,p_ended_at,p_note,p_source,p_member_links
-  );
+  begin
+    v_validation := private.validate_nihility_front_history_correction(
+      p_user_id,p_front_id,p_started_at,p_ended_at,p_note,p_source,p_member_links
+    );
+  exception when others then
+    return jsonb_build_object('error',left(sqlerrm,500));
+  end;
 
   -- Detaching an imported PluralKit record turns it into a purely local
   -- correction. Tombstone the original switch ID first so a later PK import
@@ -438,14 +462,17 @@ begin
   for update;
 
   if not found then
-    raise exception 'Front history entry was not found';
+    return jsonb_build_object('error','Front history entry was not found');
   end if;
 
   v_snapshot := private.nihility_front_history_snapshot(p_user_id,p_front_id);
 
   if p_expected_revision is null
      or p_expected_revision <> v_snapshot->>'revision' then
-    raise exception 'This history entry changed since you opened it. Review the latest version before deleting it.';
+    return jsonb_build_object(
+      'error','This history entry changed since you opened it. Review the latest version before deleting it.',
+      'stale',true
+    );
   end if;
 
   -- Imported PK entries keep a private deletion tombstone so a later history
