@@ -85,7 +85,6 @@ function setRoute(route){
   const meta={home:['Overview','Home'],members:['System directory','Members'],history:['Front tracking','Front history'],settings:['Connection and privacy','Settings'],profile:['Account','Profile']};
   const pair=meta[route]||meta.home;$('#pageEyebrow').textContent=pair[0];$('#pageTitle').textContent=pair[1];
   $$('.route-view').forEach(v=>v.hidden=v.id!==route+'Route');$$('[data-route]').forEach(b=>b.classList.toggle('active',b.dataset.route===route));
-  $('#openFrontManager').hidden=route==='settings'||route==='profile';
   history.replaceState(null,'',route==='home'?location.pathname:(location.pathname+'#'+route));
   if(route==='profile')renderProfile();
 }
@@ -241,8 +240,6 @@ function renderHome(){
     currentNote.hidden=!front?.note;
     currentNote.textContent=front?.note||'';
   }
-  const editDetails=$('#editCurrentFrontDetailsButton');
-  if(editDetails)editDetails.hidden=!front;
   const transferButton=$('#transferFrontToPkButton');
   if(transferButton){
     transferButton.hidden=!state.pkConnected;
@@ -253,17 +250,17 @@ function renderHome(){
   const rainbowSubtitle=$('#rainbowFrontSubtitle');if(rainbowSubtitle)rainbowSubtitle.textContent=!members.length?'No one is currently fronting':members.length===1?(label(members[0])+' is currently fronting'):(members.length+' members are currently fronting');
   if(!front||!members.length){
     $('#currentFrontHeading').textContent='Nobody is fronting';$('#frontDuration').textContent='--';
-    const p=document.createElement('p');p.className='muted';p.textContent='Start a front from Quick front or Manage front.';$('#currentFrontMembers').append(p);
+    const p=document.createElement('p');p.className='muted';p.textContent='Start a front from Quick front or choose a member.';$('#currentFrontMembers').append(p);
   }else{
     $('#currentFrontHeading').textContent=members.length===1?label(members[0]):(members.length+' co-fronters');
     members.forEach(m=>{
       const row=document.createElement('div');row.className='front-person timed-front-person front-person-interactive';
       row.setAttribute('role','button');
       row.tabIndex=0;
-      row.setAttribute('aria-label','Open '+label(m)+' profile');
-      row.title='View or edit '+label(m);
-      row.onclick=()=>openMember(m);
-      row.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();openMember(m)}};
+      row.setAttribute('aria-label','Open actions for '+label(m));
+      row.title='Front actions for '+label(m);
+      row.onclick=()=>openFronterActions(m,front);
+      row.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();openFronterActions(m,front)}};
       row.append(avatarEl(m,'timeline-avatar'));
       const copy=document.createElement('div');copy.className='front-person-copy';
       const name=document.createElement('strong');name.textContent=label(m);
@@ -845,8 +842,92 @@ async function saveFront(e){
     await logFront(details,ts,note);$('#frontDialog').close();toast('Front updated','Saved to Nihility.');
   }catch(error){err.textContent=error.message;err.hidden=false}
 }
+function ensureFronterActionDialog(){
+  let dialog=$('#fronterActionDialog');
+  if(dialog)return dialog;
+  dialog=document.createElement('dialog');
+  dialog.id='fronterActionDialog';
+  dialog.className='modal-dialog fronter-action-dialog';
+  dialog.setAttribute('aria-labelledby','fronterActionName');
+  dialog.innerHTML=`
+    <div class="modal-card fronter-action-card">
+      <div class="modal-heading fronter-action-heading">
+        <div class="fronter-action-identity">
+          <div id="fronterActionAvatar" class="fronter-action-avatar"></div>
+          <div>
+            <p class="eyebrow">Current fronter</p>
+            <h3 id="fronterActionName">Member</h3>
+            <p id="fronterActionMeta" class="muted"></p>
+          </div>
+        </div>
+        <button id="closeFronterActionDialog" class="icon-button" type="button" aria-label="Close">×</button>
+      </div>
+      <div class="fronter-action-list">
+        <button id="fronterActionEditMember" class="fronter-action-item" type="button">
+          <strong>Edit alter</strong>
+          <small>Open this member's profile and details.</small>
+        </button>
+        <button id="fronterActionEditFront" class="fronter-action-item" type="button">
+          <strong>Edit notes, details & time</strong>
+          <small>Change this front's timing, notes, and per-fronter details.</small>
+        </button>
+        <button id="fronterActionSwitchOut" class="fronter-action-item danger-text" type="button">
+          <strong>Switch out</strong>
+          <small>Remove only this member from the current front.</small>
+        </button>
+      </div>
+    </div>`;
+  document.body.append(dialog);
+  dialog.querySelector('#closeFronterActionDialog').onclick=()=>dialog.close();
+  dialog.addEventListener('click',event=>{if(event.target===dialog)dialog.close()});
+  return dialog;
+}
+function openFronterActions(member,front){
+  if(!member||!front)return;
+  const dialog=ensureFronterActionDialog();
+  const avatar=dialog.querySelector('#fronterActionAvatar');
+  avatar.replaceChildren(avatarEl(member,'timeline-avatar'));
+  dialog.querySelector('#fronterActionName').textContent=label(member);
+  dialog.querySelector('#fronterActionMeta').textContent=member.pronouns||member.name||'';
+  dialog.querySelector('#fronterActionEditMember').onclick=()=>{
+    dialog.close();
+    openMember(member);
+  };
+  dialog.querySelector('#fronterActionEditFront').onclick=()=>{
+    dialog.close();
+    if(window.nihilityOpenFrontHistoryEditor)window.nihilityOpenFrontHistoryEditor(front.id);
+    else toast('Front editor unavailable','Reload the page and try again.','error');
+  };
+  dialog.querySelector('#fronterActionSwitchOut').onclick=async()=>{
+    dialog.close();
+    await switchOutMember(member);
+  };
+  dialog.showModal();
+}
+function currentFrontMemberDetails(front,member){
+  const link=frontMemberLink(front.id,member.id)||{};
+  return{
+    member_id:member.id,
+    note:link.note||null,
+    private_note:link.private_note||null,
+    mood:link.mood||null,
+    context:link.context||null,
+    activity:link.activity||null,
+    location:link.location||null
+  };
+}
+async function switchOutMember(member){
+  const front=activeFront();
+  if(!front)return toast('No active front','There is no active front to update.','error');
+  const members=frontMembers(front.id);
+  if(!members.some(item=>item.id===member.id))return toast('Front already changed',label(member)+' is no longer in the current front.','error');
+  if(!confirm('Switch '+label(member)+' out?'))return;
+  const remaining=members.filter(item=>item.id!==member.id);
+  const details=remaining.map(item=>currentFrontMemberDetails(front,item));
+  await logFront(details,null,remaining.length?(front.note||null):null);
+  toast('Switched out',label(member)+' is no longer fronting.');
+}
 async function quickFront(m){if(!confirm('Start a new front with '+label(m)+' fronting?'))return;await logFront([{member_id:m.id}],null,null);toast('Front updated',label(m)+' is now fronting.')}
-async function switchOut(){if(!confirm('Switch out with nobody fronting?'))return;await logFront([],null,null);toast('Switched out')}
 
 async function connectPk(){
   const message=$('#pkMessage');message.textContent='Connecting securely...';
@@ -1128,7 +1209,7 @@ async function signOut(){
 }
 $('#signOutButton').onclick=signOut;$('#deniedSignOut').onclick=signOut;$('#sidebarProfileButton').onclick=()=>setRoute('profile');
 $$('[data-route]').forEach(b=>b.onclick=()=>setRoute(b.dataset.route));$$('[data-route-link]').forEach(b=>b.onclick=()=>setRoute(b.dataset.routeLink));
-$('#openFrontManager').onclick=()=>openFront('replace');$('#chooseAnyMemberButton').onclick=()=>openFront('replace');$('#newFrontButton').onclick=()=>openFront('replace');$('#addCoFronterButton').onclick=()=>openFront('add');$('#editCurrentFrontDetailsButton').onclick=()=>{const front=activeFront();if(front)window.nihilityOpenFrontHistoryEditor?.(front.id)};$('#transferFrontToPkButton').onclick=transferCurrentFrontToPk;$('#switchOutButton').onclick=switchOut;
+$('#chooseAnyMemberButton').onclick=()=>openFront('replace');$('#newFrontButton').onclick=()=>openFront('replace');$('#addCoFronterButton').onclick=()=>openFront('add');$('#transferFrontToPkButton').onclick=transferCurrentFrontToPk;
 $('#createMemberButton').onclick=()=>openMember();$('#memberSearch').oninput=()=>renderMembers();$('#memberForm').onsubmit=saveMember;$('#deleteMemberButton').onclick=deleteMember;$('#restoreMemberButton').onclick=restoreMember;$('#permanentDeleteMemberButton').onclick=permanentlyDeleteMember;$('#closeMemberDialog').onclick=$('#cancelMemberButton').onclick=()=>$('#memberDialog').close();$('#memberColorPicker').oninput=e=>$('#memberColor').value=e.target.value.toUpperCase();$('#memberColor').oninput=e=>{const c=hex(e.target.value);if(c)$('#memberColorPicker').value=c};
 $('#frontForm').onsubmit=saveFront;$('#closeFrontDialog').onclick=$('#cancelFrontButton').onclick=()=>$('#frontDialog').close();$('#frontMemberSearch').oninput=()=>buildFrontPicker();document.querySelectorAll('input[name="frontMode"]').forEach(i=>i.addEventListener('change',syncFrontModeDetails));$('#customFrontTimeEnabled').onchange=e=>$('#customFrontTimeRow').hidden=!e.target.checked;
 $('#connectPkButton').onclick=connectPk;$('#disconnectPkButton').onclick=disconnectPk;$('#importPkButton').onclick=importPk;
