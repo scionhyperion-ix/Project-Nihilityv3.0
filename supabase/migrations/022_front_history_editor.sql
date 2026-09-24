@@ -316,7 +316,7 @@ begin
 
   return v_snapshot || jsonb_build_object('validation',v_validation);
 end
-$;
+$$;
 
 revoke all on function public.preview_nihility_front_history_correction(
   uuid,uuid,timestamptz,timestamptz,text,text,jsonb
