@@ -1879,6 +1879,7 @@ async function actionBackupExport(user:any){
     recovery_salt:journalVault.recovery_salt,
     recovery_iv:journalVault.recovery_iv,
     recovery_wrapped_key:journalVault.recovery_wrapped_key,
+    key_verifier:journalVault.key_verifier,
     created_at:journalVault.created_at,
     updated_at:journalVault.updated_at
   }:null;
@@ -2167,6 +2168,7 @@ async function validateBackup(backup:any){
     journalBase64url(journalVault.recovery_salt,16,128,"journal recovery salt");
     journalBase64url(journalVault.recovery_iv,16,64,"journal recovery IV");
     journalBase64url(journalVault.recovery_wrapped_key,48,160,"journal recovery key");
+    journalBase64url(journalVault.key_verifier,43,43,"journal key verifier");
   }
   const journalIds=new Set<string>();
   for(const entry of journalEntries){
@@ -2377,8 +2379,21 @@ function journalVaultPayload(body:any){
     recovery_kdf_name:"HKDF-SHA-256",
     recovery_salt:journalBase64url(v.recovery_salt,16,128,"journal recovery salt"),
     recovery_iv:journalBase64url(v.recovery_iv,16,64,"journal recovery IV"),
-    recovery_wrapped_key:journalBase64url(v.recovery_wrapped_key,48,160,"journal recovery key")
+    recovery_wrapped_key:journalBase64url(v.recovery_wrapped_key,48,160,"journal recovery key"),
+    key_verifier:journalBase64url(v.key_verifier,43,43,"journal key verifier")
   };
+}
+function constantTimeTextEqual(a:string,b:string){
+  if(a.length!==b.length)return false;
+  let diff=0;
+  for(let i=0;i<a.length;i++)diff|=a.charCodeAt(i)^b.charCodeAt(i);
+  return diff===0;
+}
+async function requireJournalProof(userId:string,proof:any){
+  const supplied=journalBase64url(proof,43,43,"journal vault proof");
+  const rows=await admin("/rest/v1/journal_vaults?user_id=eq."+encodeURIComponent(userId)+"&select=key_verifier&limit=1");
+  const expected=String(rows?.[0]?.key_verifier||"");
+  if(!expected||!constantTimeTextEqual(supplied,expected))throw new ClientError("Journal vault must be unlocked for this action.",403);
 }
 async function actionJournalStatus(user:any){
   const rows=await admin(
@@ -2412,6 +2427,7 @@ async function actionJournalList(user:any,body:any){
   return{entries:rows||[],has_more:(rows||[]).length===limit};
 }
 async function actionJournalSave(user:any,body:any){
+  await requireJournalProof(user.id,body?.proof);
   const e=body?.entry||{};
   const id=journalUuid(e.id);
   const payloadVersion=Number(e.payload_version||1);
@@ -2433,6 +2449,7 @@ async function actionJournalSave(user:any,body:any){
   return{saved:true,id};
 }
 async function actionJournalDelete(user:any,body:any){
+  await requireJournalProof(user.id,body?.proof);
   const id=journalUuid(body?.entry_id);
   const existing=await admin("/rest/v1/journal_entries?user_id=eq."+encodeURIComponent(user.id)+"&id=eq."+encodeURIComponent(id)+"&select=id&limit=1");
   if(!existing?.length)throw new ClientError("Journal entry not found",404);
@@ -2442,6 +2459,7 @@ async function actionJournalDelete(user:any,body:any){
   return{deleted:true,id};
 }
 async function actionJournalRewrap(user:any,body:any){
+  await requireJournalProof(user.id,body?.proof);
   const v=body?.vault||{};
   const iterations=Number(v.kdf_iterations);
   if(!Number.isInteger(iterations)||iterations<600000||iterations>5000000)throw new ClientError("Invalid journal KDF settings",400);
@@ -2459,6 +2477,7 @@ async function actionJournalRewrap(user:any,body:any){
   return{rewrapped:true};
 }
 async function actionJournalRekey(user:any,body:any){
+  await requireJournalProof(user.id,body?.proof);
   const v=body?.vault||{};
   const iterations=Number(v.kdf_iterations);
   if(!Number.isInteger(iterations)||iterations<600000||iterations>5000000)throw new ClientError("Invalid journal KDF settings",400);
@@ -2479,6 +2498,7 @@ async function actionJournalRekey(user:any,body:any){
   return{rekeyed:true};
 }
 async function actionJournalRotateRecovery(user:any,body:any){
+  await requireJournalProof(user.id,body?.proof);
   const v=body?.vault||{};
   const patch={
     recovery_salt:journalBase64url(v.recovery_salt,16,128,"journal recovery salt"),
@@ -2493,6 +2513,7 @@ async function actionJournalRotateRecovery(user:any,body:any){
   return{rotated:true};
 }
 async function actionJournalReset(user:any,body:any){
+  await requireJournalProof(user.id,body?.proof);
   if(String(body?.confirmation||"")!=="ERASE JOURNAL")throw new ClientError("Type ERASE JOURNAL to confirm journal destruction.",400);
   await admin("/rest/v1/journal_vaults?user_id=eq."+encodeURIComponent(user.id),{
     method:"DELETE",headers:{Prefer:"return=minimal"}
