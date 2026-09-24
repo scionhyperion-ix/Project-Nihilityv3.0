@@ -1575,7 +1575,18 @@ function historyCorrectionPayload(body:any){
     if(!validUuid(memberId))throw new ClientError("Invalid member in front history");
     if(!joinedAt||!Number.isFinite(Date.parse(joinedAt)))throw new ClientError("Invalid member join time");
     if(leftAt!==null&&!Number.isFinite(Date.parse(leftAt)))throw new ClientError("Invalid member leave time");
-    return {member_id:memberId,joined_at:joinedAt,left_at:leftAt};
+    const detail={
+      note:item?.note==null?null:String(item.note),
+      private_note:item?.privateNote==null?null:String(item.privateNote),
+      mood:item?.mood==null?null:String(item.mood),
+      context:item?.context==null?null:String(item.context),
+      activity:item?.activity==null?null:String(item.activity),
+      location:item?.location==null?null:String(item.location)
+    };
+    if(!textLength(detail.note,4000)||!textLength(detail.private_note,4000)||!textLength(detail.mood,200)||!textLength(detail.context,1000)||!textLength(detail.activity,500)||!textLength(detail.location,500)){
+      throw new ClientError("One or more per-fronter detail fields exceed Nihility limits");
+    }
+    return {member_id:memberId,joined_at:joinedAt,left_at:leftAt,...detail};
   });
   return {frontId,startedAt,endedAt,note,source,memberLinks};
 }
@@ -1770,7 +1781,13 @@ async function actionBackupExport(user:any){
     front_backup_id:x.front_id,
     member_backup_id:x.member_id,
     joined_at:x.joined_at,
-    left_at:x.left_at
+    left_at:x.left_at,
+    note:x.note,
+    private_note:x.private_note,
+    mood:x.mood,
+    context:x.context,
+    activity:x.activity,
+    location:x.location
   }));
   const profile=profileRows?.[0]||{};
   const portableProfile={
@@ -1893,6 +1910,9 @@ async function validateBackup(backup:any){
     const joined=Date.parse(String(link.joined_at));
     const left=link.left_at?Date.parse(String(link.left_at)):null;
     if(left!==null&&left<joined)throw new ClientError("A fronter leaves before joining");
+    if(!textLength(link.note,4000)||!textLength(link.private_note,4000)||!textLength(link.mood,200)||!textLength(link.context,1000)||!textLength(link.activity,500)||!textLength(link.location,500)){
+      throw new ClientError("A per-fronter detail field exceeds Nihility limits");
+    }
     const frontTime=frontTimes.get(frontId);
     if(frontTime&&joined<frontTime.start-1000)throw new ClientError("A fronter joins before the front starts");
     const key=frontId+":"+memberId+":"+String(link.joined_at);
