@@ -2240,7 +2240,7 @@ async function actionBackupPreview(user:any,body:any){
     current,
     mode:"replace",
     warnings:[
-      "Restore replaces current members, groups, front history, app settings, import history, and safe profile fields.",
+      "Restore replaces current members, groups, front history, app settings, import history, encrypted journal vault data, and safe profile fields.",
       "Account email, role, sessions, invitations, and integration credentials are not changed.",
       validated.media.included<validated.media.total
         ?"Some private media is not included in this backup and will not be restored."
@@ -2416,6 +2416,7 @@ async function actionJournalSetup(user:any,body:any){
   return{configured:true};
 }
 async function actionJournalList(user:any,body:any){
+  await requireJournalProof(user.id,body?.proof);
   const limit=Math.min(200,Math.max(1,Number(body?.limit)||100));
   const offset=Math.min(1000000,Math.max(0,Number(body?.offset)||0));
   const rows=await admin(
