@@ -1927,6 +1927,8 @@ body:has(dialog[open]){
 /* Database-backed system timeline. */
 .system-timeline-panel{
   min-height:420px;
+  container-name:timeline-panel;
+  container-type:inline-size;
 }
 .timeline-intro{
   margin:0 0 14px;
@@ -2095,21 +2097,33 @@ body:has(dialog[open]){
   margin:18px 0 4px;
 }
 
-@media(max-width:920px){
+@container timeline-panel (max-width:900px){
   .timeline-toolbar{
-    grid-template-columns:1fr 1fr;
+    grid-template-columns:repeat(3,minmax(0,1fr));
   }
-  .timeline-toolbar .search-field{
+  .timeline-toolbar .timeline-search-field{
     grid-column:1/-1;
   }
 }
-@media(max-width:620px){
+@container timeline-panel (max-width:560px){
   .timeline-toolbar{
-    grid-template-columns:1fr;
+    grid-template-columns:repeat(2,minmax(0,1fr));
   }
-  .timeline-toolbar .search-field{
+  .timeline-toolbar .timeline-search-field,
+  .timeline-toolbar .timeline-filter-field:last-child{
+    grid-column:1/-1;
+  }
+}
+@container timeline-panel (max-width:390px){
+  .timeline-toolbar{
+    grid-template-columns:minmax(0,1fr);
+  }
+  .timeline-toolbar .timeline-search-field,
+  .timeline-toolbar .timeline-filter-field:last-child{
     grid-column:1;
   }
+}
+@media(max-width:620px){
   .system-timeline-event{
     grid-template-columns:30px minmax(0,1fr);
   }
