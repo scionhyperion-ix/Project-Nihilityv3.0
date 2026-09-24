@@ -105,6 +105,21 @@ The main application intentionally follows the Rainbow layout and interaction st
 
 GitHub Pages must be enabled once in repository Settings before the Pages workflow can deploy. The GitHub App token cannot perform this one-time repository setting change.
 
+## Member relationships and graph
+
+Nihility supports first-class connections between members.
+
+- Each connection references two real Nihility members rather than storing names as text.
+- Relationship labels are directional, so one record can represent pairs such as `Parent` / `Child` or symmetric labels such as `Sibling` / `Sibling`.
+- Reversed duplicate pairs and self-connections are rejected at the database layer.
+- Composite ownership foreign keys prevent cross-account member relationships.
+- Existing connections to archived members remain visible and editable; the UI blocks creating new connections to archived members.
+- Member profiles show a connections section with direct navigation to linked profiles.
+- The optional graph view renders direct connections locally in the browser and does not send relationship data to an external graph service.
+- The graph is bounded to 40 rendered neighbors for device safety while the profile list remains complete.
+- Connections are included in backup export, validation, preview counts, and replacement restore with member-ID remapping.
+- Deleting a member permanently cascades its relationships; archiving does not remove them.
+
 ## Member custom fields and tags
 
 Nihility members can use owner-defined structured fields and reusable searchable tags.

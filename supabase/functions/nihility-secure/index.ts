@@ -1660,6 +1660,7 @@ const BACKUP_LIMITS={
   member_field_values:640000,
   member_tags:500,
   member_tag_links:1000000,
+  member_connections:10000,
   media:40000
 };
 
@@ -1718,7 +1719,7 @@ async function actionBackupExport(user:any){
   await requireBackupOwner(user.id);
   const [
     members,groups,memberGroups,fronts,frontMembers,settingsRows,imports,profileRows,
-    fieldDefinitions,fieldValues,tags,tagLinks
+    fieldDefinitions,fieldValues,tags,tagLinks,connections
   ]=await Promise.all([
     adminAll("/rest/v1/members?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=created_at.asc"),
     adminAll("/rest/v1/groups?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=created_at.asc"),
@@ -1731,7 +1732,8 @@ async function actionBackupExport(user:any){
     adminAll("/rest/v1/member_field_definitions?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=position.asc,id.asc"),
     adminAll("/rest/v1/member_field_values?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=member_id.asc,field_id.asc"),
     adminAll("/rest/v1/member_tags?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=name.asc"),
-    adminAll("/rest/v1/member_tag_links?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=member_id.asc,tag_id.asc")
+    adminAll("/rest/v1/member_tag_links?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=member_id.asc,tag_id.asc"),
+    adminAll("/rest/v1/member_connections?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=created_at.asc")
   ]);
 
   const media:any[]=[];
@@ -1813,6 +1815,14 @@ async function actionBackupExport(user:any){
   const portableTagLinks=(tagLinks||[]).map((x:any)=>({
     member_backup_id:x.member_id,tag_backup_id:x.tag_id,created_at:x.created_at
   }));
+  const portableConnections=(connections||[]).map((x:any)=>({
+    source_member_backup_id:x.source_member_id,
+    target_member_backup_id:x.target_member_id,
+    source_label:x.source_label,
+    target_label:x.target_label,
+    created_at:x.created_at,
+    updated_at:x.updated_at
+  }));
   const profile=profileRows?.[0]||{};
   const portableProfile={
     display_name:profile.display_name||null,
@@ -1831,6 +1841,7 @@ async function actionBackupExport(user:any){
     member_field_values:portableFieldValues,
     member_tags:portableTags,
     member_tag_links:portableTagLinks,
+    member_connections:portableConnections,
     settings:sanitizedSettings(settingsRows?.[0]?.settings||{},media),
     imports:(imports||[]).map((x:any)=>({source:x.source,summary:x.summary||{},created_at:x.created_at})),
     profile:portableProfile
@@ -1918,6 +1929,7 @@ async function validateBackup(backup:any){
   const fieldValues=optionalArray(data,"member_field_values",BACKUP_LIMITS.member_field_values);
   const tags=optionalArray(data,"member_tags",BACKUP_LIMITS.member_tags);
   const tagLinks=optionalArray(data,"member_tag_links",BACKUP_LIMITS.member_tag_links);
+  const connections=optionalArray(data,"member_connections",BACKUP_LIMITS.member_connections);
   const media=Array.isArray(backup.media)?backup.media:[];
   if(media.length>BACKUP_LIMITS.media)throw new ClientError("Backup media manifest is too large");
 
@@ -2029,6 +2041,23 @@ async function validateBackup(backup:any){
     if((tagCounts.get(memberId)||0)>100)throw new ClientError("A backup member has more than 100 tags");
   }
 
+  const connectionKeys=new Set<string>();
+  const connectionCounts=new Map<string,number>();
+  for(const row of connections){
+    const sourceId=String(row?.source_member_backup_id||"");
+    const targetId=String(row?.target_member_backup_id||"");
+    if(!memberIds.has(sourceId)||!memberIds.has(targetId))throw new ClientError("Backup contains a connection with a missing member");
+    if(sourceId===targetId)throw new ClientError("Backup contains a self-connection");
+    if(!textLength(row?.source_label,80,true)||!textLength(row?.target_label,80,true))throw new ClientError("A relationship label is missing or too long");
+    const key=[sourceId,targetId].sort().join(":");
+    if(connectionKeys.has(key))throw new ClientError("Backup contains a duplicate member connection");
+    connectionKeys.add(key);
+    for(const memberId of [sourceId,targetId]){
+      connectionCounts.set(memberId,(connectionCounts.get(memberId)||0)+1);
+      if((connectionCounts.get(memberId)||0)>250)throw new ClientError("A backup member has more than 250 direct connections");
+    }
+  }
+
   const settings=(data.settings&&typeof data.settings==="object"&&!Array.isArray(data.settings))?data.settings:{};
   if(jsonBytes(settings)>131072)throw new ClientError("Backup settings exceed Nihility limits");
   for(const item of imports){
@@ -2063,7 +2092,8 @@ async function validateBackup(backup:any){
       member_field_definitions:fieldDefinitions.length,
       member_field_values:fieldValues.length,
       member_tags:tags.length,
-      member_tag_links:tagLinks.length
+      member_tag_links:tagLinks.length,
+      member_connections:connections.length
     },
     media:{total:media.length,included:media.filter((x:any)=>x?.included===true).length}
   };
