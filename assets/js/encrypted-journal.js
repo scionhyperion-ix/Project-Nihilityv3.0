@@ -7,6 +7,7 @@
   const PAGE_SIZE=200;
   let vaultStatus=null;
   let vaultKey=null;
+  let vaultProof=null;
   let encryptedRows=[];
   let decryptedEntries=[];
   let hasMore=false;
@@ -27,6 +28,10 @@
     return out;
   };
   const randomBytes=n=>{const x=new Uint8Array(n);crypto.getRandomValues(x);return x};
+  async function proofForRaw(raw){
+    const digest=await crypto.subtle.digest('SHA-256',raw);
+    return b64u(new Uint8Array(digest));
+  }
   const aad=(id,version=1)=>te.encode('nihility-journal-entry:v'+version+':'+state.user.id+':'+id);
   const wrapAad=()=>te.encode('nihility-journal-wrap:v1:'+state.user.id);
   const recoveryAad=()=>te.encode('nihility-journal-recovery:v1:'+state.user.id);
@@ -98,6 +103,7 @@
   }
   function lockVault(message='Journal locked.'){
     vaultKey=null;
+    vaultProof=null;
     encryptedRows=[];
     loaded=0;hasMore=false;
     clearTimeout(lockTimer);lockTimer=null;
@@ -143,7 +149,8 @@
         wrapped_key:b64u(wrapped),
         recovery_salt:b64u(recoverySalt),
         recovery_iv:b64u(recoveryIv),
-        recovery_wrapped_key:b64u(recoveryWrapped)
+        recovery_wrapped_key:b64u(recoveryWrapped),
+        key_verifier:await proofForRaw(dekRaw)
       },
       recoverySecret
     };
@@ -160,6 +167,7 @@
   }
   async function unlockWithPassphrase(passphrase){
     const raw=await rawKeyFromPassphrase(passphrase);
+    vaultProof=await proofForRaw(raw);
     vaultKey=await importAes(raw);
     raw.fill(0);
     await loadFirstPage();
@@ -346,6 +354,7 @@
       await checkNewPassphrase(pass);
       const dekRaw=randomBytes(32),built=await buildVault(pass,dekRaw);
       await nihilityApi.secure('journal_setup',{vault:built.vault});
+      vaultProof=await proofForRaw(dekRaw);
       vaultKey=await importAes(dekRaw);dekRaw.fill(0);
       await refreshStatus();await loadFirstPage();armLock();showRecovery(built.recoverySecret);toast('Encrypted journal created');
     }catch(error){err.textContent=error.message;err.hidden=false}
@@ -392,7 +401,7 @@
       const member_ids=selectedJournalMemberIds();if(member_ids.length>100)throw new Error('Link at most 100 members to one journal entry.');
       const id=editingId||crypto.randomUUID();
       const encrypted=await encryptEntry(id,{title,body,date,member_ids});
-      await nihilityApi.secure('journal_save',{entry:{id,...encrypted}});
+      await nihilityApi.secure('journal_save',{proof:vaultProof,entry:{id,...encrypted}});
       qs('#journalEntryDialog').close();clearEditor();await loadFirstPage();toast('Journal entry encrypted and saved');
     }catch(error){err.textContent=error.message;err.hidden=false}
   }
@@ -401,7 +410,7 @@
     if(!confirm('Delete this encrypted journal entry permanently?'))return;
     touchVault();
     try{
-      await nihilityApi.secure('journal_delete',{entry_id:editingId});
+      await nihilityApi.secure('journal_delete',{proof:vaultProof,entry_id:editingId});
       qs('#journalEntryDialog').close();clearEditor();await loadFirstPage();toast('Journal entry deleted');
     }catch(error){const err=qs('#journalEntryError');err.textContent=error.message;err.hidden=false}
   }
@@ -419,7 +428,7 @@
       const salt=randomBytes(16),iv=randomBytes(12),key=await derivePassphraseKey(pass,salt,PASS_ITERATIONS);
       const wrapped=await wrapRawKey(raw,key,iv,wrapAad());
       raw.fill(0);
-      await nihilityApi.secure('journal_rewrap',{vault:{kdf_iterations:PASS_ITERATIONS,kdf_salt:b64u(salt),wrap_iv:b64u(iv),wrapped_key:b64u(wrapped)}});
+      await nihilityApi.secure('journal_rewrap',{proof:vaultProof,vault:{kdf_iterations:PASS_ITERATIONS,kdf_salt:b64u(salt),wrap_iv:b64u(iv),wrapped_key:b64u(wrapped)}});
       qs('#journalCurrentPassphrase').value='';qs('#journalNewPassphrase').value='';qs('#journalNewPassphraseConfirm').value='';await refreshStatus();toast('Journal passphrase changed');
     }catch(error){err.textContent=error.message;err.hidden=false}
   }
@@ -431,7 +440,7 @@
       const raw=await rawKeyFromPassphrase(current),secret=randomBytes(32),salt=randomBytes(16),iv=randomBytes(12);
       const key=await deriveRecoveryKey(secret,salt),wrapped=await wrapRawKey(raw,key,iv,recoveryAad());
       raw.fill(0);
-      await nihilityApi.secure('journal_rotate_recovery',{vault:{recovery_salt:b64u(salt),recovery_iv:b64u(iv),recovery_wrapped_key:b64u(wrapped)}});
+      await nihilityApi.secure('journal_rotate_recovery',{proof:vaultProof,vault:{recovery_salt:b64u(salt),recovery_iv:b64u(iv),recovery_wrapped_key:b64u(wrapped)}});
       qs('#journalRecoveryCurrentPassphrase').value='';await refreshStatus();showRecovery(secret);toast('Journal recovery key rotated');
     }catch(error){err.textContent=error.message;err.hidden=false}
   }
@@ -439,7 +448,7 @@
     const err=qs('#journalSecurityError');err.hidden=true;
     try{
       if(qs('#journalResetConfirm').value!=='ERASE JOURNAL')throw new Error('Type ERASE JOURNAL exactly.');
-      await nihilityApi.secure('journal_reset',{confirmation:'ERASE JOURNAL'});
+      await nihilityApi.secure('journal_reset',{proof:vaultProof,confirmation:'ERASE JOURNAL'});
       qs('#journalSecurityDialog').close();vaultKey=null;clearPlaintext();await refreshStatus();renderJournal();toast('Journal vault erased');
     }catch(error){err.textContent=error.message;err.hidden=false}
   }
@@ -451,8 +460,9 @@
       await checkNewPassphrase(pass);
       const raw=await unlockWithRecovery(qs('#journalRecoveryInput').value);
       const built=await buildVault(pass,raw);
-      await nihilityApi.secure('journal_rekey',{vault:built.vault});
-      vaultKey=await importAes(raw);raw.fill(0);await refreshStatus();await loadFirstPage();armLock();
+      const proof=await proofForRaw(raw);
+      await nihilityApi.secure('journal_rekey',{proof,vault:built.vault});
+      vaultProof=proof;vaultKey=await importAes(raw);raw.fill(0);await refreshStatus();await loadFirstPage();armLock();
       qs('#journalRecoverDialog').close();qs('#journalRecoveryInput').value='';qs('#journalRecoveryPassphrase').value='';qs('#journalRecoveryPassphraseConfirm').value='';
       showRecovery(built.recoverySecret);toast('Journal vault recovered and keys rotated');
     }catch(error){err.textContent=error.message;err.hidden=false}
@@ -486,7 +496,7 @@
     renderJournal();
   }
   document.addEventListener('visibilitychange',()=>{if(document.hidden&&vaultKey)lockVault('Journal locked when the tab was hidden.')});
-  window.addEventListener('beforeunload',()=>{vaultKey=null;clearPlaintext()});
+  window.addEventListener('beforeunload',()=>{vaultKey=null;vaultProof=null;clearPlaintext()});
   document.addEventListener('pointerdown',()=>{if(state.route==='journal')touchVault()},{passive:true});
   document.addEventListener('keydown',()=>{if(state.route==='journal')touchVault()});
   initialize();
