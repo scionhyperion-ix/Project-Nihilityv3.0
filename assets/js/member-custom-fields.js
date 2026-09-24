@@ -205,7 +205,7 @@
     let panel=document.querySelector('#memberMetadataSettingsPanel');if(panel)return panel;
     const grid=document.querySelector('#settingsRoute .settings-grid');if(!grid)return null;
     panel=document.createElement('article');panel.id='memberMetadataSettingsPanel';panel.className='panel section-panel member-metadata-settings';
-    panel.innerHTML='<p class="eyebrow">Member metadata</p><h3>Custom fields and tags</h3><p class="muted">Field keys power filters such as <code>source:RE</code>. Tags use <code>tag:frequent</code>. Plain words search names, descriptions, fields, groups, and tags.</p><div class="member-metadata-settings-grid"><section><div class="split-heading"><div><strong>Custom fields</strong><small>Up to 64 definitions</small></div><button id="newCustomFieldButton" class="secondary-button" type="button">New field</button></div><div id="customFieldDefinitionList" class="member-metadata-list"></div></section><section><div class="split-heading"><div><strong>Tags</strong><small>Up to 500 reusable tags</small></div><button id="newMemberTagButton" class="secondary-button" type="button">New tag</button></div><div id="memberTagDefinitionList" class="member-metadata-list"></div></section></div>';
+    panel.innerHTML='<div class="member-metadata-header"><div class="member-metadata-title"><p class="eyebrow">Member metadata</p><h3>Custom fields and tags</h3><p class="muted">Add structured details to member profiles, then find them quickly from Members.</p></div><div class="member-metadata-counts" aria-label="Metadata totals"><span id="customFieldCount" class="soft-pill metadata-count-pill">0 fields</span><span id="memberTagCount" class="soft-pill metadata-count-pill">0 tags</span></div></div><div class="member-metadata-search-help"><span>Search examples</span><code>source:RE</code><code>tag:frequent</code><code>doctor</code></div><div class="member-metadata-settings-grid"><section class="member-metadata-section"><div class="member-metadata-section-heading"><div><strong>Custom fields</strong><small>Structured profile details such as source, role, age, species, or subsystem.</small></div><button id="newCustomFieldButton" class="secondary-button compact-metadata-button" type="button">+ New field</button></div><div id="customFieldDefinitionList" class="member-metadata-list"></div></section><section class="member-metadata-section"><div class="member-metadata-section-heading"><div><strong>Tags</strong><small>Reusable labels for fast filtering and lightweight member categories.</small></div><button id="newMemberTagButton" class="secondary-button compact-metadata-button" type="button">+ New tag</button></div><div id="memberTagDefinitionList" class="member-metadata-list member-tag-definition-grid"></div></section></div>';
     const backup=document.querySelector('#backupPanel');if(backup)backup.insertAdjacentElement('beforebegin',panel);else grid.append(panel);
     panel.querySelector('#newCustomFieldButton').onclick=()=>openFieldDialog();
     panel.querySelector('#newMemberTagButton').onclick=()=>openTagDialog();
@@ -215,22 +215,54 @@
   function renderSettingsPanel(){
     const panel=ensureSettingsPanel();if(!panel)return;
     panel.hidden=state.profile?.role!=='owner';if(panel.hidden)return;
+    const fieldCount=panel.querySelector('#customFieldCount'),tagCount=panel.querySelector('#memberTagCount');
+    if(fieldCount)fieldCount.textContent=state.memberFieldDefinitions.length+' field'+(state.memberFieldDefinitions.length===1?'':'s');
+    if(tagCount)tagCount.textContent=state.memberTags.length+' tag'+(state.memberTags.length===1?'':'s');
+
     const defs=panel.querySelector('#customFieldDefinitionList');defs.replaceChildren();
     state.memberFieldDefinitions.forEach(def=>{
-      const row=document.createElement('div');row.className='member-metadata-row';
-      const copy=document.createElement('div');const strong=document.createElement('strong');strong.textContent=def.label;const small=document.createElement('small');small.textContent=def.key+' · '+def.field_type.replace('_',' ');copy.append(strong,small);
-      const actions=document.createElement('div');const edit=document.createElement('button');edit.type='button';edit.className='text-button';edit.textContent='Edit';edit.onclick=()=>openFieldDialog(def);
-      const del=document.createElement('button');del.type='button';del.className='text-button danger-text';del.textContent='Delete';del.onclick=()=>deleteField(def);actions.append(edit,del);row.append(copy,actions);defs.append(row);
+      const row=document.createElement('div');row.className='member-metadata-row member-field-definition-row';
+      const copy=document.createElement('div');copy.className='member-metadata-row-copy';
+      const top=document.createElement('div');top.className='member-metadata-row-title';
+      const strong=document.createElement('strong');strong.textContent=def.label;
+      const key=document.createElement('code');key.className='member-field-key';key.textContent=def.key;
+      top.append(strong,key);
+      const small=document.createElement('small');small.textContent=def.description||'No description';
+      const type=document.createElement('span');type.className='member-field-type';type.textContent=def.field_type.replace('_',' ');
+      copy.append(top,small,type);
+      const actions=document.createElement('div');actions.className='member-metadata-row-actions';
+      const edit=document.createElement('button');edit.type='button';edit.className='text-button';edit.textContent='Edit';edit.onclick=()=>openFieldDialog(def);
+      const del=document.createElement('button');del.type='button';del.className='text-button danger-text';del.textContent='Delete';del.onclick=()=>deleteField(def);
+      actions.append(edit,del);row.append(copy,actions);defs.append(row);
     });
-    if(!state.memberFieldDefinitions.length){const p=document.createElement('p');p.className='muted';p.textContent='No custom fields yet.';defs.append(p)}
+    if(!state.memberFieldDefinitions.length){
+      const empty=document.createElement('div');empty.className='member-metadata-empty';
+      const icon=document.createElement('span');icon.className='member-metadata-empty-icon';icon.textContent='Aa';
+      const copy=document.createElement('div');const strong=document.createElement('strong');strong.textContent='No custom fields yet';
+      const p=document.createElement('p');p.textContent='Create fields like Source, Role, Species, Age, or Subsystem. Each field gets a searchable key.';
+      copy.append(strong,p);empty.append(icon,copy);defs.append(empty);
+    }
+
     const tags=panel.querySelector('#memberTagDefinitionList');tags.replaceChildren();
     state.memberTags.forEach(tag=>{
-      const row=document.createElement('div');row.className='member-metadata-row';
-      const copy=document.createElement('div');const strong=document.createElement('strong');strong.textContent=tag.name;const small=document.createElement('small');small.textContent=tag.color?'#'+tag.color.toUpperCase():'No color';copy.append(strong,small);
-      const actions=document.createElement('div');const edit=document.createElement('button');edit.type='button';edit.className='text-button';edit.textContent='Edit';edit.onclick=()=>openTagDialog(tag);
-      const del=document.createElement('button');del.type='button';del.className='text-button danger-text';del.textContent='Delete';del.onclick=()=>deleteTag(tag);actions.append(edit,del);row.append(copy,actions);tags.append(row);
+      const row=document.createElement('div');row.className='member-tag-definition-card';
+      if(tag.color)row.style.setProperty('--tag-color','#'+tag.color);
+      const copy=document.createElement('div');copy.className='member-tag-definition-copy';
+      const swatch=document.createElement('span');swatch.className='member-tag-definition-swatch';
+      const strong=document.createElement('strong');strong.textContent=tag.name;
+      copy.append(swatch,strong);
+      const actions=document.createElement('div');actions.className='member-metadata-row-actions';
+      const edit=document.createElement('button');edit.type='button';edit.className='text-button';edit.textContent='Edit';edit.onclick=()=>openTagDialog(tag);
+      const del=document.createElement('button');del.type='button';del.className='text-button danger-text';del.textContent='Delete';del.onclick=()=>deleteTag(tag);
+      actions.append(edit,del);row.append(copy,actions);tags.append(row);
     });
-    if(!state.memberTags.length){const p=document.createElement('p');p.className='muted';p.textContent='No tags yet.';tags.append(p)}
+    if(!state.memberTags.length){
+      const empty=document.createElement('div');empty.className='member-metadata-empty';
+      const icon=document.createElement('span');icon.className='member-metadata-empty-icon tag-empty-icon';icon.textContent='#';
+      const copy=document.createElement('div');const strong=document.createElement('strong');strong.textContent='No tags yet';
+      const p=document.createElement('p');p.textContent='Add reusable labels such as frequent, doctor, caretaker, or source-specific categories.';
+      copy.append(strong,p);empty.append(icon,copy);tags.append(empty);
+    }
   }
 
   function ensureFieldDialog(){
