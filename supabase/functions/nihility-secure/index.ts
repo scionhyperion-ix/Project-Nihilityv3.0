@@ -1477,8 +1477,15 @@ async function actionImportPkFronts(user:any,body:any){
   let existingIds=new Set<string>();
   if(switchIds.length){
     const filter="("+switchIds.map((id:string)=>id.replace(/[^A-Za-z0-9_-]/g,"")).join(",")+")";
-    const existing=await admin("/rest/v1/fronts?user_id=eq."+encodeURIComponent(user.id)+"&source=eq.pluralkit&external_id=in."+encodeURIComponent(filter)+"&select=external_id");
+    const [existing,tombstoned]=await Promise.all([
+      admin("/rest/v1/fronts?user_id=eq."+encodeURIComponent(user.id)+"&source=eq.pluralkit&external_id=in."+encodeURIComponent(filter)+"&select=external_id"),
+      admin("/rest/v1/rpc/nihility_front_history_tombstones",{
+        method:"POST",
+        body:JSON.stringify({p_user_id:user.id,p_provider:"pluralkit",p_external_ids:switchIds})
+      })
+    ]);
     existingIds=new Set((existing||[]).map((f:any)=>String(f.external_id)));
+    for(const id of tombstoned||[])existingIds.add(String(id));
   }
 
   const allPkMemberIds=[...new Set(validSwitches.flatMap((sw:any)=>
@@ -1546,6 +1553,84 @@ async function actionImportMedia(user:any,body:any){
   const kind=String(body.kind||""); const url=String(body.url||"");
   const path=await storeImage(user.id,kind,url);
   return {path};
+}
+
+function historyCorrectionPayload(body:any){
+  const frontId=String(body?.frontId||"").trim();
+  if(!validUuid(frontId))throw new ClientError("Invalid front history entry");
+  const startedAt=String(body?.startedAt||"").trim();
+  const endedAt=body?.endedAt==null||body?.endedAt===""?null:String(body.endedAt).trim();
+  if(!startedAt||!Number.isFinite(Date.parse(startedAt)))throw new ClientError("Invalid front start time");
+  if(endedAt!==null&&!Number.isFinite(Date.parse(endedAt)))throw new ClientError("Invalid front end time");
+  const note=body?.note==null?null:String(body.note);
+  if(note!==null&&note.length>10000)throw new ClientError("Front note is too long");
+  const source=String(body?.source||"").trim();
+  if(!source||source.length>32)throw new ClientError("Invalid front source");
+  const rawLinks=Array.isArray(body?.memberLinks)?body.memberLinks:[];
+  if(rawLinks.length>1000)throw new ClientError("Too many members are attached to one front");
+  const memberLinks=rawLinks.map((item:any)=>{
+    const memberId=String(item?.memberId||"").trim();
+    const joinedAt=String(item?.joinedAt||"").trim();
+    const leftAt=item?.leftAt==null||item?.leftAt===""?null:String(item.leftAt).trim();
+    if(!validUuid(memberId))throw new ClientError("Invalid member in front history");
+    if(!joinedAt||!Number.isFinite(Date.parse(joinedAt)))throw new ClientError("Invalid member join time");
+    if(leftAt!==null&&!Number.isFinite(Date.parse(leftAt)))throw new ClientError("Invalid member leave time");
+    return {member_id:memberId,joined_at:joinedAt,left_at:leftAt};
+  });
+  return {frontId,startedAt,endedAt,note,source,memberLinks};
+}
+async function actionFrontHistoryPreview(user:any,body:any){
+  const input=historyCorrectionPayload(body);
+  const result=await admin("/rest/v1/rpc/preview_nihility_front_history_correction",{
+    method:"POST",
+    body:JSON.stringify({
+      p_user_id:user.id,
+      p_front_id:input.frontId,
+      p_started_at:input.startedAt,
+      p_ended_at:input.endedAt,
+      p_note:input.note,
+      p_source:input.source,
+      p_member_links:input.memberLinks
+    })
+  });
+  if(result?.error)throw new ClientError(String(result.error),400);
+  return result;
+}
+async function actionFrontHistoryCorrect(user:any,body:any){
+  const input=historyCorrectionPayload(body);
+  const expectedRevision=String(body?.expectedRevision||"").trim();
+  if(!/^[a-f0-9]{32}$/i.test(expectedRevision))throw new ClientError("Review the latest history entry before saving");
+  const result=await admin("/rest/v1/rpc/correct_nihility_front_history",{
+    method:"POST",
+    body:JSON.stringify({
+      p_user_id:user.id,
+      p_front_id:input.frontId,
+      p_expected_revision:expectedRevision,
+      p_started_at:input.startedAt,
+      p_ended_at:input.endedAt,
+      p_note:input.note,
+      p_source:input.source,
+      p_member_links:input.memberLinks
+    })
+  });
+  if(result?.error)throw new ClientError(String(result.error),result?.stale?409:400);
+  return result;
+}
+async function actionFrontHistoryDelete(user:any,body:any){
+  const frontId=String(body?.frontId||"").trim();
+  const expectedRevision=String(body?.expectedRevision||"").trim();
+  if(!validUuid(frontId))throw new ClientError("Invalid front history entry");
+  if(!/^[a-f0-9]{32}$/i.test(expectedRevision))throw new ClientError("Review the latest history entry before deleting it");
+  const result=await admin("/rest/v1/rpc/delete_nihility_front_history",{
+    method:"POST",
+    body:JSON.stringify({
+      p_user_id:user.id,
+      p_front_id:frontId,
+      p_expected_revision:expectedRevision
+    })
+  });
+  if(result?.error)throw new ClientError(String(result.error),result?.stale?409:400);
+  return result;
 }
 
 
@@ -1993,11 +2078,14 @@ const ACTION_LIMITS:Record<string,{limit:number,window:number}> = {
   backup_export:{limit:5,window:60},
   backup_preview:{limit:10,window:60},
   backup_restore:{limit:2,window:300},
+  front_history_preview:{limit:60,window:60},
+  front_history_correct:{limit:20,window:60},
+  front_history_delete:{limit:10,window:60},
 };
 const AUDITED_ACTIONS=new Set([
   "pk_connect","pk_disconnect","pk_mirror_front","pk_import","pk_import_groups","pk_sync_apply",
   "pk_update_system","pk_import_fronts","import_media","upload_media","delete_member",
-  "backup_export","backup_restore"
+  "backup_export","backup_restore","front_history_correct","front_history_delete"
 ]);
 async function consumeRateLimit(userId:string,action:string){
   const spec=ACTION_LIMITS[action]||{limit:30,window:60};
@@ -2130,6 +2218,9 @@ Deno.serve(async(req)=>{
     else if(action==="password_range")result=await actionPasswordRange(body);
     else if(action==="delete_member")result=await actionDeleteMember(user,body);
     else if(action==="backup_export")result=await actionBackupExport(user);
+    else if(action==="front_history_preview")result=await actionFrontHistoryPreview(user,body);
+    else if(action==="front_history_correct")result=await actionFrontHistoryCorrect(user,body);
+    else if(action==="front_history_delete")result=await actionFrontHistoryDelete(user,body);
     else throw new ClientError("Unknown action",400);
 
     if(AUDITED_ACTIONS.has(action)){

@@ -760,3 +760,276 @@ body:has(dialog[open]){
     padding-right:10px;
   }
 }
+
+
+/* Front history correction editor. */
+.history-row-editable{
+  cursor:pointer;
+  transition:border-color .15s ease,background .15s ease;
+}
+.history-row-editable:hover,
+.history-row-editable:focus-visible{
+  border-color:var(--line-strong);
+  background:color-mix(in srgb,var(--theme-surface-1) 82%,transparent);
+  outline:none;
+}
+.history-editor-dialog{
+  width:min(1120px,calc(100vw - 28px));
+  max-height:calc(100dvh - 28px);
+}
+.history-editor-card{
+  padding:0;
+  max-height:calc(100dvh - 28px);
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
+.history-editor-heading{
+  flex:0 0 auto;
+  padding:18px 20px 15px;
+  margin:0;
+  border-bottom:1px solid var(--line);
+}
+.history-editor-heading h3{font-size:1.15rem}
+.history-editor-heading .muted{margin:5px 0 0;font-size:.74rem}
+.history-editor-body{
+  min-height:0;
+  display:grid;
+  grid-template-columns:minmax(0,1.35fr) minmax(300px,.65fr);
+  overflow:hidden;
+}
+.history-editor-fields{
+  min-height:0;
+  overflow-y:auto;
+  padding:18px 20px 20px;
+  border-right:1px solid var(--line);
+}
+.history-editor-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px 12px;
+}
+.history-editor-ongoing{
+  margin:12px 0;
+}
+.history-editor-help{
+  margin:6px 0 14px;
+  font-size:.72rem;
+  line-height:1.45;
+}
+.history-editor-section-heading{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin:18px 0 9px;
+}
+.history-editor-section-heading>div{
+  display:grid;
+  gap:2px;
+}
+.history-editor-section-heading strong{font-size:.86rem}
+.history-editor-section-heading small{font-size:.69rem;color:var(--muted)}
+.history-editor-search{margin-bottom:8px}
+.history-editor-member-picker{
+  max-height:250px;
+  overflow-y:auto;
+  border:1px solid var(--line);
+  border-radius:12px;
+  padding:5px;
+  overscroll-behavior:contain;
+}
+.history-editor-picker-row{
+  border-radius:9px;
+}
+.history-editor-picker-row .picker-copy small{
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.history-editor-timing-heading{margin-top:20px}
+.history-editor-member-times{
+  display:grid;
+  gap:8px;
+}
+.history-member-time-row{
+  display:grid;
+  grid-template-columns:minmax(170px,1fr) minmax(170px,.82fr) minmax(170px,.82fr) auto;
+  gap:8px;
+  align-items:end;
+  padding:10px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:color-mix(in srgb,var(--theme-surface-1) 72%,transparent);
+}
+.history-member-time-row label{
+  display:grid;
+  gap:5px;
+  min-width:0;
+  font-size:.69rem;
+  color:var(--muted);
+}
+.history-member-time-row input{
+  min-width:0;
+}
+.history-member-time-who{
+  display:flex;
+  align-items:center;
+  gap:9px;
+  min-width:0;
+  align-self:center;
+}
+.history-member-time-who .timeline-avatar{
+  flex:0 0 auto;
+  width:40px;
+  height:40px;
+}
+.history-member-time-who>span{
+  min-width:0;
+  display:grid;
+  gap:2px;
+}
+.history-member-time-who strong,
+.history-member-time-who small{
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.history-member-time-who strong{font-size:.78rem}
+.history-member-time-who small{font-size:.68rem;color:var(--muted)}
+.history-editor-empty{
+  margin:0;
+  padding:12px;
+  border:1px dashed var(--line);
+  border-radius:10px;
+  font-size:.74rem;
+}
+.history-editor-review-column{
+  min-height:0;
+  overflow-y:auto;
+  padding:18px;
+  background:linear-gradient(180deg,var(--theme-surface-1),var(--theme-surface-2));
+}
+.history-editor-current-card,
+.history-editor-review-panel,
+.history-editor-delete-panel{
+  padding:14px;
+  border:1px solid var(--line);
+  border-radius:13px;
+  background:color-mix(in srgb,var(--theme-surface-2) 90%,transparent);
+}
+.history-editor-current-card .detail-list{
+  margin-top:10px;
+}
+.history-editor-review-panel{
+  margin-top:12px;
+}
+.history-review-diff{
+  display:grid;
+  gap:4px;
+  padding:9px 0;
+  border-bottom:1px solid var(--line);
+}
+.history-review-diff:last-of-type{border-bottom:0}
+.history-review-diff strong{font-size:.72rem}
+.history-review-diff span{
+  font-size:.71rem;
+  line-height:1.45;
+  color:var(--muted);
+  overflow-wrap:anywhere;
+}
+.history-review-validation{
+  margin-top:10px;
+  padding:9px 10px;
+  border-radius:9px;
+  background:var(--accent-soft);
+  font-size:.7rem;
+  line-height:1.45;
+}
+.history-editor-safety{
+  margin-top:12px;
+}
+.history-editor-delete-panel{
+  margin-top:12px;
+  border-color:color-mix(in srgb,var(--danger) 34%,var(--line));
+  background:color-mix(in srgb,var(--danger) 6%,var(--theme-surface-2));
+}
+.history-editor-delete-panel>p{
+  font-size:.72rem;
+  line-height:1.45;
+}
+.history-editor-delete-panel label{
+  display:grid;
+  gap:6px;
+  margin-top:10px;
+  font-size:.72rem;
+}
+.history-editor-delete-panel input{
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  letter-spacing:.06em;
+}
+.history-editor-message{
+  flex:0 0 auto;
+  margin:0;
+  padding:0 20px 10px;
+}
+.history-editor-footer{
+  flex:0 0 auto;
+  margin:0;
+  padding:12px 20px 15px;
+  border-top:1px solid var(--line);
+  background:var(--theme-surface-2);
+}
+.history-editor-footer>div{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+}
+.history-editor-dialog::backdrop{cursor:pointer}
+.history-editor-card{cursor:default}
+
+@media(max-width:900px){
+  .history-editor-dialog{
+    width:min(calc(100vw - 12px),760px);
+    max-height:calc(100dvh - 12px);
+  }
+  .history-editor-card{max-height:calc(100dvh - 12px)}
+  .history-editor-body{
+    display:block;
+    overflow-y:auto;
+  }
+  .history-editor-fields{
+    overflow:visible;
+    border-right:0;
+    border-bottom:1px solid var(--line);
+  }
+  .history-editor-review-column{
+    overflow:visible;
+  }
+}
+@media(max-width:680px){
+  .history-editor-grid{grid-template-columns:1fr}
+  .history-editor-section-heading{
+    align-items:flex-start;
+    flex-direction:column;
+  }
+  .history-member-time-row{
+    grid-template-columns:1fr 1fr;
+  }
+  .history-member-time-who{
+    grid-column:1/-1;
+  }
+  .history-member-time-row>.icon-button{
+    justify-self:end;
+  }
+  .history-editor-footer{
+    flex-direction:column-reverse;
+    align-items:stretch;
+  }
+  .history-editor-footer>div{
+    display:grid;
+    grid-template-columns:1fr;
+  }
+  .history-editor-footer button{width:100%}
+}
