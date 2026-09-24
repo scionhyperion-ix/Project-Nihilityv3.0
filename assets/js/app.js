@@ -233,12 +233,32 @@ function renderHeader(){
     else box.textContent=initial(name);
   });
 }
+function noteHelpEl(note,ariaLabel='Show note'){
+  const wrap=document.createElement('span');wrap.className='note-help';
+  const button=document.createElement('button');button.type='button';button.className='note-help-button';button.textContent='?';
+  button.setAttribute('aria-label',ariaLabel);button.setAttribute('aria-expanded','false');
+  const tooltip=document.createElement('span');tooltip.className='note-help-tooltip';tooltip.setAttribute('role','tooltip');tooltip.textContent=note;
+  button.onclick=event=>{
+    event.stopPropagation();
+    const open=!wrap.classList.contains('note-help-open');
+    wrap.classList.toggle('note-help-open',open);
+    button.setAttribute('aria-expanded',String(open));
+  };
+  button.onkeydown=event=>event.stopPropagation();
+  button.onblur=()=>{
+    wrap.classList.remove('note-help-open');
+    button.setAttribute('aria-expanded','false');
+  };
+  wrap.append(button,tooltip);
+  return wrap;
+}
 function renderHome(){
   const front=activeFront(),members=front?frontMembers(front.id):[];
   const currentNote=$('#currentFrontNote');
   if(currentNote){
+    currentNote.replaceChildren();
     currentNote.hidden=!front?.note;
-    currentNote.textContent=front?.note||'';
+    if(front?.note)currentNote.append(noteHelpEl(front.note,'Show front note'));
   }
   const transferButton=$('#transferFrontToPkButton');
   if(transferButton){
@@ -263,7 +283,10 @@ function renderHome(){
       row.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();openFronterActions(m,front)}};
       row.append(avatarEl(m,'timeline-avatar'));
       const copy=document.createElement('div');copy.className='front-person-copy';
-      const name=document.createElement('strong');name.textContent=label(m);
+      const nameLine=document.createElement('div');nameLine.className='front-person-name-line';
+      const name=document.createElement('strong');name.textContent=label(m);nameLine.append(name);
+      const memberNote=frontMemberLink(front.id,m.id)?.note||'';
+      if(memberNote)nameLine.append(noteHelpEl(memberNote,'Show note for '+label(m)));
       const pronouns=document.createElement('small');pronouns.textContent=m.pronouns||m.name;
 
       const start=continuousFrontStart(front,m.id);
@@ -274,7 +297,7 @@ function renderHome(){
       const since=document.createElement('span');since.className='front-member-since';since.textContent=frontSinceText(start);
       timing.append(timer,since);
 
-      copy.append(name,pronouns,timing);
+      copy.append(nameLine,pronouns,timing);
       row.append(copy);
       $('#currentFrontMembers').append(row);
     });
