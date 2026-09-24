@@ -442,7 +442,7 @@ begin
     insert into public.journal_vaults(
       user_id,format_version,cipher_suite,kdf_name,kdf_iterations,kdf_salt,
       wrap_iv,wrapped_key,recovery_kdf_name,recovery_salt,recovery_iv,
-      recovery_wrapped_key,created_at,updated_at
+      recovery_wrapped_key,key_verifier,created_at,updated_at
     ) values (
       p_user_id,
       coalesce((v_journal_vault->>'format_version')::smallint,1),
@@ -456,6 +456,7 @@ begin
       v_journal_vault->>'recovery_salt',
       v_journal_vault->>'recovery_iv',
       v_journal_vault->>'recovery_wrapped_key',
+      v_journal_vault->>'key_verifier',
       coalesce(nullif(v_journal_vault->>'created_at','')::timestamptz,pg_catalog.now()),
       coalesce(nullif(v_journal_vault->>'updated_at','')::timestamptz,pg_catalog.now())
     );
