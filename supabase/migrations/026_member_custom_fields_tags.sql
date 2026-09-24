@@ -131,7 +131,7 @@ returns trigger
 language plpgsql
 security invoker
 set search_path=''
-as $$
+as $fielddef$
 declare
   v_item jsonb;
   v_seen text[] := array[]::text[];
@@ -167,9 +167,22 @@ begin
   ) >= 64 then
     raise exception 'Nihility supports up to 64 custom member fields per account';
   end if;
+
+  if tg_op='UPDATE'
+     and (new.field_type is distinct from old.field_type or new.options is distinct from old.options)
+     and exists (
+       select 1
+       from public.member_field_values v
+       where v.user_id=new.user_id
+         and v.field_id=new.id
+         and not private.member_custom_value_is_valid(new.field_type,new.options,v.value)
+     ) then
+    raise exception 'This field change would invalidate existing member values';
+  end if;
+
   return new;
 end
-$$;
+$fielddef$;
 revoke all on function private.validate_member_field_definition() from public,anon,authenticated;
 
 drop trigger if exists member_field_definitions_validate on public.member_field_definitions;
@@ -187,13 +200,9 @@ returns trigger
 language plpgsql
 security invoker
 set search_path=''
-as $$
+as $fieldvalue$
 declare
   v_def public.member_field_definitions%rowtype;
-  v_type text;
-  v_text text;
-  v_item jsonb;
-  v_seen text[] := array[]::text[];
 begin
   select * into v_def
   from public.member_field_definitions
@@ -203,66 +212,13 @@ begin
     raise exception 'Custom field does not belong to this account';
   end if;
 
-  v_type := jsonb_typeof(new.value);
-  if v_def.field_type='text' then
-    if v_type <> 'string' or length(new.value #>> '{}') > 500 then
-      raise exception 'Text custom field value is invalid or too long';
-    end if;
-  elsif v_def.field_type='long_text' then
-    if v_type <> 'string' or length(new.value #>> '{}') > 4000 then
-      raise exception 'Long-text custom field value is invalid or too long';
-    end if;
-  elsif v_def.field_type='number' then
-    if v_type <> 'number' or abs((new.value #>> '{}')::numeric) > 1000000000000000 then
-      raise exception 'Number custom field value is invalid or outside Nihility limits';
-    end if;
-  elsif v_def.field_type='boolean' then
-    if v_type <> 'boolean' then raise exception 'Yes/No custom field value is invalid'; end if;
-  elsif v_def.field_type='date' then
-    if v_type <> 'string'
-       or (new.value #>> '{}') !~ '^\d{4}-\d{2}-\d{2}$'
-       or to_char((new.value #>> '{}')::date,'YYYY-MM-DD') <> (new.value #>> '{}') then
-      raise exception 'Date custom field value is invalid';
-    end if;
-  elsif v_def.field_type='select' then
-    if v_type <> 'string' then raise exception 'Select custom field value is invalid'; end if;
-    v_text := new.value #>> '{}';
-    if not exists (
-      select 1 from jsonb_array_elements_text(v_def.options) option_value
-      where option_value=v_text
-    ) then
-      raise exception 'Select custom field value is not one of the configured options';
-    end if;
-  elsif v_def.field_type='multi_select' then
-    if v_type <> 'array' or jsonb_array_length(new.value) > 50 then
-      raise exception 'Multi-select custom field value is invalid or too large';
-    end if;
-    for v_item in select value from jsonb_array_elements(new.value)
-    loop
-      if jsonb_typeof(v_item) <> 'string' then
-        raise exception 'Multi-select custom field choices must be text';
-      end if;
-      v_text := v_item #>> '{}';
-      if not exists (
-        select 1 from jsonb_array_elements_text(v_def.options) option_value
-        where option_value=v_text
-      ) then
-        raise exception 'Multi-select custom field contains an unknown option';
-      end if;
-      if v_text = any(v_seen) then
-        raise exception 'Multi-select custom field contains duplicate choices';
-      end if;
-      v_seen := array_append(v_seen,v_text);
-    end loop;
-  else
-    raise exception 'Unsupported custom field type';
+  if not private.member_custom_value_is_valid(v_def.field_type,v_def.options,new.value) then
+    raise exception 'Custom field value is invalid for its field definition';
   end if;
+
   return new;
-exception
-  when invalid_datetime_format or datetime_field_overflow then
-    raise exception 'Date custom field value is invalid';
 end
-$$;
+$fieldvalue$;
 revoke all on function private.validate_member_field_value() from public,anon,authenticated;
 
 drop trigger if exists member_field_values_validate on public.member_field_values;
@@ -302,6 +258,30 @@ drop trigger if exists member_tags_set_updated_at on public.member_tags;
 create trigger member_tags_set_updated_at
 before update on public.member_tags
 for each row execute function public.set_updated_at();
+
+create or replace function private.validate_member_tag_link()
+returns trigger
+language plpgsql
+security invoker
+set search_path=''
+as $taglink$
+begin
+  if tg_op='INSERT' and (
+    select count(*)
+    from public.member_tag_links l
+    where l.user_id=new.user_id and l.member_id=new.member_id
+  ) >= 100 then
+    raise exception 'A member can have at most 100 tags';
+  end if;
+  return new;
+end
+$taglink$;
+revoke all on function private.validate_member_tag_link() from public,anon,authenticated;
+
+drop trigger if exists member_tag_links_validate on public.member_tag_links;
+create trigger member_tag_links_validate
+before insert on public.member_tag_links
+for each row execute function private.validate_member_tag_link();
 
 alter table public.member_field_definitions enable row level security;
 alter table public.member_field_values enable row level security;
