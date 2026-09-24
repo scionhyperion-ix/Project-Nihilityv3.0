@@ -148,16 +148,20 @@
       recoverySecret
     };
   }
-  async function unlockWithPassphrase(passphrase){
+  async function rawKeyFromPassphrase(passphrase){
     if(!vaultStatus?.configured)throw new Error('Journal vault is not configured.');
     const v=vaultStatus.vault;
     try{
       const key=await derivePassphraseKey(passphrase,unb64u(v.kdf_salt),Number(v.kdf_iterations));
-      const raw=await unwrapRawKey(unb64u(v.wrapped_key),key,unb64u(v.wrap_iv),wrapAad());
-      vaultKey=await importAes(raw);
+      return await unwrapRawKey(unb64u(v.wrapped_key),key,unb64u(v.wrap_iv),wrapAad());
     }catch{
-      throw new Error('Unable to unlock journal. Check the passphrase.');
+      throw new Error('Current journal passphrase is incorrect.');
     }
+  }
+  async function unlockWithPassphrase(passphrase){
+    const raw=await rawKeyFromPassphrase(passphrase);
+    vaultKey=await importAes(raw);
+    raw.fill(0);
     await loadFirstPage();
     armLock();
   }
@@ -249,7 +253,7 @@
     }
     if(!qs('#journalSecurityDialog')){
       const d=document.createElement('dialog');d.id='journalSecurityDialog';d.className='modal-dialog';
-      d.innerHTML='<div class="modal-card"><div class="modal-heading"><div><p class="eyebrow">Journal security</p><h3>Vault controls</h3></div><button class="icon-button journal-security-close" type="button">×</button></div><label>Auto-lock<select id="journalLockMinutes"><option value="5">5 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option></select></label><div class="journal-security-block"><strong>Change passphrase</strong><form id="journalChangePassphraseForm" class="stack"><label>New passphrase<input id="journalNewPassphrase" type="password" autocomplete="new-password" minlength="16" required></label><label>Confirm passphrase<input id="journalNewPassphraseConfirm" type="password" autocomplete="new-password" minlength="16" required></label><button class="secondary-button" type="submit">Change passphrase</button></form></div><div class="journal-security-block"><strong>Recovery key</strong><p class="muted">Rotating the recovery key immediately invalidates the previous one.</p><button id="rotateJournalRecovery" class="secondary-button" type="button">Generate new recovery key</button></div><div class="journal-security-block journal-danger-zone"><strong>Destroy journal vault</strong><p class="muted">Deletes every encrypted journal entry and both wrapped vault keys. This cannot be undone without a backup.</p><label>Type ERASE JOURNAL<input id="journalResetConfirm" autocomplete="off"></label><button id="resetJournalVault" class="secondary-button danger-button" type="button">Erase journal vault</button></div><p id="journalSecurityError" class="form-error" hidden></p><div class="modal-footer"><button class="secondary-button journal-security-close" type="button">Close</button></div></div>';
+      d.innerHTML='<div class="modal-card"><div class="modal-heading"><div><p class="eyebrow">Journal security</p><h3>Vault controls</h3></div><button class="icon-button journal-security-close" type="button">×</button></div><label>Auto-lock<select id="journalLockMinutes"><option value="5">5 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option></select></label><div class="journal-security-block"><strong>Change passphrase</strong><form id="journalChangePassphraseForm" class="stack"><label>Current journal passphrase<input id="journalCurrentPassphrase" type="password" autocomplete="current-password" required></label><label>New passphrase<input id="journalNewPassphrase" type="password" autocomplete="new-password" minlength="16" required></label><label>Confirm passphrase<input id="journalNewPassphraseConfirm" type="password" autocomplete="new-password" minlength="16" required></label><button class="secondary-button" type="submit">Change passphrase</button></form></div><div class="journal-security-block"><strong>Recovery key</strong><p class="muted">Rotating the recovery key immediately invalidates the previous one.</p><label>Current journal passphrase<input id="journalRecoveryCurrentPassphrase" type="password" autocomplete="current-password"></label><button id="rotateJournalRecovery" class="secondary-button" type="button">Generate new recovery key</button></div><div class="journal-security-block journal-danger-zone"><strong>Destroy journal vault</strong><p class="muted">Deletes every encrypted journal entry and both wrapped vault keys. This cannot be undone without a backup.</p><label>Type ERASE JOURNAL<input id="journalResetConfirm" autocomplete="off"></label><button id="resetJournalVault" class="secondary-button danger-button" type="button">Erase journal vault</button></div><p id="journalSecurityError" class="form-error" hidden></p><div class="modal-footer"><button class="secondary-button journal-security-close" type="button">Close</button></div></div>';
       document.body.append(d);
       d.querySelectorAll('.journal-security-close').forEach(b=>b.onclick=()=>d.close());
       d.querySelector('#journalLockMinutes').onchange=e=>{localStorage.setItem(LOCK_KEY,e.target.value);armLock()};
@@ -408,29 +412,27 @@
   async function changePassphrase(event){
     event.preventDefault();touchVault();const err=qs('#journalSecurityError');err.hidden=true;
     try{
-      const pass=qs('#journalNewPassphrase').value,confirm=qs('#journalNewPassphraseConfirm').value;
+      const current=qs('#journalCurrentPassphrase').value,pass=qs('#journalNewPassphrase').value,confirm=qs('#journalNewPassphraseConfirm').value;
       if(pass!==confirm)throw new Error('Passphrases do not match.');
       await checkNewPassphrase(pass);
-      const raw=await crypto.subtle.exportKey('raw',vaultKey).catch(()=>null);
-      if(!raw)throw new Error('Unable to rotate journal passphrase in this session.');
+      const raw=await rawKeyFromPassphrase(current);
       const salt=randomBytes(16),iv=randomBytes(12),key=await derivePassphraseKey(pass,salt,PASS_ITERATIONS);
-      const wrapped=await wrapRawKey(new Uint8Array(raw),key,iv,wrapAad());
+      const wrapped=await wrapRawKey(raw,key,iv,wrapAad());
+      raw.fill(0);
       await nihilityApi.secure('journal_rewrap',{vault:{kdf_iterations:PASS_ITERATIONS,kdf_salt:b64u(salt),wrap_iv:b64u(iv),wrapped_key:b64u(wrapped)}});
-      qs('#journalNewPassphrase').value='';qs('#journalNewPassphraseConfirm').value='';await refreshStatus();toast('Journal passphrase changed');
+      qs('#journalCurrentPassphrase').value='';qs('#journalNewPassphrase').value='';qs('#journalNewPassphraseConfirm').value='';await refreshStatus();toast('Journal passphrase changed');
     }catch(error){err.textContent=error.message;err.hidden=false}
-  }
-  async function exportVaultRaw(){
-    if(!vaultKey)throw new Error('Journal is locked.');
-    const raw=await crypto.subtle.exportKey('raw',vaultKey);
-    return new Uint8Array(raw);
   }
   async function rotateRecovery(){
     touchVault();const err=qs('#journalSecurityError');err.hidden=true;
     try{
-      const raw=await exportVaultRaw(),secret=randomBytes(32),salt=randomBytes(16),iv=randomBytes(12);
+      const current=qs('#journalRecoveryCurrentPassphrase').value;
+      if(!current)throw new Error('Enter the current journal passphrase first.');
+      const raw=await rawKeyFromPassphrase(current),secret=randomBytes(32),salt=randomBytes(16),iv=randomBytes(12);
       const key=await deriveRecoveryKey(secret,salt),wrapped=await wrapRawKey(raw,key,iv,recoveryAad());
+      raw.fill(0);
       await nihilityApi.secure('journal_rotate_recovery',{vault:{recovery_salt:b64u(salt),recovery_iv:b64u(iv),recovery_wrapped_key:b64u(wrapped)}});
-      await refreshStatus();showRecovery(secret);toast('Journal recovery key rotated');
+      qs('#journalRecoveryCurrentPassphrase').value='';await refreshStatus();showRecovery(secret);toast('Journal recovery key rotated');
     }catch(error){err.textContent=error.message;err.hidden=false}
   }
   async function resetVault(){
@@ -449,18 +451,12 @@
       await checkNewPassphrase(pass);
       const raw=await unlockWithRecovery(qs('#journalRecoveryInput').value);
       const built=await buildVault(pass,raw);
-      await nihilityApi.secure('journal_rewrap',{vault:{kdf_iterations:built.vault.kdf_iterations,kdf_salt:built.vault.kdf_salt,wrap_iv:built.vault.wrap_iv,wrapped_key:built.vault.wrapped_key}});
-      await nihilityApi.secure('journal_rotate_recovery',{vault:{recovery_salt:built.vault.recovery_salt,recovery_iv:built.vault.recovery_iv,recovery_wrapped_key:built.vault.recovery_wrapped_key}});
-      vaultKey=await importAes(raw);await refreshStatus();await loadFirstPage();armLock();
+      await nihilityApi.secure('journal_rekey',{vault:built.vault});
+      vaultKey=await importAes(raw);raw.fill(0);await refreshStatus();await loadFirstPage();armLock();
       qs('#journalRecoverDialog').close();qs('#journalRecoveryInput').value='';qs('#journalRecoveryPassphrase').value='';qs('#journalRecoveryPassphraseConfirm').value='';
       showRecovery(built.recoverySecret);toast('Journal vault recovered and keys rotated');
     }catch(error){err.textContent=error.message;err.hidden=false}
   }
-
-  // Import journal keys as extractable only while held in memory so passphrase and
-  // recovery rotation can rewrap the same random vault key without re-encrypting entries.
-  const originalImportAes=importAes;
-  importAes=async raw=>crypto.subtle.importKey('raw',raw,{name:'AES-GCM'},true,['encrypt','decrypt']);
 
   const coreSetRoute=setRoute;
   setRoute=function(route){
