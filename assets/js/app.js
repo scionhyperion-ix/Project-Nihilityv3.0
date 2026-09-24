@@ -671,7 +671,7 @@ function renderFrontSelectedDetails(){
     addField('Location','location',500,false,'Optional location');
     addField('Fronter note','note',4000,true,'Optional note about this fronter');
     addField('Private note','private_note',4000,true,'Shown only inside detail editors');
-    const hint=document.createElement('p');hint.className='muted front-detail-private-hint';hint.textContent='Private note and location stay out of compact Home and History views. None of these fields are sent to PluralKit.';
+    const hint=document.createElement('p');hint.className='muted front-detail-private-hint';hint.textContent='Private note and location stay out of compact Home and History views and are never sent to PluralKit. They are still part of your Nihility account data and backups.';
     fields.append(hint);card.append(fields);box.append(card);
   });
 }
