@@ -145,9 +145,15 @@
   row-gap:2px;
   align-items:center;
 }
-.current-front-members .front-person-copy>strong{
+.current-front-members .front-person-name-line{
   grid-column:1;
   grid-row:1;
+  min-width:0;
+  display:flex!important;
+  align-items:center;
+  gap:6px;
+}
+.current-front-members .front-person-name-line>strong{
   min-width:0;
   overflow:hidden;
   text-overflow:ellipsis;

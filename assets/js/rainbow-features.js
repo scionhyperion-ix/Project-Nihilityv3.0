@@ -785,9 +785,24 @@
 
   function installMultiCofronter(){
     const picker=document.querySelector('#frontMemberPicker'),dialog=document.querySelector('#frontDialog');if(!picker||!dialog||document.querySelector('#cofronterMultiHelper'))return;
-    const helper=document.createElement('div');helper.id='cofronterMultiHelper';helper.className='cofronter-multi-helper';helper.hidden=true;helper.innerHTML='<span>Select multiple members to add together.</span><strong id="cofronterSelectedCount">0 selected</strong>';picker.insertAdjacentElement('beforebegin',helper);
-    const update=()=>{const add=document.querySelector('input[name="frontMode"]:checked')?.value==='add';helper.hidden=!add;const current=new Set((activeFront()?frontMembers(activeFront().id):[]).map(m=>m.id));picker.querySelectorAll('.picker-row').forEach(r=>{const i=r.querySelector('input');if(!i)return;const already=add&&current.has(i.value);i.disabled=already;r.classList.toggle('already-fronting',already)});const n=picker.querySelectorAll('input:checked:not(:disabled)').length;document.querySelector('#cofronterSelectedCount').textContent=n+' selected'};
-    picker.addEventListener('change',update);document.querySelectorAll('input[name="frontMode"]').forEach(i=>i.addEventListener('change',()=>requestAnimationFrame(update)));new MutationObserver(()=>{if(dialog.open)requestAnimationFrame(update)}).observe(picker,{childList:true});
+    const helper=document.createElement('div');helper.id='cofronterMultiHelper';helper.className='cofronter-multi-helper';helper.hidden=true;helper.innerHTML='<span>Select multiple members. Your selections stay while you search.</span><strong id="cofronterSelectedCount">0 selected</strong>';picker.insertAdjacentElement('beforebegin',helper);
+    const update=()=>{
+      const add=document.querySelector('input[name="frontMode"]:checked')?.value==='add';
+      helper.hidden=!add;
+      const current=new Set((activeFront()?frontMembers(activeFront().id):[]).map(m=>m.id));
+      picker.querySelectorAll('.picker-row').forEach(r=>{
+        const i=r.querySelector('input');if(!i)return;
+        const already=add&&current.has(i.value);
+        i.disabled=already;
+        r.classList.toggle('already-fronting',already);
+      });
+      const selected=typeof pendingFrontSelected!=='undefined'?[...pendingFrontSelected].filter(id=>!current.has(id)).length:picker.querySelectorAll('input:checked:not(:disabled)').length;
+      document.querySelector('#cofronterSelectedCount').textContent=selected+' selected';
+    };
+    picker.addEventListener('change',update);
+    document.querySelector('#frontMemberSearch')?.addEventListener('input',()=>requestAnimationFrame(update));
+    document.querySelectorAll('input[name="frontMode"]').forEach(i=>i.addEventListener('change',()=>requestAnimationFrame(update)));
+    new MutationObserver(()=>{if(dialog.open)requestAnimationFrame(update)}).observe(picker,{childList:true});
   }
 
   function applyImportedSystemIdentity(){

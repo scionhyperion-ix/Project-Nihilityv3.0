@@ -1036,17 +1036,70 @@ body:has(dialog[open]){
 
 
 /* Optional front notes and per-fronter details. */
+.current-front-title-line{
+  display:flex;
+  align-items:center;
+  gap:7px;
+}
 .current-front-note{
-  margin:10px 0 2px;
-  padding:10px 12px;
-  border:1px solid var(--line);
-  border-radius:11px;
-  background:color-mix(in srgb,var(--theme-surface-1) 72%,transparent);
+  display:inline-flex;
+  align-items:center;
+}
+.note-help{
+  position:relative;
+  display:inline-flex;
+  flex:0 0 auto;
+}
+.note-help-button{
+  width:18px;
+  height:18px;
+  display:inline-grid;
+  place-items:center;
+  padding:0;
+  border:1px solid var(--line-strong);
+  border-radius:50%;
+  background:color-mix(in srgb,var(--theme-surface-1) 78%,transparent);
   color:var(--muted);
-  font-size:.76rem;
-  line-height:1.48;
+  font:700 .66rem/1 system-ui,sans-serif;
+  cursor:help;
+}
+.note-help-button:hover,
+.note-help-button:focus-visible,
+.note-help-open .note-help-button{
+  color:var(--text);
+  border-color:var(--accent);
+  outline:none;
+}
+.note-help-tooltip{
+  position:absolute;
+  left:50%;
+  top:calc(100% + 8px);
+  z-index:60;
+  width:max-content;
+  max-width:min(320px,72vw);
+  padding:9px 10px;
+  border:1px solid var(--line-strong);
+  border-radius:10px;
+  background:var(--theme-surface-2);
+  box-shadow:0 12px 32px rgba(0,0,0,.3);
+  color:var(--text);
+  font-size:.72rem;
+  font-weight:450;
+  line-height:1.45;
   white-space:pre-wrap;
   overflow-wrap:anywhere;
+  pointer-events:none;
+  opacity:0;
+  visibility:hidden;
+  transform:translate(-50%,-4px);
+  transition:opacity .12s ease,transform .12s ease,visibility .12s ease;
+}
+.note-help:hover .note-help-tooltip,
+.note-help:focus-within .note-help-tooltip,
+.note-help-open .note-help-tooltip{
+  opacity:1;
+  visibility:visible;
+  transform:translate(-50%,0);
 }
 .front-overall-note{
   display:grid;
@@ -1056,6 +1109,98 @@ body:has(dialog[open]){
 .front-overall-note textarea{
   resize:vertical;
   min-height:74px;
+}
+.front-selection-summary{
+  display:grid;
+  gap:6px;
+  margin:10px 0 2px;
+  padding:9px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:color-mix(in srgb,var(--theme-surface-1) 66%,transparent);
+}
+.front-selection-heading{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:1px 2px 5px;
+}
+.front-selection-heading strong{font-size:.72rem}
+.front-selection-heading small{
+  color:var(--muted);
+  font-size:.64rem;
+}
+.front-selection-item{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto auto;
+  align-items:center;
+  gap:7px;
+  padding:7px 8px;
+  border:1px solid var(--line);
+  border-radius:10px;
+  background:var(--theme-surface-2);
+}
+.front-selection-member{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.front-selection-member>.picker-avatar{
+  width:32px;
+  height:32px;
+  border-radius:9px;
+}
+.front-selection-member>span{
+  min-width:0;
+  display:grid;
+  gap:1px;
+}
+.front-selection-member strong,
+.front-selection-member small{
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.front-selection-member strong{font-size:.72rem}
+.front-selection-member small{color:var(--muted);font-size:.62rem}
+.front-selection-note-button{
+  padding:5px 8px;
+  border:1px solid var(--line);
+  border-radius:8px;
+  background:transparent;
+  color:var(--muted);
+  font-size:.63rem;
+  font-weight:700;
+  cursor:pointer;
+}
+.front-selection-note-button:hover,
+.front-selection-note-button:focus-visible,
+.front-selection-item.note-open .front-selection-note-button{
+  color:var(--text);
+  border-color:var(--accent);
+  outline:none;
+}
+.front-selection-remove{
+  width:27px;
+  height:27px;
+  padding:0;
+}
+.front-selection-note-editor{
+  grid-column:1/-1;
+  padding-top:7px;
+  border-top:1px solid var(--line);
+}
+.front-selection-note-editor label{
+  display:grid;
+  gap:5px;
+  color:var(--muted);
+  font-size:.66rem;
+}
+.front-selection-note-editor textarea{
+  min-height:58px;
+  resize:vertical;
 }
 .front-details-section{
   margin:12px 0;
@@ -1197,6 +1342,17 @@ body:has(dialog[open]){
 }
 
 @media(max-width:680px){
+  .front-selection-heading{
+    align-items:flex-start;
+    flex-direction:column;
+    gap:2px;
+  }
+  .front-selection-item{
+    grid-template-columns:minmax(0,1fr) auto auto;
+  }
+  .note-help-tooltip{
+    max-width:min(280px,80vw);
+  }
   .front-detail-fields,
   .history-member-detail-fields{
     grid-template-columns:1fr;
