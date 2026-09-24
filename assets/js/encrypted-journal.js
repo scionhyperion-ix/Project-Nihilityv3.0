@@ -346,7 +346,7 @@
       await checkNewPassphrase(pass);
       const dekRaw=randomBytes(32),built=await buildVault(pass,dekRaw);
       await nihilityApi.secure('journal_setup',{vault:built.vault});
-      vaultKey=await importAes(dekRaw);
+      vaultKey=await importAes(dekRaw);dekRaw.fill(0);
       await refreshStatus();await loadFirstPage();armLock();showRecovery(built.recoverySecret);toast('Encrypted journal created');
     }catch(error){err.textContent=error.message;err.hidden=false}
   }
@@ -458,6 +458,13 @@
     }catch(error){err.textContent=error.message;err.hidden=false}
   }
 
+  const coreLoadData=loadData;
+  loadData=async function loadDataWithJournalStatus(){
+    await coreLoadData();
+    try{await refreshStatus()}catch(error){vaultStatus={configured:false,error:error.message}}
+    if(state.route==='journal')renderJournal();
+  };
+
   const coreSetRoute=setRoute;
   setRoute=function(route){
     if(route!=='journal')return coreSetRoute(route);
@@ -473,7 +480,9 @@
 
   async function initialize(){
     ensureRoute();
-    try{await refreshStatus()}catch(error){vaultStatus={configured:false,error:error.message}}
+    if(nihilityApi.getSession()){
+      try{await refreshStatus()}catch{}
+    }
     renderJournal();
   }
   document.addEventListener('visibilitychange',()=>{if(document.hidden&&vaultKey)lockVault('Journal locked when the tab was hidden.')});
