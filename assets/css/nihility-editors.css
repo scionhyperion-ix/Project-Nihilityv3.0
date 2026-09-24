@@ -2903,3 +2903,352 @@ body:has(dialog[open]){
     grid-template-columns:1fr!important;
   }
 }
+
+
+/* Settings v4: true simple-list UI. This block intentionally resets earlier
+   Settings experiments so only the one-column list language remains. */
+#settingsRoute{
+  max-width:960px!important;
+}
+#settingsRoute .settings-list-stack{
+  display:block!important;
+}
+#settingsRoute .settings-list-stack>*{
+  grid-column:auto!important;
+  order:initial!important;
+}
+#settingsRoute .settings-list-section,
+#settingsRoute #memberMetadataSettingsPanel{
+  display:block!important;
+  margin:0!important;
+  padding:22px 2px!important;
+  border:0!important;
+  border-bottom:1px solid var(--line)!important;
+  border-radius:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+}
+#settingsRoute .settings-list-stack>.settings-list-section:first-child{
+  padding-top:4px!important;
+}
+#settingsRoute .settings-list-stack>.settings-list-section:last-child{
+  border-bottom:0!important;
+}
+#settingsRoute #memberMetadataMount:empty{
+  display:none;
+}
+#settingsRoute .settings-list-heading{
+  display:flex!important;
+  align-items:flex-start!important;
+  justify-content:space-between!important;
+  gap:18px!important;
+  margin:0 0 12px!important;
+}
+#settingsRoute .settings-list-heading>div{
+  min-width:0;
+}
+#settingsRoute .settings-list-heading h3{
+  margin:0!important;
+  font-size:1rem!important;
+}
+#settingsRoute .settings-list-heading .muted{
+  margin:5px 0 0!important;
+  max-width:720px!important;
+  color:var(--muted)!important;
+  font-size:.7rem!important;
+  line-height:1.45!important;
+}
+#settingsRoute .settings-list-body{
+  display:block!important;
+  max-width:none!important;
+}
+#settingsRoute .settings-simple-row{
+  display:grid!important;
+  grid-template-columns:minmax(145px,.28fr) minmax(0,1fr)!important;
+  gap:20px!important;
+  align-items:center!important;
+  min-height:43px!important;
+  padding:9px 0!important;
+  border:0!important;
+  border-top:1px solid color-mix(in srgb,var(--line) 72%,transparent)!important;
+  border-radius:0!important;
+  background:transparent!important;
+}
+#settingsRoute .settings-simple-row:first-child{
+  border-top:0!important;
+}
+#settingsRoute .settings-simple-row>span{
+  color:var(--muted)!important;
+  font-size:.65rem!important;
+}
+#settingsRoute .settings-simple-row>strong{
+  color:var(--text)!important;
+  font-size:.69rem!important;
+  line-height:1.4!important;
+}
+#settingsRoute .settings-simple-row>small,
+#settingsRoute .settings-simple-row>div>small{
+  color:var(--muted)!important;
+  font-size:.64rem!important;
+  line-height:1.45!important;
+}
+#settingsRoute .settings-simple-row>div{
+  min-width:0;
+}
+#settingsRoute .settings-simple-row>div>strong{
+  display:block;
+  margin-bottom:2px;
+  font-size:.69rem;
+}
+#settingsRoute .settings-list-actions{
+  display:flex!important;
+  align-items:center!important;
+  flex-wrap:wrap!important;
+  gap:8px!important;
+  padding:10px 0 0!important;
+  border:0!important;
+}
+#settingsRoute .settings-list-actions .secondary-button{
+  width:max-content!important;
+}
+#settingsRoute .settings-list-field{
+  display:grid!important;
+  gap:6px!important;
+  max-width:620px!important;
+  padding:0!important;
+  color:var(--muted)!important;
+  font-size:.65rem!important;
+}
+#settingsRoute .settings-list-field input{
+  margin:0!important;
+}
+#settingsRoute .settings-list-note{
+  margin:8px 0 0!important;
+  padding:0!important;
+  border:0!important;
+  background:transparent!important;
+  color:var(--muted)!important;
+  font-size:.63rem!important;
+  line-height:1.45!important;
+}
+#settingsRoute .settings-list-note strong{
+  color:var(--text)!important;
+}
+#settingsRoute .settings-backup-note{
+  margin-top:12px!important;
+  padding-top:10px!important;
+  border-top:1px solid color-mix(in srgb,var(--line) 72%,transparent)!important;
+}
+#settingsRoute .settings-action-row,
+#settingsRoute .settings-restore-row{
+  grid-template-columns:minmax(160px,.32fr) minmax(0,1fr)!important;
+  align-items:start!important;
+}
+#settingsRoute .settings-row-actions{
+  margin:0!important;
+  padding:0!important;
+}
+#settingsRoute .settings-restore-controls{
+  display:grid!important;
+  gap:7px!important;
+  max-width:620px!important;
+}
+#settingsRoute .settings-restore-controls .backup-file-summary{
+  margin:0!important;
+  font-size:.62rem!important;
+}
+#settingsRoute .settings-restore-controls>.secondary-button{
+  width:max-content!important;
+}
+#settingsRoute .backup-file-field input[type=file]{
+  padding:5px!important;
+  border-radius:7px!important;
+}
+#settingsRoute .backup-file-field input[type=file]::file-selector-button{
+  margin-right:8px!important;
+  padding:5px 8px!important;
+  border:1px solid var(--line-strong)!important;
+  border-radius:6px!important;
+  background:var(--theme-surface-2)!important;
+  color:var(--text)!important;
+  font:inherit!important;
+  font-size:.61rem!important;
+  font-weight:700!important;
+  cursor:pointer!important;
+}
+
+/* Theme becomes a plain radio list rather than mini-cards. */
+#settingsRoute .settings-theme-list{
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  gap:0 28px!important;
+  margin:0!important;
+}
+#settingsRoute .settings-theme-list .theme-option{
+  min-height:46px!important;
+  display:grid!important;
+  grid-template-columns:34px minmax(0,1fr) 20px!important;
+  gap:9px!important;
+  align-items:center!important;
+  padding:8px 0!important;
+  border:0!important;
+  border-top:1px solid color-mix(in srgb,var(--line) 72%,transparent)!important;
+  border-radius:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+}
+#settingsRoute .settings-theme-list .theme-option:nth-child(-n+2){
+  border-top:0!important;
+}
+#settingsRoute .settings-theme-list .theme-option:hover{
+  background:transparent!important;
+}
+#settingsRoute .settings-theme-list .theme-swatch{
+  width:32px!important;
+  height:24px!important;
+  border-radius:6px!important;
+}
+#settingsRoute .settings-theme-list .theme-option-copy strong{
+  font-size:.67rem!important;
+}
+#settingsRoute .settings-theme-list .theme-option-copy small{
+  display:none!important;
+}
+#settingsRoute .settings-theme-list .theme-check{
+  width:19px!important;
+  height:19px!important;
+  font-size:.61rem!important;
+}
+
+/* Metadata is one stacked list, never side-by-side cards. */
+#settingsRoute #memberMetadataSettingsPanel{
+  padding-left:2px!important;
+  padding-right:2px!important;
+}
+#settingsRoute .member-metadata-header{
+  margin:0 0 8px!important;
+}
+#settingsRoute .settings-metadata-search-note{
+  align-self:flex-end!important;
+  margin:0!important;
+  color:var(--muted)!important;
+  font-size:.61rem!important;
+  white-space:normal!important;
+}
+#settingsRoute .settings-metadata-search-note code{
+  padding:1px 4px!important;
+  font-size:.58rem!important;
+}
+#settingsRoute .member-metadata-list-group{
+  display:block!important;
+}
+#settingsRoute .member-metadata-section{
+  display:block!important;
+  margin:0!important;
+  padding:12px 0 0!important;
+  border:0!important;
+  border-top:1px solid color-mix(in srgb,var(--line) 72%,transparent)!important;
+  border-radius:0!important;
+  background:transparent!important;
+}
+#settingsRoute .member-metadata-section+.member-metadata-section{
+  margin-top:10px!important;
+}
+#settingsRoute .member-metadata-section-heading{
+  min-height:34px!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+  gap:12px!important;
+  margin:0!important;
+  padding:0 0 7px!important;
+  border:0!important;
+}
+#settingsRoute .member-metadata-section-heading>div{
+  display:flex!important;
+  align-items:baseline!important;
+  gap:8px!important;
+}
+#settingsRoute .member-metadata-section-heading strong{
+  font-size:.7rem!important;
+}
+#settingsRoute .member-metadata-section-heading small{
+  color:var(--muted)!important;
+  font-size:.6rem!important;
+}
+#settingsRoute .compact-metadata-button{
+  padding:3px 2px!important;
+  font-size:.62rem!important;
+}
+#settingsRoute .member-metadata-list{
+  display:block!important;
+}
+#settingsRoute .member-metadata-row,
+#settingsRoute .member-tag-definition-card{
+  min-height:43px!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+  gap:12px!important;
+  margin:0!important;
+  padding:8px 0!important;
+  border:0!important;
+  border-top:1px solid color-mix(in srgb,var(--line) 66%,transparent)!important;
+  border-radius:0!important;
+  background:transparent!important;
+}
+#settingsRoute .member-metadata-row:first-child,
+#settingsRoute .member-tag-definition-card:first-child{
+  border-top:0!important;
+}
+#settingsRoute .member-tag-definition-grid{
+  display:block!important;
+}
+#settingsRoute .member-metadata-empty{
+  min-height:0!important;
+  display:block!important;
+  margin:0!important;
+  padding:7px 0 1px!important;
+  border:0!important;
+  background:transparent!important;
+}
+#settingsRoute .member-metadata-empty-icon{
+  display:none!important;
+}
+#settingsRoute .member-metadata-empty>div{
+  display:block!important;
+}
+#settingsRoute .member-metadata-empty strong{
+  display:block!important;
+  margin-bottom:2px!important;
+  color:var(--muted)!important;
+  font-size:.64rem!important;
+}
+#settingsRoute .member-metadata-empty p{
+  margin:0!important;
+  max-width:680px!important;
+  color:var(--muted)!important;
+  font-size:.61rem!important;
+  line-height:1.45!important;
+}
+
+@media(max-width:720px){
+  #settingsRoute .settings-list-heading{
+    display:block!important;
+  }
+  #settingsRoute .settings-metadata-search-note{
+    margin-top:7px!important;
+  }
+  #settingsRoute .settings-theme-list{
+    grid-template-columns:1fr!important;
+  }
+  #settingsRoute .settings-theme-list .theme-option:nth-child(2){
+    border-top:1px solid color-mix(in srgb,var(--line) 72%,transparent)!important;
+  }
+  #settingsRoute .settings-simple-row,
+  #settingsRoute .settings-action-row,
+  #settingsRoute .settings-restore-row{
+    grid-template-columns:1fr!important;
+    gap:4px!important;
+  }
+}
