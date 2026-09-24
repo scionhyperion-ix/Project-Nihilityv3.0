@@ -1935,16 +1935,89 @@ body:has(dialog[open]){
 }
 .timeline-toolbar{
   display:grid;
-  grid-template-columns:minmax(240px,1.5fr) repeat(3,minmax(150px,.7fr));
+  grid-template-columns:minmax(250px,1.45fr) repeat(3,minmax(150px,.72fr));
   gap:10px;
   margin:14px 0 18px;
   align-items:end;
 }
-.timeline-toolbar>label:not(.search-field){
+.timeline-search-field{
+  width:100%;
+  max-width:none;
+  min-width:0;
+  min-height:42px;
+  border-radius:10px;
+  background:color-mix(in srgb,var(--theme-input) 82%,transparent);
+}
+.timeline-search-field>span{
+  flex:0 0 auto;
+}
+.timeline-search-field input{
+  min-width:0;
+  min-height:40px;
+  padding-block:9px;
+  border:0!important;
+  border-radius:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+}
+.timeline-search-field input:hover,
+.timeline-search-field input:focus{
+  border:0!important;
+  background:transparent!important;
+}
+.timeline-filter-field{
+  min-width:0;
   display:grid;
   gap:5px;
-  font-size:.68rem;
   color:var(--muted);
+  font-size:.68rem;
+}
+.timeline-filter-label{
+  padding-left:2px;
+  font-weight:700;
+}
+.timeline-select-wrap{
+  position:relative;
+  display:block;
+  min-width:0;
+}
+.timeline-select-wrap::after{
+  content:'⌄';
+  position:absolute;
+  right:11px;
+  top:50%;
+  transform:translateY(-53%);
+  color:var(--muted);
+  font-size:.72rem;
+  pointer-events:none;
+}
+.timeline-filter-field select{
+  appearance:none;
+  width:100%;
+  min-width:0;
+  min-height:42px;
+  padding:9px 32px 9px 11px;
+  border:1px solid var(--line);
+  border-radius:10px;
+  background:color-mix(in srgb,var(--theme-input) 82%,transparent);
+  color:var(--text);
+  font:inherit;
+  font-size:.72rem;
+  font-weight:600;
+  cursor:pointer;
+}
+.timeline-filter-field select:hover{
+  border-color:var(--line-strong);
+  background:color-mix(in srgb,var(--theme-surface-hover) 70%,var(--theme-input));
+}
+.timeline-filter-field select:focus-visible{
+  outline:2px solid var(--accent-2);
+  outline-offset:2px;
+  border-color:var(--accent);
+}
+.timeline-filter-field select option{
+  background:var(--theme-surface-2);
+  color:var(--text);
 }
 .system-timeline-list{
   display:grid;
