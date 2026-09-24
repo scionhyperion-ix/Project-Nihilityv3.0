@@ -189,7 +189,8 @@
   }
 
   async function fetchPage(offset){
-    return nihilityApi.secure('journal_list',{limit:PAGE_SIZE,offset});
+    if(!vaultProof)throw new Error('Journal vault is locked.');
+    return nihilityApi.secure('journal_list',{proof:vaultProof,limit:PAGE_SIZE,offset});
   }
   async function decryptRows(rows){
     const output=[];
@@ -269,7 +270,11 @@
       const d=document.createElement('dialog');d.id='journalSecurityDialog';d.className='modal-dialog';
       d.innerHTML='<div class="modal-card"><div class="modal-heading"><div><p class="eyebrow">Journal security</p><h3>Vault controls</h3></div><button class="icon-button journal-security-close" type="button">×</button></div><label>Auto-lock<select id="journalLockMinutes"><option value="5">5 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option></select></label><div class="journal-security-block"><strong>Change passphrase</strong><form id="journalChangePassphraseForm" class="stack"><label>Current journal passphrase<input id="journalCurrentPassphrase" type="password" autocomplete="current-password" required></label><label>New passphrase<input id="journalNewPassphrase" type="password" autocomplete="new-password" minlength="16" required></label><label>Confirm passphrase<input id="journalNewPassphraseConfirm" type="password" autocomplete="new-password" minlength="16" required></label><button class="secondary-button" type="submit">Change passphrase</button></form></div><div class="journal-security-block"><strong>Recovery key</strong><p class="muted">Rotating the recovery key immediately invalidates the previous one.</p><label>Current journal passphrase<input id="journalRecoveryCurrentPassphrase" type="password" autocomplete="current-password"></label><button id="rotateJournalRecovery" class="secondary-button" type="button">Generate new recovery key</button></div><div class="journal-security-block journal-danger-zone"><strong>Destroy journal vault</strong><p class="muted">Deletes every encrypted journal entry and both wrapped vault keys. This cannot be undone without a backup.</p><label>Type ERASE JOURNAL<input id="journalResetConfirm" autocomplete="off"></label><button id="resetJournalVault" class="secondary-button danger-button" type="button">Erase journal vault</button></div><p id="journalSecurityError" class="form-error" hidden></p><div class="modal-footer"><button class="secondary-button journal-security-close" type="button">Close</button></div></div>';
       document.body.append(d);
-      d.querySelectorAll('.journal-security-close').forEach(b=>b.onclick=()=>d.close());
+      const clearSecurityInputs=()=>{
+        ['#journalCurrentPassphrase','#journalNewPassphrase','#journalNewPassphraseConfirm','#journalRecoveryCurrentPassphrase','#journalResetConfirm'].forEach(sel=>{const el=d.querySelector(sel);if(el)el.value=''});
+      };
+      d.querySelectorAll('.journal-security-close').forEach(b=>b.onclick=()=>{clearSecurityInputs();d.close()});
+      d.addEventListener('cancel',()=>clearSecurityInputs());
       d.querySelector('#journalLockMinutes').onchange=e=>{localStorage.setItem(LOCK_KEY,e.target.value);armLock()};
       d.querySelector('#journalChangePassphraseForm').onsubmit=changePassphrase;
       d.querySelector('#rotateJournalRecovery').onclick=rotateRecovery;
@@ -279,7 +284,11 @@
       const d=document.createElement('dialog');d.id='journalRecoverDialog';d.className='modal-dialog';
       d.innerHTML='<form id="journalRecoverForm" class="modal-card"><div class="modal-heading"><div><p class="eyebrow">Journal recovery</p><h3>Recover vault access</h3><p class="muted">The recovery key decrypts the vault key locally. A new passphrase and a new recovery key will be created immediately.</p></div><button class="icon-button journal-recover-close" type="button">×</button></div><label>Recovery key<input id="journalRecoveryInput" autocomplete="off" required></label><label>New passphrase<input id="journalRecoveryPassphrase" type="password" autocomplete="new-password" minlength="16" required></label><label>Confirm new passphrase<input id="journalRecoveryPassphraseConfirm" type="password" autocomplete="new-password" minlength="16" required></label><p id="journalRecoverError" class="form-error" hidden></p><div class="modal-footer"><button class="secondary-button journal-recover-close" type="button">Cancel</button><button class="primary-button" type="submit">Recover and rotate keys</button></div></form>';
       document.body.append(d);
-      d.querySelectorAll('.journal-recover-close').forEach(b=>b.onclick=()=>d.close());
+      const clearRecoveryInputs=()=>{
+        ['#journalRecoveryInput','#journalRecoveryPassphrase','#journalRecoveryPassphraseConfirm'].forEach(sel=>{const el=d.querySelector(sel);if(el)el.value=''});
+      };
+      d.querySelectorAll('.journal-recover-close').forEach(b=>b.onclick=()=>{clearRecoveryInputs();d.close()});
+      d.addEventListener('cancel',()=>clearRecoveryInputs());
       d.querySelector('#journalRecoverForm').onsubmit=recoverVault;
     }
   }
@@ -486,7 +495,10 @@
 
   const coreSetRoute=setRoute;
   setRoute=function(route){
-    if(route!=='journal')return coreSetRoute(route);
+    if(route!=='journal'){
+      if(state.route==='journal'&&vaultKey)lockVault('');
+      return coreSetRoute(route);
+    }
     ensureRoute();
     state.route='journal';
     qs('#pageEyebrow').textContent='Encrypted vault';
