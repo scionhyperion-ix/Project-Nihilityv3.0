@@ -105,6 +105,20 @@ The main application intentionally follows the Rainbow layout and interaction st
 
 GitHub Pages must be enabled once in repository Settings before the Pages workflow can deploy. The GitHub App token cannot perform this one-time repository setting change.
 
+## Member custom fields and tags
+
+Nihility members can use owner-defined structured fields and reusable searchable tags.
+
+- Supported field types: text, long text, number, yes/no, date, select, and multi-select.
+- Field definitions use stable UUIDs plus short search keys such as `source`, `role`, or `species`.
+- Member search supports plain terms plus qualified filters such as `tag:frequent`, `source:RE`, `role:doctor`, and quoted values.
+- Search parsing happens locally in the browser; user filter text is never interpolated into SQL or PostgREST filters.
+- Field definitions and tags are owner-managed, while authorized accounts can assign configured values and tags to their own members.
+- Composite ownership foreign keys prevent cross-account field/tag assignment.
+- Database triggers enforce field types, configured select options, per-account quotas, per-member tag quotas, and safe field-definition changes.
+- Custom metadata is included in Nihility backups with ID remapping on restore. Older v1 backups without these sections remain compatible.
+- Deleting a field or tag cascades only its member values/assignments; members themselves are never deleted.
+
 ## Front notes and per-fronter details
 
 Fronts can optionally store an overall note plus per-fronter details such as mood, context, activity, location, a fronter note, and a private note.
