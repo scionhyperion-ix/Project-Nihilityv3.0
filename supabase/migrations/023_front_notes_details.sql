@@ -195,7 +195,7 @@ begin
   if exists (
     select 1
     from pg_catalog.jsonb_array_elements(p_member_links) item
-    where nullif(item->>'member_id','') is null
+    where nullif(item_json->>'member_id','') is null
        or nullif(item->>'joined_at','') is null
   ) then
     raise exception 'Each selected member requires a join time';
@@ -204,9 +204,9 @@ begin
   if exists (
     select 1
     from (
-      select (item->>'member_id')::uuid as member_id, count(*) as row_count
+      select (v_item->>'member_id')::uuid as member_id, count(*) as row_count
       from pg_catalog.jsonb_array_elements(p_member_links) item
-      group by (item->>'member_id')::uuid
+      group by (v_item->>'member_id')::uuid
     ) duplicates
     where duplicates.row_count > 1
   ) then
@@ -219,7 +219,7 @@ begin
     where not exists (
       select 1
       from public.members m
-      where m.id = (item->>'member_id')::uuid
+      where m.id = (v_item->>'member_id')::uuid
         and m.user_id = p_user_id
     )
   ) then
@@ -229,12 +229,12 @@ begin
   if exists (
     select 1
     from pg_catalog.jsonb_array_elements(p_member_links) item
-    where length(coalesce(item->>'note','')) > 4000
-       or length(coalesce(item->>'private_note','')) > 4000
-       or length(coalesce(item->>'mood','')) > 200
-       or length(coalesce(item->>'context','')) > 1000
-       or length(coalesce(item->>'activity','')) > 500
-       or length(coalesce(item->>'location','')) > 500
+    where length(coalesce(item_json->>'note','')) > 4000
+       or length(coalesce(item_json->>'private_note','')) > 4000
+       or length(coalesce(item_json->>'mood','')) > 200
+       or length(coalesce(item_json->>'context','')) > 1000
+       or length(coalesce(item_json->>'activity','')) > 500
+       or length(coalesce(item_json->>'location','')) > 500
   ) then
     raise exception 'One or more per-fronter detail fields exceed Nihility limits';
   end if;
@@ -410,15 +410,15 @@ begin
   select
     p_user_id,
     p_front_id,
-    (item->>'member_id')::uuid,
+    (v_item->>'member_id')::uuid,
     (item->>'joined_at')::timestamptz,
     nullif(item->>'left_at','')::timestamptz,
-    nullif(item->>'note',''),
-    nullif(item->>'private_note',''),
-    nullif(item->>'mood',''),
-    nullif(item->>'context',''),
-    nullif(item->>'activity',''),
-    nullif(item->>'location','')
+    nullif(v_item->>'note',''),
+    nullif(v_item->>'private_note',''),
+    nullif(v_item->>'mood',''),
+    nullif(v_item->>'context',''),
+    nullif(v_item->>'activity',''),
+    nullif(v_item->>'location','')
   from pg_catalog.jsonb_array_elements(p_member_links) item;
 
   return private.nihility_front_history_snapshot(p_user_id,p_front_id)
@@ -448,7 +448,7 @@ declare
   new_front uuid;
   effective_started_at timestamptz := coalesce(p_started_at, now());
   active_started_at timestamptz;
-  item jsonb;
+  v_item jsonb;
 begin
   if uid is null then
     raise exception 'Authentication required';
@@ -487,8 +487,8 @@ begin
 
   if exists (
     select 1
-    from pg_catalog.jsonb_array_elements(p_member_details) x(item)
-    where coalesce(item->>'member_id','') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    from pg_catalog.jsonb_array_elements(p_member_details) x(item_json)
+    where coalesce(item_json->>'member_id','') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
   ) then
     raise exception 'One or more selected members are invalid';
   end if;
@@ -496,9 +496,9 @@ begin
   if exists (
     select 1
     from (
-      select item->>'member_id' member_id,count(*) c
-      from pg_catalog.jsonb_array_elements(p_member_details) x(item)
-      group by item->>'member_id'
+      select item_json->>'member_id' member_id,count(*) c
+      from pg_catalog.jsonb_array_elements(p_member_details) x(item_json)
+      group by item_json->>'member_id'
     ) d
     where d.c > 1
   ) then
@@ -507,10 +507,10 @@ begin
 
   if exists (
     select 1
-    from pg_catalog.jsonb_array_elements(p_member_details) x(item)
+    from pg_catalog.jsonb_array_elements(p_member_details) x(item_json)
     where not exists (
       select 1 from public.members m
-      where m.id=(item->>'member_id')::uuid
+      where m.id=(v_item->>'member_id')::uuid
         and m.user_id=uid
         and m.archived_at is null
     )
@@ -520,13 +520,13 @@ begin
 
   if exists (
     select 1
-    from pg_catalog.jsonb_array_elements(p_member_details) x(item)
-    where length(coalesce(item->>'note','')) > 4000
-       or length(coalesce(item->>'private_note','')) > 4000
-       or length(coalesce(item->>'mood','')) > 200
-       or length(coalesce(item->>'context','')) > 1000
-       or length(coalesce(item->>'activity','')) > 500
-       or length(coalesce(item->>'location','')) > 500
+    from pg_catalog.jsonb_array_elements(p_member_details) x(item_json)
+    where length(coalesce(item_json->>'note','')) > 4000
+       or length(coalesce(item_json->>'private_note','')) > 4000
+       or length(coalesce(item_json->>'mood','')) > 200
+       or length(coalesce(item_json->>'context','')) > 1000
+       or length(coalesce(item_json->>'activity','')) > 500
+       or length(coalesce(item_json->>'location','')) > 500
   ) then
     raise exception 'One or more per-fronter detail fields exceed Nihility limits';
   end if;
@@ -551,7 +551,7 @@ begin
   values(uid,effective_started_at,nullif(p_note,''),'nihility')
   returning id into new_front;
 
-  for item in
+  for v_item in
     select value from pg_catalog.jsonb_array_elements(p_member_details)
   loop
     insert into public.front_members(
@@ -561,15 +561,15 @@ begin
     values(
       uid,
       new_front,
-      (item->>'member_id')::uuid,
+      (v_item->>'member_id')::uuid,
       effective_started_at,
       null,
-      nullif(item->>'note',''),
-      nullif(item->>'private_note',''),
-      nullif(item->>'mood',''),
-      nullif(item->>'context',''),
-      nullif(item->>'activity',''),
-      nullif(item->>'location','')
+      nullif(v_item->>'note',''),
+      nullif(v_item->>'private_note',''),
+      nullif(v_item->>'mood',''),
+      nullif(v_item->>'context',''),
+      nullif(v_item->>'activity',''),
+      nullif(v_item->>'location','')
     );
   end loop;
 
@@ -802,7 +802,7 @@ begin
     p_user_id,
     nullif(item->>'started_at','')::timestamptz,
     nullif(item->>'ended_at','')::timestamptz,
-    nullif(item->>'note',''),
+    nullif(v_item->>'note',''),
     coalesce(nullif(item->>'source',''),'nihility'),
     nullif(item->>'external_id',''),
     coalesce(nullif(item->>'created_at','')::timestamptz, pg_catalog.now())
@@ -820,12 +820,12 @@ begin
     member_map.new_id,
     nullif(item->>'joined_at','')::timestamptz,
     nullif(item->>'left_at','')::timestamptz,
-    nullif(item->>'note',''),
-    nullif(item->>'private_note',''),
-    nullif(item->>'mood',''),
-    nullif(item->>'context',''),
-    nullif(item->>'activity',''),
-    nullif(item->>'location','')
+    nullif(v_item->>'note',''),
+    nullif(v_item->>'private_note',''),
+    nullif(v_item->>'mood',''),
+    nullif(v_item->>'context',''),
+    nullif(v_item->>'activity',''),
+    nullif(v_item->>'location','')
   from jsonb_array_elements(v_front_members) item
   join _nihility_restore_front_map front_map
     on front_map.old_id = item->>'front_backup_id'
