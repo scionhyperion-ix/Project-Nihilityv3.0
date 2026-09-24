@@ -377,6 +377,13 @@
         document.querySelector('#memberId').value=memberId;
         memberPersisted=true;
       }
+      if(memberPersisted&&memberId){
+        const cached=state.members.find(m=>m.id===memberId);
+        if(cached)Object.assign(cached,body,{id:memberId});
+        else state.members.push({...body,id:memberId});
+        document.querySelector('#memberAvatarFile').value='';
+        document.querySelector('#memberBannerFile').value='';
+      }
       if(memberId)await saveMemberGroups(memberId);
       if(memberId&&window.nihilityMemberCustom?.saveMemberCustomData)await window.nihilityMemberCustom.saveMemberCustomData(memberId);
       if(old?.avatar_storage_path&&old.avatar_storage_path!==body.avatar_storage_path)await safeDelete('avatar',old.avatar_storage_path);
