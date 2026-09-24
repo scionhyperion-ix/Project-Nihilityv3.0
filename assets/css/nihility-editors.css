@@ -3424,3 +3424,84 @@ body:has(dialog[open]){
 #settingsRoute .backup-file-field input[type=file]::file-selector-button{
   font-size:.74rem!important;
 }
+
+
+/* Settings v4.3: clearly readable desktop typography. */
+#settingsRoute .settings-list-heading h3{
+  font-size:1.24rem!important;
+  line-height:1.25!important;
+}
+#settingsRoute .settings-list-heading .muted{
+  font-size:.96rem!important;
+  line-height:1.58!important;
+}
+#settingsRoute .settings-simple-row>span{
+  font-size:.91rem!important;
+}
+#settingsRoute .settings-simple-row>strong{
+  font-size:.98rem!important;
+}
+#settingsRoute .settings-simple-row>small,
+#settingsRoute .settings-simple-row>div>small{
+  font-size:.90rem!important;
+  line-height:1.55!important;
+}
+#settingsRoute .settings-simple-row>div>strong{
+  font-size:.98rem!important;
+}
+#settingsRoute .settings-list-field{
+  font-size:.92rem!important;
+}
+#settingsRoute .settings-list-note{
+  font-size:.88rem!important;
+  line-height:1.55!important;
+}
+#settingsRoute .settings-restore-controls .backup-file-summary{
+  font-size:.86rem!important;
+}
+#settingsRoute .settings-theme-list .theme-option-copy strong{
+  font-size:.94rem!important;
+}
+#settingsRoute .settings-metadata-search-note{
+  font-size:.88rem!important;
+  line-height:1.5!important;
+}
+#settingsRoute .settings-metadata-search-note code{
+  font-size:.82rem!important;
+}
+#settingsRoute .member-metadata-section-heading strong{
+  font-size:.96rem!important;
+}
+#settingsRoute .member-metadata-section-heading small{
+  font-size:.84rem!important;
+}
+#settingsRoute .member-metadata-empty strong{
+  font-size:.92rem!important;
+}
+#settingsRoute .member-metadata-empty p{
+  font-size:.88rem!important;
+  line-height:1.55!important;
+}
+#settingsRoute .member-metadata-row strong,
+#settingsRoute .member-tag-definition-copy strong{
+  font-size:.94rem!important;
+}
+#settingsRoute .member-metadata-row small{
+  font-size:.86rem!important;
+  line-height:1.5!important;
+}
+#settingsRoute .member-field-key,
+#settingsRoute .member-field-type{
+  font-size:.80rem!important;
+}
+#settingsRoute .secondary-button{
+  font-size:.84rem!important;
+  padding:7px 10px!important;
+}
+#settingsRoute .text-button,
+#settingsRoute .compact-metadata-button{
+  font-size:.84rem!important;
+}
+#settingsRoute .backup-file-field input[type=file]::file-selector-button{
+  font-size:.82rem!important;
+}
