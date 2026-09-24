@@ -1915,6 +1915,8 @@ async function validateBackup(backup:any){
     }
     const frontTime=frontTimes.get(frontId);
     if(frontTime&&joined<frontTime.start-1000)throw new ClientError("A fronter joins before the front starts");
+    if(frontTime?.end!==null&&frontTime?.end!==undefined&&joined>frontTime.end+1000)throw new ClientError("A fronter joins after the front ends");
+    if(frontTime?.end!==null&&frontTime?.end!==undefined&&left!==null&&left>frontTime.end+1000)throw new ClientError("A fronter leaves after the front ends");
     const key=frontId+":"+memberId+":"+String(link.joined_at);
     if(frontMemberKeys.has(key))throw new ClientError("Backup contains a duplicate fronter timing row");
     frontMemberKeys.add(key);
