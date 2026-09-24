@@ -106,9 +106,7 @@
     <div class="main-column">
       <header class="topbar">
         <div><p id="pageEyebrow" class="eyebrow">Overview</p><h2 id="pageTitle">Home</h2></div>
-        <div class="topbar-actions">
-          <button id="openFrontManager" class="primary-button" type="button">Manage front</button>
-        </div>
+
       </header>
 
       <section id="homeRoute" class="route-view">
@@ -116,7 +114,11 @@
           <article class="panel current-front-panel">
             <div class="panel-heading"><div><p class="eyebrow">Current front</p><h3 id="currentFrontHeading">Nobody is fronting</h3></div><span id="frontDuration" class="soft-pill">--</span></div>
             <div id="currentFrontMembers" class="current-front-members"></div>
-            <div id="currentFrontNote" class="current-front-note" hidden></div><div class="panel-actions"><button id="editCurrentFrontDetailsButton" class="secondary-button" type="button" hidden>Edit notes/details</button><button id="addCoFronterButton" class="secondary-button" type="button">Add co-fronter</button><button id="transferFrontToPkButton" class="secondary-button" type="button" hidden>Transfer to PK</button><button id="switchOutButton" class="text-button danger-text" type="button">Switch out</button></div>
+            <div id="currentFrontNote" class="current-front-note" hidden></div>
+            <div class="panel-actions current-front-actions">
+              <button id="addCoFronterButton" class="text-button" type="button">+ Add co-fronter</button>
+              <button id="transferFrontToPkButton" class="text-button" type="button" hidden>Transfer to PK</button>
+            </div>
           </article>
 
           <article class="panel system-summary-panel">
