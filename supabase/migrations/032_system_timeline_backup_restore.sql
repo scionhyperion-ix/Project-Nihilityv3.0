@@ -438,29 +438,77 @@ begin
       updated_at = pg_catalog.now()
   where user_id = p_user_id;
 
-  insert into public.system_events(
-    id,user_id,event_type,occurred_at,member_id,related_member_id,group_id,front_id,metadata,created_at
-  )
-  select
-    gen_random_uuid(),
-    p_user_id,
-    item->>'event_type',
-    (item->>'occurred_at')::timestamptz,
-    member_map.new_id,
-    related_member_map.new_id,
-    group_map.new_id,
-    front_map.new_id,
-    case when jsonb_typeof(item->'metadata')='object' then item->'metadata' else '{}'::jsonb end,
-    coalesce(nullif(item->>'created_at','')::timestamptz,pg_catalog.now())
-  from jsonb_array_elements(v_system_events) item
-  left join _nihility_restore_member_map member_map
-    on member_map.old_id=item->>'member_backup_id'
-  left join _nihility_restore_member_map related_member_map
-    on related_member_map.old_id=item->>'related_member_backup_id'
-  left join _nihility_restore_group_map group_map
-    on group_map.old_id=item->>'group_backup_id'
-  left join _nihility_restore_front_map front_map
-    on front_map.old_id=item->>'front_backup_id';
+  if jsonb_array_length(v_system_events) > 0 then
+    insert into public.system_events(
+      id,user_id,event_type,occurred_at,member_id,related_member_id,group_id,front_id,metadata,created_at
+    )
+    select
+      gen_random_uuid(),
+      p_user_id,
+      item->>'event_type',
+      (item->>'occurred_at')::timestamptz,
+      member_map.new_id,
+      related_member_map.new_id,
+      group_map.new_id,
+      front_map.new_id,
+      case when jsonb_typeof(item->'metadata')='object' then item->'metadata' else '{}'::jsonb end,
+      coalesce(nullif(item->>'created_at','')::timestamptz,pg_catalog.now())
+    from jsonb_array_elements(v_system_events) item
+    left join _nihility_restore_member_map member_map
+      on member_map.old_id=item->>'member_backup_id'
+    left join _nihility_restore_member_map related_member_map
+      on related_member_map.old_id=item->>'related_member_backup_id'
+    left join _nihility_restore_group_map group_map
+      on group_map.old_id=item->>'group_backup_id'
+    left join _nihility_restore_front_map front_map
+      on front_map.old_id=item->>'front_backup_id';
+  else
+    -- Older backups predate the timeline. Reconstruct only events whose
+    -- historical timestamp can be derived exactly from restored data.
+    insert into public.system_events(user_id,event_type,occurred_at,member_id)
+    select user_id,'member_created',created_at,id
+    from public.members
+    where user_id=p_user_id;
+
+    insert into public.system_events(user_id,event_type,occurred_at,member_id)
+    select user_id,'member_archived',archived_at,id
+    from public.members
+    where user_id=p_user_id and archived_at is not null;
+
+    insert into public.system_events(user_id,event_type,occurred_at,group_id)
+    select user_id,'group_created',created_at,id
+    from public.groups
+    where user_id=p_user_id;
+
+    insert into public.system_events(user_id,event_type,occurred_at,member_id,group_id)
+    select user_id,'member_group_added',created_at,member_id,group_id
+    from public.member_groups
+    where user_id=p_user_id;
+
+    insert into public.system_events(user_id,event_type,occurred_at,front_id)
+    select user_id,'front_logged',started_at,id
+    from public.fronts
+    where user_id=p_user_id;
+
+    insert into public.system_events(
+      user_id,event_type,occurred_at,member_id,related_member_id,metadata
+    )
+    select
+      user_id,'connection_added',created_at,source_member_id,target_member_id,
+      pg_catalog.jsonb_build_object(
+        'source_label',source_label,
+        'target_label',target_label
+      )
+    from public.member_connections
+    where user_id=p_user_id;
+
+    insert into public.system_events(user_id,event_type,occurred_at,metadata)
+    select
+      user_id,'integration_imported',created_at,
+      pg_catalog.jsonb_build_object('source',source)
+    from public.imports
+    where user_id=p_user_id;
+  end if;
 
   perform pg_catalog.set_config('nihility.suppress_timeline','off',true);
 
