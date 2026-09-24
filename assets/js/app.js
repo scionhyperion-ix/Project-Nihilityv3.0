@@ -626,6 +626,19 @@ function effectiveFrontDetailMemberIds(){
   const current=activeFront();
   return [...new Set([...(current?frontMembers(current.id).map(m=>m.id):[]),...selected])];
 }
+function syncFrontModeDetails(){
+  const mode=$('input[name="frontMode"]:checked')?.value||'replace';
+  if(mode==='add'){
+    const current=activeFront();
+    if(current){
+      state.frontMembers.filter(x=>x.front_id===current.id).forEach(link=>{
+        if(!pendingFrontDetails.has(link.member_id))pendingFrontDetails.set(link.member_id,detailFromFrontLink(link));
+      });
+      if(!$('#frontOverallNote').value.trim()&&current.note)$('#frontOverallNote').value=current.note;
+    }
+  }
+  renderFrontSelectedDetails();
+}
 function renderFrontSelectedDetails(){
   const box=$('#frontSelectedDetails');if(!box)return;
   box.replaceChildren();
@@ -1096,7 +1109,7 @@ $('#signOutButton').onclick=signOut;$('#deniedSignOut').onclick=signOut;$('#side
 $$('[data-route]').forEach(b=>b.onclick=()=>setRoute(b.dataset.route));$$('[data-route-link]').forEach(b=>b.onclick=()=>setRoute(b.dataset.routeLink));
 $('#openFrontManager').onclick=()=>openFront('replace');$('#chooseAnyMemberButton').onclick=()=>openFront('replace');$('#newFrontButton').onclick=()=>openFront('replace');$('#addCoFronterButton').onclick=()=>openFront('add');$('#editCurrentFrontDetailsButton').onclick=()=>{const front=activeFront();if(front)window.nihilityOpenFrontHistoryEditor?.(front.id)};$('#transferFrontToPkButton').onclick=transferCurrentFrontToPk;$('#switchOutButton').onclick=switchOut;
 $('#createMemberButton').onclick=()=>openMember();$('#memberSearch').oninput=()=>renderMembers();$('#memberForm').onsubmit=saveMember;$('#deleteMemberButton').onclick=deleteMember;$('#restoreMemberButton').onclick=restoreMember;$('#permanentDeleteMemberButton').onclick=permanentlyDeleteMember;$('#closeMemberDialog').onclick=$('#cancelMemberButton').onclick=()=>$('#memberDialog').close();$('#memberColorPicker').oninput=e=>$('#memberColor').value=e.target.value.toUpperCase();$('#memberColor').oninput=e=>{const c=hex(e.target.value);if(c)$('#memberColorPicker').value=c};
-$('#frontForm').onsubmit=saveFront;$('#closeFrontDialog').onclick=$('#cancelFrontButton').onclick=()=>$('#frontDialog').close();$('#frontMemberSearch').oninput=()=>buildFrontPicker($('#frontMemberPicker input:checked').map(i=>i.value));document.querySelectorAll('input[name="frontMode"]').forEach(i=>i.addEventListener('change',()=>renderFrontSelectedDetails()));$('#customFrontTimeEnabled').onchange=e=>$('#customFrontTimeRow').hidden=!e.target.checked;
+$('#frontForm').onsubmit=saveFront;$('#closeFrontDialog').onclick=$('#cancelFrontButton').onclick=()=>$('#frontDialog').close();$('#frontMemberSearch').oninput=()=>buildFrontPicker($('#frontMemberPicker input:checked').map(i=>i.value));document.querySelectorAll('input[name="frontMode"]').forEach(i=>i.addEventListener('change',syncFrontModeDetails));$('#customFrontTimeEnabled').onchange=e=>$('#customFrontTimeRow').hidden=!e.target.checked;
 $('#connectPkButton').onclick=connectPk;$('#disconnectPkButton').onclick=disconnectPk;$('#importPkButton').onclick=importPk;
 $('#closePkSyncDialog').onclick=$('#cancelPkSyncButton').onclick=()=>$('#pkSyncDialog').close();$('#applyPkSyncButton').onclick=applyPkSync;
 document.querySelectorAll('input[name="themeMode"]').forEach(i=>i.onchange=()=>applyTheme(i.value));
