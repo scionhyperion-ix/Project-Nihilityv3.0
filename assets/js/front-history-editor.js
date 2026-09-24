@@ -188,7 +188,13 @@
     const memberLinks=[...(editorState?.links?.entries()||[])].map(([memberId,item])=>({
       memberId,
       joinedAt:toIso(item.joinedAt),
-      leftAt:ongoing?null:(item.leftAt?toIso(item.leftAt):null)
+      leftAt:ongoing?null:(item.leftAt?toIso(item.leftAt):null),
+      note:item.note||null,
+      privateNote:item.privateNote||null,
+      mood:item.mood||null,
+      context:item.context||null,
+      activity:item.activity||null,
+      location:item.location||null
     }));
     return{frontId:editorState.front.id,startedAt,endedAt,source,note,memberLinks};
   }
@@ -266,7 +272,7 @@
         if(input.checked){
           const start=dialog.querySelector('#historyEditorStart').value;
           const end=dialog.querySelector('#historyEditorOngoing').checked?'':dialog.querySelector('#historyEditorEnd').value;
-          editorState.links.set(m.id,{joinedAt:start,leftAt:end||null});
+          editorState.links.set(m.id,{joinedAt:start,leftAt:end||null,note:'',privateNote:'',mood:'',context:'',activity:'',location:''});
         }else{
           editorState.links.delete(m.id);
         }
@@ -321,7 +327,27 @@
         editorState.links.delete(id);
         renderMemberTimes();renderMemberPicker();invalidateReview();
       };
-      row.append(who,joinLabel,leaveLabel,remove);box.append(row);
+      const details=document.createElement('details');details.className='history-member-detail-editor';
+      const summary=document.createElement('summary');summary.textContent='Notes and details';
+      details.append(summary);
+      const fields=document.createElement('div');fields.className='history-member-detail-fields';
+      const addDetail=(title,key,max,textarea=false)=>{
+        const label=document.createElement('label');label.textContent=title;
+        const input=document.createElement(textarea?'textarea':'input');
+        if(textarea)input.rows=2;else input.type='text';
+        input.maxLength=max;input.value=times[key]||'';
+        input.oninput=()=>{times[key]=input.value;invalidateReview()};
+        label.append(input);fields.append(label);
+      };
+      addDetail('Mood','mood',200);
+      addDetail('Activity','activity',500);
+      addDetail('Context','context',1000,true);
+      addDetail('Location','location',500);
+      addDetail('Fronter note','note',4000,true);
+      addDetail('Private note','privateNote',4000,true);
+      const hint=document.createElement('p');hint.className='muted history-detail-privacy-note';hint.textContent='Private note and location stay inside detail editors and are never sent to PluralKit.';
+      fields.append(hint);details.append(fields);
+      row.append(who,joinLabel,leaveLabel,remove,details);box.append(row);
     });
     updateSelectedCount();
   }
@@ -370,6 +396,16 @@
       const a=afterMembers.get(id),b=beforeMembers.get(id);
       return b&&(!sameInstant(a.joinedAt,b.joined_at)||!sameInstant(a.leftAt,b.left_at));
     });
+    const detailsChanged=[...afterMembers.keys()].filter(id=>{
+      const a=afterMembers.get(id),b=beforeMembers.get(id);
+      if(!b)return false;
+      return (a.note||'')!==(b.note||'')||
+        (a.privateNote||'')!==(b.private_note||'')||
+        (a.mood||'')!==(b.mood||'')||
+        (a.context||'')!==(b.context||'')||
+        (a.activity||'')!==(b.activity||'')||
+        (a.location||'')!==(b.location||'');
+    });
     const addMemberSummary=(label,ids)=>{
       if(!ids.length)return;
       changed=true;
@@ -381,6 +417,7 @@
     addMemberSummary('Members added',added);
     addMemberSummary('Members removed',removed);
     addMemberSummary('Timing changed',timingChanged);
+    addMemberSummary('Details changed',detailsChanged);
 
     if(!changed){
       const p=document.createElement('p');p.className='muted';p.textContent='No changes detected.';box.append(p);
@@ -508,7 +545,16 @@
     editorState={
       front:{...front},
       originalLinks:links.map(x=>({...x})),
-      links:new Map(links.map(x=>[x.member_id,{joinedAt:toLocalInput(x.joined_at),leftAt:toLocalInput(x.left_at)}])),
+      links:new Map(links.map(x=>[x.member_id,{
+        joinedAt:toLocalInput(x.joined_at),
+        leftAt:toLocalInput(x.left_at),
+        note:x.note||'',
+        privateNote:x.private_note||'',
+        mood:x.mood||'',
+        context:x.context||'',
+        activity:x.activity||'',
+        location:x.location||''
+      }])),
       baseRevision:null,
       preview:null,
       review:null
