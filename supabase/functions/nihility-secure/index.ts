@@ -17,6 +17,7 @@ const TRUSTED_MEDIA_HOSTS = new Set([
   "i.postimg.cc",
   "cdn.discordapp.com",
   "media.discordapp.net",
+  "cdn.pluralkit.me",
   "i.imgur.com",
 ]);
 const MIME_EXT: Record<string,string> = {
@@ -537,6 +538,203 @@ async function safeImage(url:string,kind:string){
 async function storeImage(userId:string,kind:string,url:string){
   const img=await safeImage(url,kind);
   return storeImageBytes(userId,kind,img.bytes,img.type);
+}
+async function copyPkImage(userId:string,kind:string,url:string|null,label:string){
+  if(!url)return null;
+  try{
+    return await storeImage(userId,kind,url);
+  }catch(error){
+    console.warn("Unable to copy PluralKit media",label,error instanceof Error?error.message:String(error));
+    return null;
+  }
+}
+function pkMemberMediaUrls(remote:any){
+  return{avatar:remote?.avatar_url||null,banner:remote?.banner||remote?.banner_url||null};
+}
+function pkGroupMediaUrls(remote:any){
+  return{icon:remote?.icon||remote?.icon_url||null,banner:remote?.banner||remote?.banner_url||null};
+}
+async function syncPkMemberMedia(user:any,local:any,remote:any){
+  const urls=pkMemberMediaUrls(remote);
+  const metadata:any={...(local.metadata||{})};
+  const patch:any={};
+  const cleanup:Array<{kind:string,path:string}>=[];
+  let copied=0,removed=0,failed=0,conflicts=0,changed=false;
+
+  for(const spec of [
+    {key:"avatar",kind:"avatar",url:urls.avatar,current:local.avatar_storage_path||null,sourceKey:"avatar_source",pathKey:"avatar_storage_path",urlMeta:"pk_avatar_url",pathMeta:"pk_avatar_storage_path"},
+    {key:"banner",kind:"banner",url:urls.banner,current:local.banner_storage_path||null,sourceKey:"banner_source",pathKey:"banner_storage_path",urlMeta:"pk_banner_url",pathMeta:"pk_banner_storage_path"}
+  ]){
+    const previousUrl=metadata[spec.urlMeta]||null;
+    const managedPath=metadata[spec.pathMeta]||null;
+    const remoteChanged=previousUrl!==spec.url;
+    const missing=Boolean(spec.url&&!spec.current);
+    const localStillManaged=Boolean(managedPath&&spec.current===managedPath);
+
+    if(spec.url&&(missing||(remoteChanged&&localStillManaged))){
+      const nextPath=await copyPkImage(user.id,spec.kind,spec.url,"member "+String(remote?.id||local?.id||"")+" "+spec.key);
+      if(!nextPath){failed++;continue}
+      patch[spec.pathKey]=nextPath;
+      patch[spec.sourceKey]="supabase";
+      metadata[spec.urlMeta]=spec.url;
+      metadata[spec.pathMeta]=nextPath;
+      if(spec.current&&spec.current!==nextPath&&localStillManaged)cleanup.push({kind:spec.kind,path:spec.current});
+      copied++;changed=true;
+      continue;
+    }
+
+    if(!spec.url&&remoteChanged&&localStillManaged){
+      patch[spec.pathKey]=null;
+      patch[spec.sourceKey]=null;
+      metadata[spec.urlMeta]=null;
+      metadata[spec.pathMeta]=null;
+      if(spec.current)cleanup.push({kind:spec.kind,path:spec.current});
+      removed++;changed=true;
+      continue;
+    }
+
+    if(remoteChanged){
+      // A local image exists, but it is not proven to be the last PK-managed
+      // copy. Preserve the Nihility image instead of overwriting it blindly.
+      conflicts++;
+      continue;
+    }
+
+    // Repair old imports where the PK URL was recorded but the image copy failed.
+    if(spec.url&&spec.current&&managedPath===spec.current&&metadata[spec.urlMeta]!==spec.url){
+      metadata[spec.urlMeta]=spec.url;changed=true;
+    }
+  }
+
+  if(changed){
+    patch.metadata=metadata;
+    await admin("/rest/v1/members?id=eq."+encodeURIComponent(local.id),{
+      method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify(patch)
+    });
+    await Promise.allSettled(cleanup.map(item=>deleteStoredMedia(user.id,item.kind,item.path)));
+  }
+  return{copied,removed,failed,conflicts};
+}
+async function syncPkGroupMedia(user:any,local:any,remote:any){
+  const urls=pkGroupMediaUrls(remote);
+  const metadata:any={...(local.metadata||{})};
+  const patch:any={};
+  const cleanup:Array<{kind:string,path:string}>=[];
+  let copied=0,removed=0,failed=0,conflicts=0,changed=false;
+
+  for(const spec of [
+    {key:"icon",kind:"avatar",url:urls.icon,current:local.icon_storage_path||metadata.icon_storage_path||null,pathKey:"icon_storage_path",urlMeta:"pk_icon_url",pathMeta:"pk_icon_storage_path"},
+    {key:"banner",kind:"banner",url:urls.banner,current:metadata.banner_storage_path||null,pathKey:null,urlMeta:"pk_banner_url",pathMeta:"pk_banner_storage_path"}
+  ]){
+    const previousUrl=metadata[spec.urlMeta]||null;
+    const managedPath=metadata[spec.pathMeta]||null;
+    const remoteChanged=previousUrl!==spec.url;
+    const missing=Boolean(spec.url&&!spec.current);
+    const localStillManaged=Boolean(managedPath&&spec.current===managedPath);
+
+    if(spec.url&&(missing||(remoteChanged&&localStillManaged))){
+      const nextPath=await copyPkImage(user.id,spec.kind,spec.url,"group "+String(remote?.id||local?.id||"")+" "+spec.key);
+      if(!nextPath){failed++;continue}
+      if(spec.pathKey)patch[spec.pathKey]=nextPath;
+      metadata[spec.key==="icon"?"icon_storage_path":"banner_storage_path"]=nextPath;
+      metadata[spec.urlMeta]=spec.url;
+      metadata[spec.pathMeta]=nextPath;
+      if(spec.current&&spec.current!==nextPath&&localStillManaged)cleanup.push({kind:spec.kind,path:spec.current});
+      copied++;changed=true;
+      continue;
+    }
+
+    if(!spec.url&&remoteChanged&&localStillManaged){
+      if(spec.pathKey)patch[spec.pathKey]=null;
+      metadata[spec.key==="icon"?"icon_storage_path":"banner_storage_path"]=null;
+      metadata[spec.urlMeta]=null;
+      metadata[spec.pathMeta]=null;
+      if(spec.current)cleanup.push({kind:spec.kind,path:spec.current});
+      removed++;changed=true;
+      continue;
+    }
+
+    if(remoteChanged){conflicts++;continue}
+  }
+
+  if(changed){
+    patch.metadata=metadata;
+    await admin("/rest/v1/groups?id=eq."+encodeURIComponent(local.id),{
+      method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify(patch)
+    });
+    await Promise.allSettled(cleanup.map(item=>deleteStoredMedia(user.id,item.kind,item.path)));
+  }
+  return{copied,removed,failed,conflicts};
+}
+async function syncPkSystemMedia(user:any,remote:any){
+  const rows=await admin("/rest/v1/app_settings?user_id=eq."+encodeURIComponent(user.id)+"&select=settings&limit=1");
+  const settings=rows?.[0]?.settings||{};
+  const profile:any={...(settings.system_profile||{})};
+  const baseline:any={...(profile.pk_media_v1||{})};
+  const urls={avatar:remote?.avatar_url||null,banner:remote?.banner||remote?.banner_url||null};
+  const cleanup:Array<{kind:string,path:string}>=[];
+  let copied=0,removed=0,failed=0,conflicts=0,changed=false;
+
+  for(const spec of [
+    {key:"avatar",kind:"avatar",url:urls.avatar,current:profile.avatar_storage_path||null},
+    {key:"banner",kind:"banner",url:urls.banner,current:profile.banner_storage_path||null}
+  ]){
+    const previousUrl=baseline[spec.key+"_url"]??(profile[spec.key==="avatar"?"avatar_url":"banner"]||null);
+    const managedPath=baseline[spec.key+"_storage_path"]||null;
+    const remoteChanged=previousUrl!==spec.url;
+    const missing=Boolean(spec.url&&!spec.current);
+    const localStillManaged=Boolean(managedPath&&spec.current===managedPath);
+
+    if(spec.url&&(missing||(remoteChanged&&localStillManaged))){
+      const nextPath=await copyPkImage(user.id,spec.kind,spec.url,"system "+spec.key);
+      if(!nextPath){failed++;continue}
+      profile[spec.key+"_storage_path"]=nextPath;
+      baseline[spec.key+"_url"]=spec.url;
+      baseline[spec.key+"_storage_path"]=nextPath;
+      if(spec.current&&spec.current!==nextPath&&localStillManaged)cleanup.push({kind:spec.kind,path:spec.current});
+      copied++;changed=true;
+      continue;
+    }
+    if(!spec.url&&remoteChanged&&localStillManaged){
+      profile[spec.key+"_storage_path"]=null;
+      baseline[spec.key+"_url"]=null;
+      baseline[spec.key+"_storage_path"]=null;
+      if(spec.current)cleanup.push({kind:spec.kind,path:spec.current});
+      removed++;changed=true;
+      continue;
+    }
+    if(remoteChanged){conflicts++;continue}
+  }
+
+  if(changed){
+    profile.avatar_url=urls.avatar;
+    profile.banner=urls.banner;
+    profile.pk_media_v1=baseline;
+    const merged={...settings,system_profile:profile,system_name:profile.name||settings.system_name||null};
+    await admin("/rest/v1/app_settings?on_conflict=user_id",{
+      method:"POST",headers:{Prefer:"resolution=merge-duplicates,return=minimal"},
+      body:JSON.stringify({user_id:user.id,settings:merged})
+    });
+    await Promise.allSettled(cleanup.map(item=>deleteStoredMedia(user.id,item.kind,item.path)));
+  }
+  return{copied,removed,failed,conflicts};
+}
+async function syncPkMediaToNihility(user:any,token:string,state:any){
+  const totals={copied:0,removed:0,failed:0,conflicts:0};
+  for(const local of state.localMembers||[]){
+    const remote=findPkForLocal(local,state.pkMemberByKey);if(!remote)continue;
+    const result=await syncPkMemberMedia(user,local,remote);
+    totals.copied+=result.copied;totals.removed+=result.removed;totals.failed+=result.failed;totals.conflicts+=result.conflicts;
+  }
+  for(const local of state.localGroups||[]){
+    const remote=findPkForLocal(local,state.pkGroupByKey);if(!remote)continue;
+    const result=await syncPkGroupMedia(user,local,remote);
+    totals.copied+=result.copied;totals.removed+=result.removed;totals.failed+=result.failed;totals.conflicts+=result.conflicts;
+  }
+  const system=await pk(token,"/systems/@me");
+  const systemResult=await syncPkSystemMedia(user,system);
+  totals.copied+=systemResult.copied;totals.removed+=systemResult.removed;totals.failed+=systemResult.failed;totals.conflicts+=systemResult.conflicts;
+  return totals;
 }
 async function deleteStoredMedia(userId:string,kind:string,path:string|null|undefined){
   if(!path)return;
