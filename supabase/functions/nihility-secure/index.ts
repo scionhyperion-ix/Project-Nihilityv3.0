@@ -1593,13 +1593,14 @@ async function actionFrontHistoryPreview(user:any,body:any){
       p_member_links:input.memberLinks
     })
   });
+  if(result?.error)throw new ClientError(String(result.error),400);
   return result;
 }
 async function actionFrontHistoryCorrect(user:any,body:any){
   const input=historyCorrectionPayload(body);
   const expectedRevision=String(body?.expectedRevision||"").trim();
   if(!/^[a-f0-9]{32}$/i.test(expectedRevision))throw new ClientError("Review the latest history entry before saving");
-  return admin("/rest/v1/rpc/correct_nihility_front_history",{
+  const result=await admin("/rest/v1/rpc/correct_nihility_front_history",{
     method:"POST",
     body:JSON.stringify({
       p_user_id:user.id,
@@ -1612,13 +1613,15 @@ async function actionFrontHistoryCorrect(user:any,body:any){
       p_member_links:input.memberLinks
     })
   });
+  if(result?.error)throw new ClientError(String(result.error),result?.stale?409:400);
+  return result;
 }
 async function actionFrontHistoryDelete(user:any,body:any){
   const frontId=String(body?.frontId||"").trim();
   const expectedRevision=String(body?.expectedRevision||"").trim();
   if(!validUuid(frontId))throw new ClientError("Invalid front history entry");
   if(!/^[a-f0-9]{32}$/i.test(expectedRevision))throw new ClientError("Review the latest history entry before deleting it");
-  return admin("/rest/v1/rpc/delete_nihility_front_history",{
+  const result=await admin("/rest/v1/rpc/delete_nihility_front_history",{
     method:"POST",
     body:JSON.stringify({
       p_user_id:user.id,
@@ -1626,6 +1629,8 @@ async function actionFrontHistoryDelete(user:any,body:any){
       p_expected_revision:expectedRevision
     })
   });
+  if(result?.error)throw new ClientError(String(result.error),result?.stale?409:400);
+  return result;
 }
 
 
