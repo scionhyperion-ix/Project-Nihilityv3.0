@@ -1043,30 +1043,34 @@ async function actionPkSyncApply(user:any,body:any){
   }
 
   result.comparison=await buildPkSyncComparison(user,token);
-  await admin("/rest/v1/system_events",{
-    method:"POST",
-    headers:{Prefer:"return=minimal"},
-    body:JSON.stringify({
-      user_id:user.id,
-      event_type:"integration_synced",
-      occurred_at:new Date().toISOString(),
-      metadata:{
-        source:"pluralkit",
-        members_to_nihility:result.members.toNihility,
-        members_to_pk:result.members.toPk,
-        members_created_in_nihility:result.members.createdInNihility,
-        members_created_in_pk:result.members.createdInPk,
-        groups_to_nihility:result.groups.toNihility,
-        groups_to_pk:result.groups.toPk,
-        groups_created_in_nihility:result.groups.createdInNihility,
-        groups_created_in_pk:result.groups.createdInPk,
-        memberships_to_nihility:result.memberships.toNihility,
-        memberships_to_pk:result.memberships.toPk,
-        conflicts_skipped:result.conflictsSkipped,
-        blocked_count:result.blocked.length
-      }
-    })
-  });
+  try{
+    await admin("/rest/v1/system_events",{
+      method:"POST",
+      headers:{Prefer:"return=minimal"},
+      body:JSON.stringify({
+        user_id:user.id,
+        event_type:"integration_synced",
+        occurred_at:new Date().toISOString(),
+        metadata:{
+          source:"pluralkit",
+          members_to_nihility:result.members.toNihility,
+          members_to_pk:result.members.toPk,
+          members_created_in_nihility:result.members.createdInNihility,
+          members_created_in_pk:result.members.createdInPk,
+          groups_to_nihility:result.groups.toNihility,
+          groups_to_pk:result.groups.toPk,
+          groups_created_in_nihility:result.groups.createdInNihility,
+          groups_created_in_pk:result.groups.createdInPk,
+          memberships_to_nihility:result.memberships.toNihility,
+          memberships_to_pk:result.memberships.toPk,
+          conflicts_skipped:result.conflictsSkipped,
+          blocked_count:result.blocked.length
+        }
+      })
+    });
+  }catch{
+    console.warn("Unable to record PluralKit sync timeline summary");
+  }
   return result;
 }
 
