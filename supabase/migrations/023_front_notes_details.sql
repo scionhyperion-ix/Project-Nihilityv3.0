@@ -1,6 +1,6 @@
 -- Optional front notes and per-fronter details.
--- Details stay attached to the owned front_members row and are never shared
--- to external integrations automatically.
+-- Details inherit front_members ownership and deletion behavior. No external
+-- integration receives these fields automatically.
 
 alter table public.front_members
   add column if not exists note text,
@@ -10,34 +10,28 @@ alter table public.front_members
   add column if not exists activity text,
   add column if not exists location text;
 
-do $$
+do $constraints$
 begin
   if not exists (select 1 from pg_constraint where conname='front_members_note_length') then
-    alter table public.front_members add constraint front_members_note_length
-      check (note is null or length(note) <= 4000);
+    alter table public.front_members add constraint front_members_note_length check (note is null or length(note) <= 4000);
   end if;
   if not exists (select 1 from pg_constraint where conname='front_members_private_note_length') then
-    alter table public.front_members add constraint front_members_private_note_length
-      check (private_note is null or length(private_note) <= 4000);
+    alter table public.front_members add constraint front_members_private_note_length check (private_note is null or length(private_note) <= 4000);
   end if;
   if not exists (select 1 from pg_constraint where conname='front_members_mood_length') then
-    alter table public.front_members add constraint front_members_mood_length
-      check (mood is null or length(mood) <= 200);
+    alter table public.front_members add constraint front_members_mood_length check (mood is null or length(mood) <= 200);
   end if;
   if not exists (select 1 from pg_constraint where conname='front_members_context_length') then
-    alter table public.front_members add constraint front_members_context_length
-      check (context is null or length(context) <= 1000);
+    alter table public.front_members add constraint front_members_context_length check (context is null or length(context) <= 1000);
   end if;
   if not exists (select 1 from pg_constraint where conname='front_members_activity_length') then
-    alter table public.front_members add constraint front_members_activity_length
-      check (activity is null or length(activity) <= 500);
+    alter table public.front_members add constraint front_members_activity_length check (activity is null or length(activity) <= 500);
   end if;
   if not exists (select 1 from pg_constraint where conname='front_members_location_length') then
-    alter table public.front_members add constraint front_members_location_length
-      check (location is null or length(location) <= 500);
+    alter table public.front_members add constraint front_members_location_length check (location is null or length(location) <= 500);
   end if;
 end
-$$;
+$constraints$;
 
 create or replace function private.nihility_front_history_snapshot(
   p_user_id uuid,
@@ -195,7 +189,7 @@ begin
   if exists (
     select 1
     from pg_catalog.jsonb_array_elements(p_member_links) item
-    where nullif(item_json->>'member_id','') is null
+    where nullif(item->>'member_id','') is null
        or nullif(item->>'joined_at','') is null
   ) then
     raise exception 'Each selected member requires a join time';
@@ -204,9 +198,9 @@ begin
   if exists (
     select 1
     from (
-      select (v_item->>'member_id')::uuid as member_id, count(*) as row_count
+      select (item->>'member_id')::uuid as member_id, count(*) as row_count
       from pg_catalog.jsonb_array_elements(p_member_links) item
-      group by (v_item->>'member_id')::uuid
+      group by (item->>'member_id')::uuid
     ) duplicates
     where duplicates.row_count > 1
   ) then
@@ -219,7 +213,7 @@ begin
     where not exists (
       select 1
       from public.members m
-      where m.id = (v_item->>'member_id')::uuid
+      where m.id = (item->>'member_id')::uuid
         and m.user_id = p_user_id
     )
   ) then
@@ -229,12 +223,12 @@ begin
   if exists (
     select 1
     from pg_catalog.jsonb_array_elements(p_member_links) item
-    where length(coalesce(item_json->>'note','')) > 4000
-       or length(coalesce(item_json->>'private_note','')) > 4000
-       or length(coalesce(item_json->>'mood','')) > 200
-       or length(coalesce(item_json->>'context','')) > 1000
-       or length(coalesce(item_json->>'activity','')) > 500
-       or length(coalesce(item_json->>'location','')) > 500
+    where length(coalesce(item->>'note','')) > 4000
+       or length(coalesce(item->>'private_note','')) > 4000
+       or length(coalesce(item->>'mood','')) > 200
+       or length(coalesce(item->>'context','')) > 1000
+       or length(coalesce(item->>'activity','')) > 500
+       or length(coalesce(item->>'location','')) > 500
   ) then
     raise exception 'One or more per-fronter detail fields exceed Nihility limits';
   end if;
@@ -410,15 +404,15 @@ begin
   select
     p_user_id,
     p_front_id,
-    (v_item->>'member_id')::uuid,
+    (item->>'member_id')::uuid,
     (item->>'joined_at')::timestamptz,
     nullif(item->>'left_at','')::timestamptz,
-    nullif(v_item->>'note',''),
-    nullif(v_item->>'private_note',''),
-    nullif(v_item->>'mood',''),
-    nullif(v_item->>'context',''),
-    nullif(v_item->>'activity',''),
-    nullif(v_item->>'location','')
+    nullif(item->>'note',''),
+    nullif(item->>'private_note',''),
+    nullif(item->>'mood',''),
+    nullif(item->>'context',''),
+    nullif(item->>'activity',''),
+    nullif(item->>'location','')
   from pg_catalog.jsonb_array_elements(p_member_links) item;
 
   return private.nihility_front_history_snapshot(p_user_id,p_front_id)
@@ -453,134 +447,80 @@ begin
   if uid is null then
     raise exception 'Authentication required';
   end if;
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(uid::text || ':nihility-front-history', 0));
+  if p_note is not null and length(p_note) > 10000 then raise exception 'Front note is too long'; end if;
+  if p_member_details is null or pg_catalog.jsonb_typeof(p_member_details) <> 'array' then raise exception 'Front member details must be an array'; end if;
+  if pg_catalog.jsonb_array_length(p_member_details) > 1000 then raise exception 'Too many members are attached to one front'; end if;
+  if effective_started_at > now() + interval '5 minutes' then raise exception 'Front start time cannot be in the future'; end if;
 
-  perform pg_catalog.pg_advisory_xact_lock(
-    pg_catalog.hashtextextended(uid::text || ':nihility-front-history', 0)
-  );
-
-  if p_note is not null and length(p_note) > 10000 then
-    raise exception 'Front note is too long';
-  end if;
-
-  if p_member_details is null or pg_catalog.jsonb_typeof(p_member_details) <> 'array' then
-    raise exception 'Front member details must be an array';
-  end if;
-
-  if pg_catalog.jsonb_array_length(p_member_details) > 1000 then
-    raise exception 'Too many members are attached to one front';
-  end if;
-
-  if effective_started_at > now() + interval '5 minutes' then
-    raise exception 'Front start time cannot be in the future';
-  end if;
-
-  select started_at
-  into active_started_at
-  from public.fronts
-  where user_id=uid and ended_at is null
-  order by started_at desc
-  limit 1;
-
+  select started_at into active_started_at
+  from public.fronts where user_id=uid and ended_at is null
+  order by started_at desc limit 1;
   if active_started_at is not null and effective_started_at < active_started_at then
     raise exception 'Start time cannot be earlier than the current front';
   end if;
 
   if exists (
-    select 1
-    from pg_catalog.jsonb_array_elements(p_member_details) x(item_json)
-    where coalesce(item_json->>'member_id','') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
-  ) then
-    raise exception 'One or more selected members are invalid';
-  end if;
+    select 1 from pg_catalog.jsonb_array_elements(p_member_details) j(value)
+    where coalesce(j.value->>'member_id','') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+  ) then raise exception 'One or more selected members are invalid'; end if;
 
   if exists (
-    select 1
-    from (
-      select item_json->>'member_id' member_id,count(*) c
-      from pg_catalog.jsonb_array_elements(p_member_details) x(item_json)
-      group by item_json->>'member_id'
-    ) d
-    where d.c > 1
-  ) then
-    raise exception 'A member can only appear once in a front';
-  end if;
+    select 1 from (
+      select j.value->>'member_id' member_id,count(*) c
+      from pg_catalog.jsonb_array_elements(p_member_details) j(value)
+      group by j.value->>'member_id'
+    ) d where d.c > 1
+  ) then raise exception 'A member can only appear once in a front'; end if;
 
   if exists (
-    select 1
-    from pg_catalog.jsonb_array_elements(p_member_details) x(item_json)
+    select 1 from pg_catalog.jsonb_array_elements(p_member_details) j(value)
     where not exists (
       select 1 from public.members m
-      where m.id=(v_item->>'member_id')::uuid
-        and m.user_id=uid
-        and m.archived_at is null
+      where m.id=(j.value->>'member_id')::uuid and m.user_id=uid and m.archived_at is null
     )
-  ) then
-    raise exception 'One or more selected members are unavailable';
-  end if;
+  ) then raise exception 'One or more selected members are unavailable'; end if;
 
   if exists (
-    select 1
-    from pg_catalog.jsonb_array_elements(p_member_details) x(item_json)
-    where length(coalesce(item_json->>'note','')) > 4000
-       or length(coalesce(item_json->>'private_note','')) > 4000
-       or length(coalesce(item_json->>'mood','')) > 200
-       or length(coalesce(item_json->>'context','')) > 1000
-       or length(coalesce(item_json->>'activity','')) > 500
-       or length(coalesce(item_json->>'location','')) > 500
-  ) then
-    raise exception 'One or more per-fronter detail fields exceed Nihility limits';
-  end if;
+    select 1 from pg_catalog.jsonb_array_elements(p_member_details) j(value)
+    where length(coalesce(j.value->>'note','')) > 4000
+       or length(coalesce(j.value->>'private_note','')) > 4000
+       or length(coalesce(j.value->>'mood','')) > 200
+       or length(coalesce(j.value->>'context','')) > 1000
+       or length(coalesce(j.value->>'activity','')) > 500
+       or length(coalesce(j.value->>'location','')) > 500
+  ) then raise exception 'One or more per-fronter detail fields exceed Nihility limits'; end if;
 
   update public.front_members fm
-    set left_at=effective_started_at
-    where fm.user_id=uid
-      and fm.left_at is null
-      and exists (
-        select 1
-        from public.fronts f
-        where f.id=fm.front_id
-          and f.user_id=uid
-          and f.ended_at is null
-      );
+  set left_at=effective_started_at
+  where fm.user_id=uid and fm.left_at is null
+    and exists (
+      select 1 from public.fronts f
+      where f.id=fm.front_id and f.user_id=uid and f.ended_at is null
+    );
 
-  update public.fronts
-    set ended_at=effective_started_at
-    where user_id=uid and ended_at is null;
+  update public.fronts set ended_at=effective_started_at where user_id=uid and ended_at is null;
 
   insert into public.fronts(user_id,started_at,note,source)
   values(uid,effective_started_at,nullif(p_note,''),'nihility')
   returning id into new_front;
 
-  for v_item in
-    select value from pg_catalog.jsonb_array_elements(p_member_details)
+  for v_item in select value from pg_catalog.jsonb_array_elements(p_member_details)
   loop
     insert into public.front_members(
-      user_id,front_id,member_id,joined_at,left_at,
-      note,private_note,mood,context,activity,location
-    )
-    values(
-      uid,
-      new_front,
-      (v_item->>'member_id')::uuid,
-      effective_started_at,
-      null,
-      nullif(v_item->>'note',''),
-      nullif(v_item->>'private_note',''),
-      nullif(v_item->>'mood',''),
-      nullif(v_item->>'context',''),
-      nullif(v_item->>'activity',''),
-      nullif(v_item->>'location','')
+      user_id,front_id,member_id,joined_at,left_at,note,private_note,mood,context,activity,location
+    ) values(
+      uid,new_front,(v_item->>'member_id')::uuid,effective_started_at,null,
+      nullif(v_item->>'note',''),nullif(v_item->>'private_note',''),nullif(v_item->>'mood',''),
+      nullif(v_item->>'context',''),nullif(v_item->>'activity',''),nullif(v_item->>'location','')
     );
   end loop;
-
   return new_front;
 end
 $$;
 
-revoke all on function public.log_front_detailed(jsonb,timestamptz,text)
-  from public, anon;
-grant execute on function public.log_front_detailed(jsonb,timestamptz,text)
-  to authenticated, service_role;
+revoke all on function public.log_front_detailed(jsonb,timestamptz,text) from public, anon;
+grant execute on function public.log_front_detailed(jsonb,timestamptz,text) to authenticated, service_role;
 
 create or replace function public.restore_nihility_backup(
   p_user_id uuid,
@@ -802,7 +742,7 @@ begin
     p_user_id,
     nullif(item->>'started_at','')::timestamptz,
     nullif(item->>'ended_at','')::timestamptz,
-    nullif(v_item->>'note',''),
+    nullif(item->>'note',''),
     coalesce(nullif(item->>'source',''),'nihility'),
     nullif(item->>'external_id',''),
     coalesce(nullif(item->>'created_at','')::timestamptz, pg_catalog.now())
@@ -820,12 +760,12 @@ begin
     member_map.new_id,
     nullif(item->>'joined_at','')::timestamptz,
     nullif(item->>'left_at','')::timestamptz,
-    nullif(v_item->>'note',''),
-    nullif(v_item->>'private_note',''),
-    nullif(v_item->>'mood',''),
-    nullif(v_item->>'context',''),
-    nullif(v_item->>'activity',''),
-    nullif(v_item->>'location','')
+    nullif(item->>'note',''),
+    nullif(item->>'private_note',''),
+    nullif(item->>'mood',''),
+    nullif(item->>'context',''),
+    nullif(item->>'activity',''),
+    nullif(item->>'location','')
   from jsonb_array_elements(v_front_members) item
   join _nihility_restore_front_map front_map
     on front_map.old_id = item->>'front_backup_id'
