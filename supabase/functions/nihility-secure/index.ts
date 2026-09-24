@@ -1885,7 +1885,6 @@ async function actionBackupExport(user:any){
   const portableJournalEntries=(journalEntries||[]).map((x:any)=>({
     id:x.id,
     payload_version:x.payload_version,
-    logical_date:x.logical_date,
     iv:x.iv,
     ciphertext:x.ciphertext,
     created_at:x.created_at,
@@ -2175,7 +2174,6 @@ async function validateBackup(backup:any){
     if(journalIds.has(id))throw new ClientError("Backup contains duplicate journal entry identifiers");
     journalIds.add(id);
     if(Number(entry?.payload_version)!==1)throw new ClientError("Unsupported journal entry version");
-    journalDate(entry?.logical_date);
     journalBase64url(entry?.iv,16,64,"journal entry IV");
     journalBase64url(entry?.ciphertext,24,350000,"journal ciphertext");
     if(!validTimestamp(entry?.created_at,true)||!validTimestamp(entry?.updated_at,true))throw new ClientError("A journal timestamp is invalid");
@@ -2408,8 +2406,8 @@ async function actionJournalList(user:any,body:any){
   const offset=Math.min(1000000,Math.max(0,Number(body?.offset)||0));
   const rows=await admin(
     "/rest/v1/journal_entries?user_id=eq."+encodeURIComponent(user.id)+
-    "&select=id,payload_version,logical_date,iv,ciphertext,created_at,updated_at"+
-    "&order=logical_date.desc,updated_at.desc,id.desc"+
+    "&select=id,payload_version,iv,ciphertext,created_at,updated_at"+
+    "&order=updated_at.desc,id.desc"+
     "&limit="+limit+"&offset="+offset
   );
   return{entries:rows||[],has_more:(rows||[]).length===limit};
@@ -2419,7 +2417,6 @@ async function actionJournalSave(user:any,body:any){
   const id=journalUuid(e.id);
   const payloadVersion=Number(e.payload_version||1);
   if(payloadVersion!==1)throw new ClientError("Unsupported journal payload version",400);
-  const logicalDate=journalDate(e.logical_date);
   const iv=journalBase64url(e.iv,16,64,"journal entry IV");
   const ciphertext=journalBase64url(e.ciphertext,24,350000,"journal ciphertext");
 
@@ -2432,7 +2429,7 @@ async function actionJournalSave(user:any,body:any){
   await admin("/rest/v1/journal_entries?on_conflict=id",{
     method:"POST",
     headers:{Prefer:"resolution=merge-duplicates,return=representation"},
-    body:JSON.stringify({id,user_id:user.id,payload_version:1,logical_date:logicalDate,iv,ciphertext})
+    body:JSON.stringify({id,user_id:user.id,payload_version:1,iv,ciphertext})
   });
   return{saved:true,id};
 }
