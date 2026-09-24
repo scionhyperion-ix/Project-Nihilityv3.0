@@ -104,3 +104,17 @@ The main application intentionally follows the Rainbow layout and interaction st
 ## Deployment
 
 GitHub Pages must be enabled once in repository Settings before the Pages workflow can deploy. The GitHub App token cannot perform this one-time repository setting change.
+
+## Front notes and per-fronter details
+
+Fronts can optionally store an overall note plus per-fronter details such as mood, context, activity, location, a fronter note, and a private note.
+
+- Every field is optional and length-limited in both the UI and database.
+- Per-fronter details stay attached to that member's front-membership row.
+- Private notes and locations are hidden from compact Home and History views.
+- No front notes or per-fronter detail fields are sent to PluralKit.
+- Private notes and locations are still part of Nihility account data and are included in backups.
+- New detailed fronts close the prior front's open per-fronter timing rows when the front changes.
+- History corrections preserve and validate these fields with the same revision protection as timing edits.
+- Old v1 Nihility backups remain restorable; missing detail fields restore as null.
+
