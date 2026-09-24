@@ -813,7 +813,13 @@ async function saveFront(e){
     const mode=$('input[name="frontMode"]:checked')?.value||'replace';
     if(mode!=='add'&&!selected.length)throw new Error('Select at least one member.');
     let ids=selected;
-    if(mode==='add'){const current=activeFront();ids=[...new Set([...(current?frontMembers(current.id).map(m=>m.id):[]),...selected])]}
+    if(mode==='add'){
+      const current=activeFront();
+      const currentIds=new Set(current?frontMembers(current.id).map(m=>m.id):[]);
+      const newlyAdded=selected.filter(id=>!currentIds.has(id));
+      if(!newlyAdded.length)throw new Error('Select at least one member who is not already fronting.');
+      ids=[...new Set([...currentIds,...selected])];
+    }
     if(!ids.length)throw new Error('Select at least one member.');
     const details=ids.map(memberId=>{
       const value=pendingFrontDetails.get(memberId)||emptyFrontDetail();
