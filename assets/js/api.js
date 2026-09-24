@@ -168,14 +168,16 @@
   async function secure(action,payload={}){
     const s=await refresh();
     if(!s?.access_token)throw new Error('You are signed out.');
+    const headers={
+      apikey:cfg.SUPABASE_ANON_KEY,
+      Authorization:'Bearer '+s.access_token,
+      'Content-Type':'application/json'
+    };
+    if(action==='journal_save')headers['x-nihility-action']='journal_save';
     const r=await fetch(cfg.SUPABASE_URL+'/functions/v1/nihility-secure',{
       method:'POST',
-      headers:{
-        apikey:cfg.SUPABASE_ANON_KEY,
-        Authorization:'Bearer '+s.access_token,
-        'Content-Type':'application/json'
-      },
-      body:JSON.stringify({action,...payload})
+      headers,
+      body:JSON.stringify(action==='journal_save'?payload:{action,...payload})
     });
     const data=await r.json().catch(()=>({}));
     if(!r.ok)throw new Error(data?.error||data?.message||'Secure request failed.');

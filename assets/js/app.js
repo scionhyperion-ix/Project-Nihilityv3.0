@@ -423,7 +423,8 @@ function backupCountLabel(key){
     member_tags:'Member tags',
     member_tag_links:'Tag assignments',
     member_connections:'Member connections',
-    system_events:'System timeline events'
+    system_events:'System timeline events',
+    journal_entries:'Encrypted journal entries'
   })[key]||key;
 }
 function addBackupPreviewRow(container,labelText,currentValue,backupValue){
@@ -451,7 +452,7 @@ function renderBackupRestorePreview(result,parsed){
 
   const counts=result?.backup?.counts||{};
   const existing=result?.current||{};
-  ['members','groups','member_groups','fronts','front_members','imports','member_field_definitions','member_field_values','member_tags','member_tag_links','member_connections','system_events'].forEach(key=>{
+  ['members','groups','member_groups','fronts','front_members','imports','member_field_definitions','member_field_values','member_tags','member_tag_links','member_connections','system_events','journal_entries'].forEach(key=>{
     addBackupPreviewRow(box,backupCountLabel(key),existing[key]||0,counts[key]||0);
   });
 
@@ -1161,7 +1162,7 @@ async function autoRefreshData({force=false}={}){
   if(autoRefreshBusy||!state.user||document.hidden||!navigator.onLine)return;
   if($('#appView')?.hidden)return;
   if(document.querySelector('dialog[open]'))return;
-  if(state.route==='settings'||state.route==='profile')return;
+  if(state.route==='settings'||state.route==='profile'||state.route==='journal')return;
   const now=Date.now();
   if(!force&&now-lastAutoRefreshAt<AUTO_REFRESH_MS-500)return;
   autoRefreshBusy=true;

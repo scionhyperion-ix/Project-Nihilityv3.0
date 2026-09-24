@@ -1690,6 +1690,7 @@ const BACKUP_LIMITS={
   member_tag_links:1000000,
   member_connections:10000,
   system_events:1000000,
+  journal_entries:100000,
   media:40000
 };
 
@@ -1748,7 +1749,7 @@ async function actionBackupExport(user:any){
   await requireBackupOwner(user.id);
   const [
     members,groups,memberGroups,fronts,frontMembers,settingsRows,imports,profileRows,
-    fieldDefinitions,fieldValues,tags,tagLinks,connections,systemEvents
+    fieldDefinitions,fieldValues,tags,tagLinks,connections,systemEvents,journalVaultRows,journalEntries
   ]=await Promise.all([
     adminAll("/rest/v1/members?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=created_at.asc"),
     adminAll("/rest/v1/groups?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=created_at.asc"),
@@ -1763,7 +1764,9 @@ async function actionBackupExport(user:any){
     adminAll("/rest/v1/member_tags?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=name.asc"),
     adminAll("/rest/v1/member_tag_links?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=member_id.asc,tag_id.asc"),
     adminAll("/rest/v1/member_connections?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=created_at.asc"),
-    adminAll("/rest/v1/system_events?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=occurred_at.asc,id.asc")
+    adminAll("/rest/v1/system_events?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=occurred_at.asc,id.asc"),
+    admin("/rest/v1/journal_vaults?user_id=eq."+encodeURIComponent(user.id)+"&select=*&limit=1"),
+    adminAll("/rest/v1/journal_entries?user_id=eq."+encodeURIComponent(user.id)+"&select=*&order=logical_date.asc,created_at.asc,id.asc")
   ]);
 
   const media:any[]=[];
@@ -1863,6 +1866,31 @@ async function actionBackupExport(user:any){
     metadata:(x.metadata&&typeof x.metadata==="object"&&!Array.isArray(x.metadata))?x.metadata:{},
     created_at:x.created_at
   }));
+  const journalVault=journalVaultRows?.[0]||null;
+  const portableJournalVault=journalVault?{
+    format_version:journalVault.format_version,
+    cipher_suite:journalVault.cipher_suite,
+    kdf_name:journalVault.kdf_name,
+    kdf_iterations:journalVault.kdf_iterations,
+    kdf_salt:journalVault.kdf_salt,
+    wrap_iv:journalVault.wrap_iv,
+    wrapped_key:journalVault.wrapped_key,
+    recovery_kdf_name:journalVault.recovery_kdf_name,
+    recovery_salt:journalVault.recovery_salt,
+    recovery_iv:journalVault.recovery_iv,
+    recovery_wrapped_key:journalVault.recovery_wrapped_key,
+    key_verifier:journalVault.key_verifier,
+    created_at:journalVault.created_at,
+    updated_at:journalVault.updated_at
+  }:null;
+  const portableJournalEntries=(journalEntries||[]).map((x:any)=>({
+    id:x.id,
+    payload_version:x.payload_version,
+    iv:x.iv,
+    ciphertext:x.ciphertext,
+    created_at:x.created_at,
+    updated_at:x.updated_at
+  }));
   const profile=profileRows?.[0]||{};
   const portableProfile={
     display_name:profile.display_name||null,
@@ -1883,6 +1911,8 @@ async function actionBackupExport(user:any){
     member_tag_links:portableTagLinks,
     member_connections:portableConnections,
     system_events:portableSystemEvents,
+    journal_vault:portableJournalVault,
+    journal_entries:portableJournalEntries,
     settings:sanitizedSettings(settingsRows?.[0]?.settings||{},media),
     imports:(imports||[]).map((x:any)=>({source:x.source,summary:x.summary||{},created_at:x.created_at})),
     profile:portableProfile
@@ -1972,6 +2002,8 @@ async function validateBackup(backup:any){
   const tagLinks=optionalArray(data,"member_tag_links",BACKUP_LIMITS.member_tag_links);
   const connections=optionalArray(data,"member_connections",BACKUP_LIMITS.member_connections);
   const systemEvents=optionalArray(data,"system_events",BACKUP_LIMITS.system_events);
+  const journalEntries=optionalArray(data,"journal_entries",BACKUP_LIMITS.journal_entries);
+  const journalVault=(data.journal_vault&&typeof data.journal_vault==="object"&&!Array.isArray(data.journal_vault))?data.journal_vault:null;
   const media=Array.isArray(backup.media)?backup.media:[];
   if(media.length>BACKUP_LIMITS.media)throw new ClientError("Backup media manifest is too large");
 
@@ -2122,6 +2154,33 @@ async function validateBackup(backup:any){
     if(jsonBytes(metadata)>8192)throw new ClientError("A system timeline metadata block exceeds Nihility limits");
   }
 
+  if(journalEntries.length&&!journalVault)throw new ClientError("Journal entries require journal vault metadata");
+  if(journalVault){
+    if(Number(journalVault.format_version)!==1)throw new ClientError("Unsupported journal vault version");
+    if(String(journalVault.cipher_suite||"")!=="AES-256-GCM")throw new ClientError("Unsupported journal cipher suite");
+    if(String(journalVault.kdf_name||"")!=="PBKDF2-HMAC-SHA-256")throw new ClientError("Unsupported journal passphrase KDF");
+    if(String(journalVault.recovery_kdf_name||"")!=="HKDF-SHA-256")throw new ClientError("Unsupported journal recovery KDF");
+    const iterations=Number(journalVault.kdf_iterations);
+    if(!Number.isInteger(iterations)||iterations<600000||iterations>5000000)throw new ClientError("Journal KDF settings are invalid");
+    journalBase64url(journalVault.kdf_salt,16,128,"journal KDF salt");
+    journalBase64url(journalVault.wrap_iv,16,64,"journal wrap IV");
+    journalBase64url(journalVault.wrapped_key,48,160,"wrapped journal key");
+    journalBase64url(journalVault.recovery_salt,16,128,"journal recovery salt");
+    journalBase64url(journalVault.recovery_iv,16,64,"journal recovery IV");
+    journalBase64url(journalVault.recovery_wrapped_key,48,160,"journal recovery key");
+    journalBase64url(journalVault.key_verifier,43,43,"journal key verifier");
+  }
+  const journalIds=new Set<string>();
+  for(const entry of journalEntries){
+    const id=journalUuid(entry?.id);
+    if(journalIds.has(id))throw new ClientError("Backup contains duplicate journal entry identifiers");
+    journalIds.add(id);
+    if(Number(entry?.payload_version)!==1)throw new ClientError("Unsupported journal entry version");
+    journalBase64url(entry?.iv,16,64,"journal entry IV");
+    journalBase64url(entry?.ciphertext,24,350000,"journal ciphertext");
+    if(!validTimestamp(entry?.created_at,true)||!validTimestamp(entry?.updated_at,true))throw new ClientError("A journal timestamp is invalid");
+  }
+
   const settings=(data.settings&&typeof data.settings==="object"&&!Array.isArray(data.settings))?data.settings:{};
   if(jsonBytes(settings)>131072)throw new ClientError("Backup settings exceed Nihility limits");
   for(const item of imports){
@@ -2158,7 +2217,8 @@ async function validateBackup(backup:any){
       member_tags:tags.length,
       member_tag_links:tagLinks.length,
       member_connections:connections.length,
-      system_events:systemEvents.length
+      system_events:systemEvents.length,
+      journal_entries:journalEntries.length
     },
     media:{total:media.length,included:media.filter((x:any)=>x?.included===true).length}
   };
@@ -2180,7 +2240,7 @@ async function actionBackupPreview(user:any,body:any){
     current,
     mode:"replace",
     warnings:[
-      "Restore replaces current members, groups, front history, app settings, import history, and safe profile fields.",
+      "Restore replaces current members, groups, front history, app settings, import history, encrypted journal vault data, and safe profile fields.",
       "Account email, role, sessions, invitations, and integration credentials are not changed.",
       validated.media.included<validated.media.total
         ?"Some private media is not included in this backup and will not be restored."
@@ -2286,6 +2346,182 @@ async function readBackupRequest(req:Request){
   catch{throw new ClientError("Backup request contains invalid JSON")}
 }
 
+
+function journalBase64url(value:any,min:number,max:number,label:string){
+  const text=String(value||"");
+  if(text.length<min||text.length>max||!/^[A-Za-z0-9_-]+$/.test(text))throw new ClientError("Invalid "+label,400);
+  return text;
+}
+function journalUuid(value:any,label="journal entry"){
+  const text=String(value||"");
+  if(!/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/.test(text))throw new ClientError("Invalid "+label,400);
+  return text;
+}
+function journalDate(value:any){
+  const text=String(value||"");
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(text))throw new ClientError("Invalid journal date",400);
+  const d=new Date(text+"T00:00:00Z");
+  if(!Number.isFinite(d.getTime())||d.toISOString().slice(0,10)!==text)throw new ClientError("Invalid journal date",400);
+  return text;
+}
+function journalVaultPayload(body:any){
+  const v=body?.vault||{};
+  const iterations=Number(v.kdf_iterations);
+  if(!Number.isInteger(iterations)||iterations<600000||iterations>5000000)throw new ClientError("Invalid journal KDF settings",400);
+  return{
+    format_version:1,
+    cipher_suite:"AES-256-GCM",
+    kdf_name:"PBKDF2-HMAC-SHA-256",
+    kdf_iterations:iterations,
+    kdf_salt:journalBase64url(v.kdf_salt,16,128,"journal KDF salt"),
+    wrap_iv:journalBase64url(v.wrap_iv,16,64,"journal wrap IV"),
+    wrapped_key:journalBase64url(v.wrapped_key,48,160,"wrapped journal key"),
+    recovery_kdf_name:"HKDF-SHA-256",
+    recovery_salt:journalBase64url(v.recovery_salt,16,128,"journal recovery salt"),
+    recovery_iv:journalBase64url(v.recovery_iv,16,64,"journal recovery IV"),
+    recovery_wrapped_key:journalBase64url(v.recovery_wrapped_key,48,160,"journal recovery key"),
+    key_verifier:journalBase64url(v.key_verifier,43,43,"journal key verifier")
+  };
+}
+function constantTimeTextEqual(a:string,b:string){
+  if(a.length!==b.length)return false;
+  let diff=0;
+  for(let i=0;i<a.length;i++)diff|=a.charCodeAt(i)^b.charCodeAt(i);
+  return diff===0;
+}
+async function requireJournalProof(userId:string,proof:any){
+  const supplied=journalBase64url(proof,43,43,"journal vault proof");
+  const rows=await admin("/rest/v1/journal_vaults?user_id=eq."+encodeURIComponent(userId)+"&select=key_verifier&limit=1");
+  const expected=String(rows?.[0]?.key_verifier||"");
+  if(!expected||!constantTimeTextEqual(supplied,expected))throw new ClientError("Journal vault must be unlocked for this action.",403);
+}
+async function actionJournalStatus(user:any){
+  const rows=await admin(
+    "/rest/v1/journal_vaults?user_id=eq."+encodeURIComponent(user.id)+
+    "&select=format_version,cipher_suite,kdf_name,kdf_iterations,kdf_salt,wrap_iv,wrapped_key,recovery_kdf_name,recovery_salt,recovery_iv,recovery_wrapped_key,created_at,updated_at&limit=1"
+  );
+  const vault=rows?.[0]||null;
+  if(!vault)return{configured:false,vault:null};
+  return{configured:true,vault};
+}
+async function actionJournalSetup(user:any,body:any){
+  const existing=await admin("/rest/v1/journal_vaults?user_id=eq."+encodeURIComponent(user.id)+"&select=user_id&limit=1");
+  if(existing?.length)throw new ClientError("Journal vault is already configured",409);
+  const vault=journalVaultPayload(body);
+  await admin("/rest/v1/journal_vaults",{
+    method:"POST",
+    headers:{Prefer:"return=minimal"},
+    body:JSON.stringify({user_id:user.id,...vault})
+  });
+  return{configured:true};
+}
+async function actionJournalList(user:any,body:any){
+  await requireJournalProof(user.id,body?.proof);
+  const limit=Math.min(200,Math.max(1,Number(body?.limit)||100));
+  const offset=Math.min(1000000,Math.max(0,Number(body?.offset)||0));
+  const rows=await admin(
+    "/rest/v1/journal_entries?user_id=eq."+encodeURIComponent(user.id)+
+    "&select=id,payload_version,iv,ciphertext,created_at,updated_at"+
+    "&order=updated_at.desc,id.desc"+
+    "&limit="+limit+"&offset="+offset
+  );
+  return{entries:rows||[],has_more:(rows||[]).length===limit};
+}
+async function actionJournalSave(user:any,body:any){
+  await requireJournalProof(user.id,body?.proof);
+  const e=body?.entry||{};
+  const id=journalUuid(e.id);
+  const payloadVersion=Number(e.payload_version||1);
+  if(payloadVersion!==1)throw new ClientError("Unsupported journal payload version",400);
+  const iv=journalBase64url(e.iv,16,64,"journal entry IV");
+  const ciphertext=journalBase64url(e.ciphertext,24,350000,"journal ciphertext");
+
+  const vault=await admin("/rest/v1/journal_vaults?user_id=eq."+encodeURIComponent(user.id)+"&select=user_id&limit=1");
+  if(!vault?.length)throw new ClientError("Journal vault is not configured",409);
+
+  const existing=await admin("/rest/v1/journal_entries?id=eq."+encodeURIComponent(id)+"&select=id,user_id&limit=1");
+  if(existing?.length&&String(existing[0].user_id)!==String(user.id))throw new ClientError("Journal entry identifier is unavailable",409);
+
+  await admin("/rest/v1/journal_entries?on_conflict=id",{
+    method:"POST",
+    headers:{Prefer:"resolution=merge-duplicates,return=representation"},
+    body:JSON.stringify({id,user_id:user.id,payload_version:1,iv,ciphertext})
+  });
+  return{saved:true,id};
+}
+async function actionJournalDelete(user:any,body:any){
+  await requireJournalProof(user.id,body?.proof);
+  const id=journalUuid(body?.entry_id);
+  const existing=await admin("/rest/v1/journal_entries?user_id=eq."+encodeURIComponent(user.id)+"&id=eq."+encodeURIComponent(id)+"&select=id&limit=1");
+  if(!existing?.length)throw new ClientError("Journal entry not found",404);
+  await admin("/rest/v1/journal_entries?user_id=eq."+encodeURIComponent(user.id)+"&id=eq."+encodeURIComponent(id),{
+    method:"DELETE",headers:{Prefer:"return=minimal"}
+  });
+  return{deleted:true,id};
+}
+async function actionJournalRewrap(user:any,body:any){
+  await requireJournalProof(user.id,body?.proof);
+  const v=body?.vault||{};
+  const iterations=Number(v.kdf_iterations);
+  if(!Number.isInteger(iterations)||iterations<600000||iterations>5000000)throw new ClientError("Invalid journal KDF settings",400);
+  const patch={
+    kdf_iterations:iterations,
+    kdf_salt:journalBase64url(v.kdf_salt,16,128,"journal KDF salt"),
+    wrap_iv:journalBase64url(v.wrap_iv,16,64,"journal wrap IV"),
+    wrapped_key:journalBase64url(v.wrapped_key,48,160,"wrapped journal key")
+  };
+  const existing=await admin("/rest/v1/journal_vaults?user_id=eq."+encodeURIComponent(user.id)+"&select=user_id&limit=1");
+  if(!existing?.length)throw new ClientError("Journal vault is not configured",404);
+  await admin("/rest/v1/journal_vaults?user_id=eq."+encodeURIComponent(user.id),{
+    method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify(patch)
+  });
+  return{rewrapped:true};
+}
+async function actionJournalRekey(user:any,body:any){
+  await requireJournalProof(user.id,body?.proof);
+  const v=body?.vault||{};
+  const iterations=Number(v.kdf_iterations);
+  if(!Number.isInteger(iterations)||iterations<600000||iterations>5000000)throw new ClientError("Invalid journal KDF settings",400);
+  const patch={
+    kdf_iterations:iterations,
+    kdf_salt:journalBase64url(v.kdf_salt,16,128,"journal KDF salt"),
+    wrap_iv:journalBase64url(v.wrap_iv,16,64,"journal wrap IV"),
+    wrapped_key:journalBase64url(v.wrapped_key,48,160,"wrapped journal key"),
+    recovery_salt:journalBase64url(v.recovery_salt,16,128,"journal recovery salt"),
+    recovery_iv:journalBase64url(v.recovery_iv,16,64,"journal recovery IV"),
+    recovery_wrapped_key:journalBase64url(v.recovery_wrapped_key,48,160,"journal recovery key")
+  };
+  const existing=await admin("/rest/v1/journal_vaults?user_id=eq."+encodeURIComponent(user.id)+"&select=user_id&limit=1");
+  if(!existing?.length)throw new ClientError("Journal vault is not configured",404);
+  await admin("/rest/v1/journal_vaults?user_id=eq."+encodeURIComponent(user.id),{
+    method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify(patch)
+  });
+  return{rekeyed:true};
+}
+async function actionJournalRotateRecovery(user:any,body:any){
+  await requireJournalProof(user.id,body?.proof);
+  const v=body?.vault||{};
+  const patch={
+    recovery_salt:journalBase64url(v.recovery_salt,16,128,"journal recovery salt"),
+    recovery_iv:journalBase64url(v.recovery_iv,16,64,"journal recovery IV"),
+    recovery_wrapped_key:journalBase64url(v.recovery_wrapped_key,48,160,"journal recovery key")
+  };
+  const existing=await admin("/rest/v1/journal_vaults?user_id=eq."+encodeURIComponent(user.id)+"&select=user_id&limit=1");
+  if(!existing?.length)throw new ClientError("Journal vault is not configured",404);
+  await admin("/rest/v1/journal_vaults?user_id=eq."+encodeURIComponent(user.id),{
+    method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify(patch)
+  });
+  return{rotated:true};
+}
+async function actionJournalReset(user:any,body:any){
+  await requireJournalProof(user.id,body?.proof);
+  if(String(body?.confirmation||"")!=="ERASE JOURNAL")throw new ClientError("Type ERASE JOURNAL to confirm journal destruction.",400);
+  await admin("/rest/v1/journal_vaults?user_id=eq."+encodeURIComponent(user.id),{
+    method:"DELETE",headers:{Prefer:"return=minimal"}
+  });
+  return{reset:true};
+}
+
 const ACTION_LIMITS:Record<string,{limit:number,window:number}> = {
   pk_connect:{limit:10,window:60},
   pk_status:{limit:120,window:60},
@@ -2309,11 +2545,21 @@ const ACTION_LIMITS:Record<string,{limit:number,window:number}> = {
   front_history_preview:{limit:60,window:60},
   front_history_correct:{limit:20,window:60},
   front_history_delete:{limit:10,window:60},
+  journal_status:{limit:60,window:60},
+  journal_setup:{limit:3,window:300},
+  journal_list:{limit:60,window:60},
+  journal_save:{limit:60,window:60},
+  journal_delete:{limit:20,window:60},
+  journal_rewrap:{limit:5,window:300},
+  journal_rotate_recovery:{limit:5,window:300},
+  journal_rekey:{limit:3,window:300},
+  journal_reset:{limit:2,window:600},
 };
 const AUDITED_ACTIONS=new Set([
   "pk_connect","pk_disconnect","pk_mirror_front","pk_import","pk_import_groups","pk_sync_apply",
   "pk_update_system","pk_import_fronts","import_media","upload_media","delete_member",
-  "backup_export","backup_restore","front_history_correct","front_history_delete"
+  "backup_export","backup_restore","front_history_correct","front_history_delete",
+  "journal_setup","journal_delete","journal_rewrap","journal_rotate_recovery","journal_rekey","journal_reset"
 ]);
 async function consumeRateLimit(userId:string,action:string){
   const spec=ACTION_LIMITS[action]||{limit:30,window:60};
@@ -2408,6 +2654,16 @@ Deno.serve(async(req)=>{
       return json(result,200,origin);
     }
 
+    if(headerAction==="journal_save"){
+      action="journal_save";
+      await consumeRateLimit(user.id,action);
+      const contentType=(req.headers.get("content-type")||"").split(";")[0].trim().toLowerCase();
+      if(contentType!=="application/json")throw new ClientError("JSON content type required",415);
+      const body=await readJsonBody(req,512*1024);
+      const result=await actionJournalSave(user,body);
+      return json(result,200,origin);
+    }
+
     if(headerAction==="backup_preview"||headerAction==="backup_restore"){
       action=headerAction;
       if(profile?.[0]?.role!=="owner")throw new ClientError("Only the Nihility owner can manage full backups.",403);
@@ -2449,6 +2705,15 @@ Deno.serve(async(req)=>{
     else if(action==="front_history_preview")result=await actionFrontHistoryPreview(user,body);
     else if(action==="front_history_correct")result=await actionFrontHistoryCorrect(user,body);
     else if(action==="front_history_delete")result=await actionFrontHistoryDelete(user,body);
+    else if(action==="journal_status")result=await actionJournalStatus(user);
+    else if(action==="journal_setup")result=await actionJournalSetup(user,body);
+    else if(action==="journal_list")result=await actionJournalList(user,body);
+    else if(action==="journal_save")result=await actionJournalSave(user,body);
+    else if(action==="journal_delete")result=await actionJournalDelete(user,body);
+    else if(action==="journal_rewrap")result=await actionJournalRewrap(user,body);
+    else if(action==="journal_rotate_recovery")result=await actionJournalRotateRecovery(user,body);
+    else if(action==="journal_rekey")result=await actionJournalRekey(user,body);
+    else if(action==="journal_reset")result=await actionJournalReset(user,body);
     else throw new ClientError("Unknown action",400);
 
     if(AUDITED_ACTIONS.has(action)){
