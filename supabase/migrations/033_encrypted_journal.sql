@@ -51,7 +51,6 @@ create table public.journal_entries (
   id uuid primary key,
   user_id uuid not null,
   payload_version smallint not null default 1,
-  logical_date date not null,
   iv text not null,
   ciphertext text not null,
   created_at timestamptz not null default now(),
@@ -67,8 +66,6 @@ create table public.journal_entries (
   )
 );
 
-create index journal_entries_user_date_idx
-  on public.journal_entries(user_id,logical_date desc,updated_at desc,id desc);
 create index journal_entries_user_updated_idx
   on public.journal_entries(user_id,updated_at desc,id desc);
 
