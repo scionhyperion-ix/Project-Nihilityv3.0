@@ -624,15 +624,26 @@ function detailFromFrontLink(link){
     location:link?.location||''
   };
 }
+function currentFrontMemberIdSet(){
+  const current=activeFront();
+  return new Set(current?frontMembers(current.id).map(m=>m.id):[]);
+}
+function selectedFrontMemberIds(){
+  const selected=[...pendingFrontSelected];
+  if(($('input[name="frontMode"]:checked')?.value||'replace')!=='add')return selected;
+  const currentIds=currentFrontMemberIdSet();
+  return selected.filter(id=>!currentIds.has(id));
+}
 function effectiveFrontDetailMemberIds(){
   const selected=[...pendingFrontSelected];
   const mode=$('input[name="frontMode"]:checked')?.value||'replace';
   if(mode!=='add')return selected;
-  const current=activeFront();
-  return [...new Set([...(current?frontMembers(current.id).map(m=>m.id):[]),...selected])];
+  return [...new Set([...currentFrontMemberIdSet(),...selected])];
 }
 function syncFrontModeDetails(){
   const mode=$('input[name="frontMode"]:checked')?.value||'replace';
+  const overallNoteField=$('#frontOverallNoteField');
+  if(overallNoteField)overallNoteField.hidden=mode==='add';
   if(mode==='add'){
     const current=activeFront();
     if(current){
@@ -642,7 +653,68 @@ function syncFrontModeDetails(){
       if(!$('#frontOverallNote').value.trim()&&current.note)$('#frontOverallNote').value=current.note;
     }
   }
+  renderFrontSelectionSummary();
   renderFrontSelectedDetails();
+}
+function renderFrontSelectionSummary(){
+  const box=$('#frontSelectionSummary');if(!box)return;
+  const ids=selectedFrontMemberIds();
+  box.replaceChildren();
+  box.hidden=!ids.length;
+  if(!ids.length)return;
+
+  const heading=document.createElement('div');heading.className='front-selection-heading';
+  const title=document.createElement('strong');title.textContent=ids.length+' selected';
+  const hint=document.createElement('small');hint.textContent='Selections stay selected while you search.';
+  heading.append(title,hint);box.append(heading);
+
+  ids.forEach(id=>{
+    const member=state.members.find(m=>m.id===id);if(!member)return;
+    if(!pendingFrontDetails.has(id))pendingFrontDetails.set(id,emptyFrontDetail());
+    const values=pendingFrontDetails.get(id);
+
+    const item=document.createElement('div');item.className='front-selection-item';
+    const who=document.createElement('div');who.className='front-selection-member';
+    who.append(avatarEl(member,'picker-avatar'));
+    const copy=document.createElement('span');
+    const strong=document.createElement('strong');strong.textContent=label(member);
+    const small=document.createElement('small');small.textContent=member.pronouns||member.name||'';
+    copy.append(strong,small);who.append(copy);
+
+    const noteButton=document.createElement('button');noteButton.type='button';noteButton.className='front-selection-note-button';
+    noteButton.textContent=values.note?'Note ✓':'Note';
+    noteButton.setAttribute('aria-expanded','false');
+    noteButton.setAttribute('aria-label','Add a note for '+label(member));
+
+    const remove=document.createElement('button');remove.type='button';remove.className='front-selection-remove icon-button';
+    remove.textContent='×';remove.setAttribute('aria-label','Remove '+label(member));
+
+    const editor=document.createElement('div');editor.className='front-selection-note-editor';editor.hidden=true;
+    const noteLabel=document.createElement('label');noteLabel.textContent='Note for '+label(member);
+    const textarea=document.createElement('textarea');textarea.rows=2;textarea.maxLength=4000;
+    textarea.value=values.note||'';textarea.placeholder='Optional note for this fronter';
+    textarea.addEventListener('input',()=>{
+      values.note=textarea.value;
+      noteButton.textContent=textarea.value.trim()?'Note ✓':'Note';
+    });
+    noteLabel.append(textarea);editor.append(noteLabel);
+
+    noteButton.onclick=()=>{
+      editor.hidden=!editor.hidden;
+      noteButton.setAttribute('aria-expanded',String(!editor.hidden));
+      item.classList.toggle('note-open',!editor.hidden);
+      if(!editor.hidden)requestAnimationFrame(()=>textarea.focus());
+    };
+    remove.onclick=()=>{
+      pendingFrontSelected.delete(id);
+      if(!currentFrontMemberIdSet().has(id))pendingFrontDetails.delete(id);
+      buildFrontPicker();
+      renderFrontSelectionSummary();
+      renderFrontSelectedDetails();
+    };
+
+    item.append(who,noteButton,remove,editor);box.append(item);
+  });
 }
 function renderFrontSelectedDetails(){
   const box=$('#frontSelectedDetails');if(!box)return;
@@ -659,7 +731,7 @@ function renderFrontSelectedDetails(){
     const summary=document.createElement('summary');
     summary.append(avatarEl(member,'picker-avatar'));
     const copy=document.createElement('span');const strong=document.createElement('strong');strong.textContent=label(member);
-    const small=document.createElement('small');small.textContent='Optional details';
+    const small=document.createElement('small');small.textContent='Mood, activity, context and private details';
     copy.append(strong,small);summary.append(copy);card.append(summary);
     const fields=document.createElement('div');fields.className='front-detail-fields';
     const addField=(title,key,max,textarea=false,placeholder='')=>{
@@ -674,9 +746,8 @@ function renderFrontSelectedDetails(){
     addField('Activity','activity',500,false,'What are they doing?');
     addField('Context','context',1000,true,'Reason, situation, or context');
     addField('Location','location',500,false,'Optional location');
-    addField('Fronter note','note',4000,true,'Optional note about this fronter');
     addField('Private note','private_note',4000,true,'Shown only inside detail editors');
-    const hint=document.createElement('p');hint.className='muted front-detail-private-hint';hint.textContent='Private note and location stay out of compact Home and History views and are never sent to PluralKit. They are still part of your Nihility account data and backups.';
+    const hint=document.createElement('p');hint.className='muted front-detail-private-hint';hint.textContent='The fronter note is edited beside the selected member above. Private note and location stay out of compact Home and History views and are never sent to PluralKit. They are still part of your Nihility account data and backups.';
     fields.append(hint);card.append(fields);box.append(card);
   });
 }
@@ -685,8 +756,8 @@ function buildFrontPicker(selected=[]){
   const q=$('#frontMemberSearch').value.trim().toLowerCase(),set=pendingFrontSelected;$('#frontMemberPicker').replaceChildren();
   activeMembers().filter(m=>[m.name,m.display_name].filter(Boolean).some(v=>v.toLowerCase().includes(q))).forEach(m=>{
     const row=document.createElement('label');row.className='picker-row';row.append(avatarEl(m,'picker-avatar'));
-    const c=document.createElement('span');c.className='picker-copy';const strong=document.createElement('strong');strong.textContent=label(m);
-    const sm=document.createElement('small');sm.textContent=m.pk_id?'PK linked':'Nihility only';c.append(strong,sm);
+    const copy=document.createElement('span');copy.className='picker-copy';const strong=document.createElement('strong');strong.textContent=label(m);
+    const small=document.createElement('small');small.textContent=m.pk_id?'PK linked':'Nihility only';copy.append(strong,small);
     const input=document.createElement('input');input.type='checkbox';input.value=m.id;input.checked=set.has(m.id);
     input.onchange=()=>{
       if(input.checked){
@@ -694,13 +765,13 @@ function buildFrontPicker(selected=[]){
         if(!pendingFrontDetails.has(m.id))pendingFrontDetails.set(m.id,emptyFrontDetail());
       }else{
         pendingFrontSelected.delete(m.id);
-        if(($('input[name="frontMode"]:checked')?.value||'replace')!=='add')pendingFrontDetails.delete(m.id);
+        if(!currentFrontMemberIdSet().has(m.id))pendingFrontDetails.delete(m.id);
       }
+      renderFrontSelectionSummary();
       renderFrontSelectedDetails();
     };
-    row.append(c,input);$('#frontMemberPicker').append(row)
+    row.append(copy,input);$('#frontMemberPicker').append(row);
   });
-  renderFrontSelectedDetails();
 }
 function openFront(mode='replace',pre=[]){
   $('input[name="frontMode"][value="'+mode+'"]').checked=true;
@@ -716,7 +787,9 @@ function openFront(mode='replace',pre=[]){
   }
   pre.forEach(id=>{if(!pendingFrontDetails.has(id))pendingFrontDetails.set(id,emptyFrontDetail())});
   $('#frontDetailsSection').open=false;
-  buildFrontPicker(pre);$('#frontDialog').showModal()
+  buildFrontPicker(pre);
+  syncFrontModeDetails();
+  $('#frontDialog').showModal();
 }
 async function mirrorFrontToPk(memberIds,timestamp){
   if(!state.pkConnected)return{shared:false,reason:'PluralKit is not connected.'};
