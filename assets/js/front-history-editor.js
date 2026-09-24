@@ -46,7 +46,7 @@
     dialog=document.createElement('dialog');
     dialog.id='frontHistoryEditorDialog';
     dialog.className='modal-dialog history-editor-dialog';
-    dialog.innerHTML=\`
+    dialog.innerHTML=`
       <div class="modal-card history-editor-card">
         <div class="modal-heading history-editor-heading">
           <div>
@@ -134,7 +134,7 @@
             <button id="historyEditorApplyButton" class="primary-button" type="button" disabled>Apply correction</button>
           </div>
         </div>
-      </div>\`;
+      </div>`;
     document.body.append(dialog);
 
     dialog.querySelector('#closeHistoryEditorButton').onclick=
