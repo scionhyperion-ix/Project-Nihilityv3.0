@@ -19,7 +19,7 @@
   <link rel="stylesheet" href="assets/rainbowpk/member-color-picker.css?v=1">
   <link rel="stylesheet" href="assets/rainbowpk/app-theme-shell.css?v=1">
   <link rel="stylesheet" href="assets/css/nihility-rainbow-adapter.css?v=9">
-  <link rel="stylesheet" href="assets/css/nihility-editors.css?v=9">
+  <link rel="stylesheet" href="assets/css/nihility-editors.css?v=10">
   <link rel="stylesheet" href="assets/rainbowpk/member-sort.css?v=1">
   <link rel="stylesheet" href="assets/rainbowpk/member-view-menu.css?v=1">
   <link rel="stylesheet" href="assets/rainbowpk/groups-route.css?v=1">
@@ -116,7 +116,7 @@
           <article class="panel current-front-panel">
             <div class="panel-heading"><div><p class="eyebrow">Current front</p><h3 id="currentFrontHeading">Nobody is fronting</h3></div><span id="frontDuration" class="soft-pill">--</span></div>
             <div id="currentFrontMembers" class="current-front-members"></div>
-            <div class="panel-actions"><button id="addCoFronterButton" class="secondary-button" type="button">Add co-fronter</button><button id="transferFrontToPkButton" class="secondary-button" type="button" hidden>Transfer to PK</button><button id="switchOutButton" class="text-button danger-text" type="button">Switch out</button></div>
+            <div id="currentFrontNote" class="current-front-note" hidden></div><div class="panel-actions"><button id="editCurrentFrontDetailsButton" class="secondary-button" type="button" hidden>Edit notes/details</button><button id="addCoFronterButton" class="secondary-button" type="button">Add co-fronter</button><button id="transferFrontToPkButton" class="secondary-button" type="button" hidden>Transfer to PK</button><button id="switchOutButton" class="text-button danger-text" type="button">Switch out</button></div>
           </article>
 
           <article class="panel system-summary-panel">
@@ -327,6 +327,11 @@
       <div class="modal-heading"><div><p class="eyebrow">Nihility front</p><h3>Manage front</h3></div><button id="closeFrontDialog" class="icon-button" type="button">×</button></div>
       <fieldset class="front-mode-fieldset"><legend>Action</legend><label class="radio-card"><input type="radio" name="frontMode" value="replace" checked><span><strong>New front</strong><small>Replace the current front.</small></span></label><label class="radio-card"><input type="radio" name="frontMode" value="add"><span><strong>Add co-fronter</strong><small>Keep current fronters and add more.</small></span></label></fieldset>
       <label>Find members<input id="frontMemberSearch" type="search" placeholder="Search members"></label><div id="frontMemberPicker" class="front-member-picker"></div>
+      <label class="front-overall-note">Front note<textarea id="frontOverallNote" maxlength="10000" rows="3" placeholder="Optional note for this front"></textarea></label>
+      <details id="frontDetailsSection" class="front-details-section">
+        <summary><span><strong>Per-fronter details</strong><small>Optional. Stored only in Nihility and never sent to PluralKit.</small></span></summary>
+        <div id="frontSelectedDetails" class="front-selected-details"></div>
+      </details>
       <label class="check-row"><input id="customFrontTimeEnabled" type="checkbox"><span><strong>Set a custom start time</strong><small>Otherwise it starts now.</small></span></label><label id="customFrontTimeRow" hidden>Start time<input id="customFrontTime" type="datetime-local"></label>
       <p id="frontError" class="form-error" hidden></p><div class="modal-footer"><button id="cancelFrontButton" class="secondary-button" type="button">Cancel</button><button class="primary-button" type="submit">Log front</button></div>
     </form>
@@ -380,9 +385,9 @@
   <script src="assets/js/config.js?v=2" defer></script>
   <script src="assets/js/api.js?v=14" defer></script>
   <script src="assets/js/backup.js?v=1" defer></script>
-  <script src="assets/js/app.js?v=39" defer></script>
+  <script src="assets/js/app.js?v=40" defer></script>
   <script src="assets/js/rainbow-features.js?v=15" defer></script>
-  <script src="assets/js/front-history-editor.js?v=1" defer></script>
+  <script src="assets/js/front-history-editor.js?v=2" defer></script>
   <script src="assets/js/system-controls.js?v=3" defer></script>
 </body>
 </html>
