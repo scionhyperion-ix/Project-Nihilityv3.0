@@ -17,6 +17,7 @@ const TRUSTED_MEDIA_HOSTS = new Set([
   "i.postimg.cc",
   "cdn.discordapp.com",
   "media.discordapp.net",
+  "cdn.pluralkit.me",
   "i.imgur.com",
 ]);
 const MIME_EXT: Record<string,string> = {
@@ -538,6 +539,211 @@ async function storeImage(userId:string,kind:string,url:string){
   const img=await safeImage(url,kind);
   return storeImageBytes(userId,kind,img.bytes,img.type);
 }
+async function copyPkImage(userId:string,kind:string,url:string|null,label:string){
+  if(!url)return null;
+  try{
+    return await storeImage(userId,kind,url);
+  }catch(error){
+    console.warn("Unable to copy PluralKit media",label,error instanceof Error?error.message:String(error));
+    return null;
+  }
+}
+function pkMemberMediaUrls(remote:any){
+  return{avatar:remote?.avatar_url||null,banner:remote?.banner||remote?.banner_url||null};
+}
+function pkGroupMediaUrls(remote:any){
+  return{icon:remote?.icon||remote?.icon_url||null,banner:remote?.banner||remote?.banner_url||null};
+}
+async function syncPkMemberMedia(user:any,local:any,remote:any,{preferPk=false}={}){
+  const urls=pkMemberMediaUrls(remote);
+  const metadata:any={...(local.metadata||{})};
+  const patch:any={};
+  const cleanup:Array<{kind:string,path:string}>=[];
+  let copied=0,removed=0,failed=0,conflicts=0,changed=false;
+
+  for(const spec of [
+    {key:"avatar",kind:"avatar",url:urls.avatar,current:local.avatar_storage_path||null,sourceKey:"avatar_source",pathKey:"avatar_storage_path",urlMeta:"pk_avatar_url",pathMeta:"pk_avatar_storage_path"},
+    {key:"banner",kind:"banner",url:urls.banner,current:local.banner_storage_path||null,sourceKey:"banner_source",pathKey:"banner_storage_path",urlMeta:"pk_banner_url",pathMeta:"pk_banner_storage_path"}
+  ]){
+    const previousUrl=metadata[spec.urlMeta]||null;
+    const managedPath=metadata[spec.pathMeta]||null;
+    const remoteChanged=previousUrl!==spec.url;
+    const missing=Boolean(spec.url&&!spec.current);
+    const localStillManaged=Boolean(managedPath&&spec.current===managedPath);
+
+    if(spec.url&&(missing||(remoteChanged&&(localStillManaged||preferPk)))){
+      const nextPath=await copyPkImage(user.id,spec.kind,spec.url,"member "+String(remote?.id||local?.id||"")+" "+spec.key);
+      if(!nextPath){failed++;continue}
+      patch[spec.pathKey]=nextPath;
+      patch[spec.sourceKey]="supabase";
+      metadata[spec.urlMeta]=spec.url;
+      metadata[spec.pathMeta]=nextPath;
+      if(spec.current&&spec.current!==nextPath&&(localStillManaged||preferPk))cleanup.push({kind:spec.kind,path:spec.current});
+      copied++;changed=true;
+      continue;
+    }
+
+    if(!spec.url&&remoteChanged&&(localStillManaged||preferPk)){
+      patch[spec.pathKey]=null;
+      patch[spec.sourceKey]=null;
+      metadata[spec.urlMeta]=null;
+      metadata[spec.pathMeta]=null;
+      if(spec.current)cleanup.push({kind:spec.kind,path:spec.current});
+      removed++;changed=true;
+      continue;
+    }
+
+    if(remoteChanged){
+      // A local image exists, but it is not proven to be the last PK-managed
+      // copy. Preserve the Nihility image instead of overwriting it blindly.
+      conflicts++;
+      continue;
+    }
+
+    // Repair old imports where the PK URL was recorded but the image copy failed.
+    if(spec.url&&spec.current&&managedPath===spec.current&&metadata[spec.urlMeta]!==spec.url){
+      metadata[spec.urlMeta]=spec.url;changed=true;
+    }
+  }
+
+  if(changed){
+    patch.metadata=metadata;
+    await admin("/rest/v1/members?id=eq."+encodeURIComponent(local.id),{
+      method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify(patch)
+    });
+    if(Object.prototype.hasOwnProperty.call(patch,"avatar_storage_path"))local.avatar_storage_path=patch.avatar_storage_path;
+    if(Object.prototype.hasOwnProperty.call(patch,"banner_storage_path"))local.banner_storage_path=patch.banner_storage_path;
+    if(Object.prototype.hasOwnProperty.call(patch,"avatar_source"))local.avatar_source=patch.avatar_source;
+    if(Object.prototype.hasOwnProperty.call(patch,"banner_source"))local.banner_source=patch.banner_source;
+    local.metadata=metadata;
+    await Promise.allSettled(cleanup.map(item=>deleteStoredMedia(user.id,item.kind,item.path)));
+  }
+  return{copied,removed,failed,conflicts};
+}
+async function syncPkGroupMedia(user:any,local:any,remote:any,{preferPk=false}={}){
+  const urls=pkGroupMediaUrls(remote);
+  const metadata:any={...(local.metadata||{})};
+  const patch:any={};
+  const cleanup:Array<{kind:string,path:string}>=[];
+  let copied=0,removed=0,failed=0,conflicts=0,changed=false;
+
+  for(const spec of [
+    {key:"icon",kind:"avatar",url:urls.icon,current:local.icon_storage_path||metadata.icon_storage_path||null,pathKey:"icon_storage_path",urlMeta:"pk_icon_url",pathMeta:"pk_icon_storage_path"},
+    {key:"banner",kind:"banner",url:urls.banner,current:metadata.banner_storage_path||null,pathKey:null,urlMeta:"pk_banner_url",pathMeta:"pk_banner_storage_path"}
+  ]){
+    const previousUrl=metadata[spec.urlMeta]||null;
+    const managedPath=metadata[spec.pathMeta]||null;
+    const remoteChanged=previousUrl!==spec.url;
+    const missing=Boolean(spec.url&&!spec.current);
+    const localStillManaged=Boolean(managedPath&&spec.current===managedPath);
+
+    if(spec.url&&(missing||(remoteChanged&&(localStillManaged||preferPk)))){
+      const nextPath=await copyPkImage(user.id,spec.kind,spec.url,"group "+String(remote?.id||local?.id||"")+" "+spec.key);
+      if(!nextPath){failed++;continue}
+      if(spec.pathKey)patch[spec.pathKey]=nextPath;
+      metadata[spec.key==="icon"?"icon_storage_path":"banner_storage_path"]=nextPath;
+      metadata[spec.urlMeta]=spec.url;
+      metadata[spec.pathMeta]=nextPath;
+      if(spec.current&&spec.current!==nextPath&&(localStillManaged||preferPk))cleanup.push({kind:spec.kind,path:spec.current});
+      copied++;changed=true;
+      continue;
+    }
+
+    if(!spec.url&&remoteChanged&&(localStillManaged||preferPk)){
+      if(spec.pathKey)patch[spec.pathKey]=null;
+      metadata[spec.key==="icon"?"icon_storage_path":"banner_storage_path"]=null;
+      metadata[spec.urlMeta]=null;
+      metadata[spec.pathMeta]=null;
+      if(spec.current)cleanup.push({kind:spec.kind,path:spec.current});
+      removed++;changed=true;
+      continue;
+    }
+
+    if(remoteChanged){conflicts++;continue}
+  }
+
+  if(changed){
+    patch.metadata=metadata;
+    await admin("/rest/v1/groups?id=eq."+encodeURIComponent(local.id),{
+      method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify(patch)
+    });
+    if(Object.prototype.hasOwnProperty.call(patch,"icon_storage_path"))local.icon_storage_path=patch.icon_storage_path;
+    local.metadata=metadata;
+    await Promise.allSettled(cleanup.map(item=>deleteStoredMedia(user.id,item.kind,item.path)));
+  }
+  return{copied,removed,failed,conflicts};
+}
+async function syncPkSystemMedia(user:any,remote:any,{preferPk=false}={}){
+  const rows=await admin("/rest/v1/app_settings?user_id=eq."+encodeURIComponent(user.id)+"&select=settings&limit=1");
+  const settings=rows?.[0]?.settings||{};
+  const profile:any={...(settings.system_profile||{})};
+  const baseline:any={...(profile.pk_media_v1||{})};
+  const urls={avatar:remote?.avatar_url||null,banner:remote?.banner||remote?.banner_url||null};
+  const cleanup:Array<{kind:string,path:string}>=[];
+  let copied=0,removed=0,failed=0,conflicts=0,changed=false;
+
+  for(const spec of [
+    {key:"avatar",kind:"avatar",url:urls.avatar,current:profile.avatar_storage_path||null},
+    {key:"banner",kind:"banner",url:urls.banner,current:profile.banner_storage_path||null}
+  ]){
+    const previousUrl=baseline[spec.key+"_url"]??(profile[spec.key==="avatar"?"avatar_url":"banner"]||null);
+    const managedPath=baseline[spec.key+"_storage_path"]||null;
+    const remoteChanged=previousUrl!==spec.url;
+    const missing=Boolean(spec.url&&!spec.current);
+    const localStillManaged=Boolean(managedPath&&spec.current===managedPath);
+
+    if(spec.url&&(missing||(remoteChanged&&(localStillManaged||preferPk)))){
+      const nextPath=await copyPkImage(user.id,spec.kind,spec.url,"system "+spec.key);
+      if(!nextPath){failed++;continue}
+      profile[spec.key+"_storage_path"]=nextPath;
+      baseline[spec.key+"_url"]=spec.url;
+      baseline[spec.key+"_storage_path"]=nextPath;
+      if(spec.current&&spec.current!==nextPath&&(localStillManaged||preferPk))cleanup.push({kind:spec.kind,path:spec.current});
+      copied++;changed=true;
+      continue;
+    }
+    if(!spec.url&&remoteChanged&&(localStillManaged||preferPk)){
+      profile[spec.key+"_storage_path"]=null;
+      baseline[spec.key+"_url"]=null;
+      baseline[spec.key+"_storage_path"]=null;
+      if(spec.current)cleanup.push({kind:spec.kind,path:spec.current});
+      removed++;changed=true;
+      continue;
+    }
+    if(remoteChanged){conflicts++;continue}
+  }
+
+  if(changed){
+    profile.avatar_url=urls.avatar;
+    profile.banner=urls.banner;
+    profile.pk_media_v1=baseline;
+    const merged={...settings,system_profile:profile,system_name:profile.name||settings.system_name||null};
+    await admin("/rest/v1/app_settings?on_conflict=user_id",{
+      method:"POST",headers:{Prefer:"resolution=merge-duplicates,return=minimal"},
+      body:JSON.stringify({user_id:user.id,settings:merged})
+    });
+    await Promise.allSettled(cleanup.map(item=>deleteStoredMedia(user.id,item.kind,item.path)));
+  }
+  return{copied,removed,failed,conflicts};
+}
+async function syncPkMediaToNihility(user:any,token:string,state:any,conflictPolicy="skip"){
+  const totals={copied:0,removed:0,failed:0,conflicts:0};
+  const preferPk=conflictPolicy==="pk";
+  for(const local of state.localMembers||[]){
+    const remote=findPkForLocal(local,state.pkMemberByKey);if(!remote)continue;
+    const result=await syncPkMemberMedia(user,local,remote,{preferPk});
+    totals.copied+=result.copied;totals.removed+=result.removed;totals.failed+=result.failed;totals.conflicts+=result.conflicts;
+  }
+  for(const local of state.localGroups||[]){
+    const remote=findPkForLocal(local,state.pkGroupByKey);if(!remote)continue;
+    const result=await syncPkGroupMedia(user,local,remote,{preferPk});
+    totals.copied+=result.copied;totals.removed+=result.removed;totals.failed+=result.failed;totals.conflicts+=result.conflicts;
+  }
+  const system=await pk(token,"/systems/@me");
+  const systemResult=await syncPkSystemMedia(user,system,{preferPk});
+  totals.copied+=systemResult.copied;totals.removed+=systemResult.removed;totals.failed+=systemResult.failed;totals.conflicts+=systemResult.conflicts;
+  return totals;
+}
 async function deleteStoredMedia(userId:string,kind:string,path:string|null|undefined){
   if(!path)return;
   const cfg=BUCKETS[kind];
@@ -843,7 +1049,7 @@ async function buildPkSyncComparison(user:any,token:string){
       toPk:{count:membershipPush.length,items:trimSyncItems(membershipPush)},
       conflicts:{count:membershipConflicts.length,items:trimSyncItems(membershipConflicts)}
     },
-    mediaNote:"Two-way sync covers member/group details and group memberships. Private image files are left unchanged because PluralKit requires publicly accessible image URLs."
+    mediaNote:"PluralKit-hosted avatars, banners, and group images are copied into Nihility's private storage during sync. Nihility-only private images are never pushed to PluralKit automatically."
   };
 }
 async function actionPkSyncCompare(user:any){
@@ -853,8 +1059,8 @@ async function actionPkSyncCompare(user:any){
 async function importPkMemberForSync(user:any,pm:any){
   let avatarPath=null,bannerPath=null;
   const avatar=pm.avatar_url||null,banner=pm.banner||pm.banner_url||null;
-  if(avatar){try{avatarPath=await storeImage(user.id,"avatar",avatar)}catch{}}
-  if(banner){try{bannerPath=await storeImage(user.id,"banner",banner)}catch{}}
+  if(avatar)avatarPath=await copyPkImage(user.id,"avatar",avatar,"member "+String(pm?.id||"")+" avatar");
+  if(banner)bannerPath=await copyPkImage(user.id,"banner",banner,"member "+String(pm?.id||"")+" banner");
   const fields=canonicalPkMember(pm);
   const rows=await admin("/rest/v1/members",{
     method:"POST",headers:{Prefer:"return=representation"},
@@ -863,7 +1069,7 @@ async function importPkMemberForSync(user:any,pm:any){
       proxy_tags:undefined,keep_proxy:undefined,
       avatar_url:null,avatar_source:avatarPath?"supabase":null,avatar_storage_path:avatarPath,
       banner_url:null,banner_source:bannerPath?"supabase":null,banner_storage_path:bannerPath,
-      pk_id:pm.id,metadata:{pk_uuid:pm.uuid||null,pk_avatar_url:avatar,pk_banner_url:banner,proxy_tags:fields.proxy_tags,keep_proxy:fields.keep_proxy,pk_sync_v1:{fields}},archived_at:null
+      pk_id:pm.id,metadata:{pk_uuid:pm.uuid||null,pk_avatar_url:avatar,pk_banner_url:banner,pk_avatar_storage_path:avatarPath,pk_banner_storage_path:bannerPath,proxy_tags:fields.proxy_tags,keep_proxy:fields.keep_proxy,pk_sync_v1:{fields}},archived_at:null
     })
   });
   return rows?.[0]||null;
@@ -871,15 +1077,15 @@ async function importPkMemberForSync(user:any,pm:any){
 async function importPkGroupForSync(user:any,pg:any){
   let iconPath=null,bannerPath=null;
   const icon=pg.icon||pg.icon_url||null,banner=pg.banner||pg.banner_url||null;
-  if(icon){try{iconPath=await storeImage(user.id,"avatar",icon)}catch{}}
-  if(banner){try{bannerPath=await storeImage(user.id,"banner",banner)}catch{}}
+  if(icon)iconPath=await copyPkImage(user.id,"avatar",icon,"group "+String(pg?.id||"")+" icon");
+  if(banner)bannerPath=await copyPkImage(user.id,"banner",banner,"group "+String(pg?.id||"")+" banner");
   const fields=canonicalPkGroup(pg);
   const rows=await admin("/rest/v1/groups",{
     method:"POST",headers:{Prefer:"return=representation"},
     body:JSON.stringify({
       user_id:user.id,...fields,
       icon_url:null,icon_source:null,icon_storage_path:iconPath,pk_id:pg.id,
-      metadata:{pk_uuid:pg.uuid||null,pk_icon_url:icon,pk_banner_url:banner,icon_storage_path:iconPath,banner_storage_path:bannerPath,pk_sync_v1:{fields,origin:"pk"}}
+      metadata:{pk_uuid:pg.uuid||null,pk_icon_url:icon,pk_banner_url:banner,pk_icon_storage_path:iconPath,pk_banner_storage_path:bannerPath,icon_storage_path:iconPath,banner_storage_path:bannerPath,pk_sync_v1:{fields,origin:"pk"}}
     })
   });
   return rows?.[0]||null;
@@ -910,7 +1116,7 @@ async function actionPkSyncApply(user:any,body:any){
   const token=await getSecret(user.id);
   const conflictPolicy=["skip","nihility","pk"].includes(String(body?.conflictPolicy))?String(body.conflictPolicy):"skip";
   let state=await loadPkTwoWayState(user,token);
-  const result:any={members:{toNihility:0,toPk:0,createdInNihility:0,createdInPk:0},groups:{toNihility:0,toPk:0,createdInNihility:0,createdInPk:0},memberships:{toNihility:0,toPk:0},conflictsSkipped:0,blocked:[] as string[]};
+  const result:any={members:{toNihility:0,toPk:0,createdInNihility:0,createdInPk:0},groups:{toNihility:0,toPk:0,createdInNihility:0,createdInPk:0},memberships:{toNihility:0,toPk:0},media:{copied:0,removed:0,failed:0,conflicts:0},conflictsSkipped:0,blocked:[] as string[]};
 
   for(const remote of state.pkMembers){
     if(findLocalForPk(remote,state.localMemberByRemote))continue;
@@ -1009,6 +1215,8 @@ async function actionPkSyncApply(user:any,body:any){
   }
 
   state=await loadPkTwoWayState(user,token);
+  result.media=await syncPkMediaToNihility(user,token,state,conflictPolicy);
+  result.conflictsSkipped+=result.media.conflicts||0;
   const memberByLocalId=new Map<string,any>((state.localMembers||[]).map((m:any)=>[String(m.id),m]));
   for(const local of state.localGroups){
     const remote=findPkForLocal(local,state.pkGroupByKey);if(!remote)continue;
@@ -1063,6 +1271,10 @@ async function actionPkSyncApply(user:any,body:any){
           groups_created_in_pk:result.groups.createdInPk,
           memberships_to_nihility:result.memberships.toNihility,
           memberships_to_pk:result.memberships.toPk,
+          media_to_nihility:result.media.copied,
+          media_removed:result.media.removed,
+          media_failed:result.media.failed,
+          media_conflicts:result.media.conflicts,
           conflicts_skipped:result.conflictsSkipped,
           blocked_count:result.blocked.length
         }
@@ -1122,8 +1334,14 @@ async function actionImportPk(user:any,body:any){
     if(existingIds.has(String(m.id))){skipped++;continue}
     let avatarPath=null,bannerPath=null;
     const avatar=m.avatar_url||null,banner=m.banner||m.banner_url||null;
-    if(avatar){try{avatarPath=await storeImage(user.id,"avatar",avatar);mediaCopied++}catch{}}
-    if(banner){try{bannerPath=await storeImage(user.id,"banner",banner);mediaCopied++}catch{}}
+    if(avatar){
+      avatarPath=await copyPkImage(user.id,"avatar",avatar,"member "+String(m?.id||"")+" avatar");
+      if(avatarPath)mediaCopied++;
+    }
+    if(banner){
+      bannerPath=await copyPkImage(user.id,"banner",banner,"member "+String(m?.id||"")+" banner");
+      if(bannerPath)mediaCopied++;
+    }
     await admin("/rest/v1/members",{
       method:"POST",headers:{Prefer:"return=minimal"},
       body:JSON.stringify({
@@ -1131,7 +1349,7 @@ async function actionImportPk(user:any,body:any){
         pronouns:m.pronouns||null,color:m.color||null,description:m.description||null,birthday:m.birthday||null,
         avatar_url:null,avatar_source:avatarPath?"supabase":null,avatar_storage_path:avatarPath,
         banner_url:null,banner_source:bannerPath?"supabase":null,banner_storage_path:bannerPath,
-        pk_id:m.id,metadata:{pk_uuid:m.uuid||null,pk_avatar_url:avatar,pk_banner_url:banner,proxy_tags:Array.isArray(m.proxy_tags)?m.proxy_tags:[],keep_proxy:Boolean(m.keep_proxy)},archived_at:null
+        pk_id:m.id,metadata:{pk_uuid:m.uuid||null,pk_avatar_url:avatar,pk_banner_url:banner,pk_avatar_storage_path:avatarPath,pk_banner_storage_path:bannerPath,proxy_tags:Array.isArray(m.proxy_tags)?m.proxy_tags:[],keep_proxy:Boolean(m.keep_proxy)},archived_at:null
       })
     });
     added++;
@@ -1168,19 +1386,47 @@ async function saveLocalSystemProfile(user:any,system:any,{copyMedia=false}={}){
   const old=existingSettings?.system_profile||{};
   let avatarPath=old.avatar_storage_path||null;
   let bannerPath=old.banner_storage_path||null;
+  const baseline:any={...(old.pk_media_v1||{})};
+  const cleanup:Array<{kind:string,path:string}>=[];
+
   if(copyMedia&&system.avatar_url){
-    try{avatarPath=await storeImage(user.id,"avatar",system.avatar_url)}catch{}
+    const next=await copyPkImage(user.id,"avatar",system.avatar_url,"system avatar");
+    if(next){
+      if(avatarPath&&avatarPath!==next)cleanup.push({kind:"avatar",path:avatarPath});
+      avatarPath=next;
+      baseline.avatar_url=system.avatar_url;
+      baseline.avatar_storage_path=next;
+    }
+  }else if(copyMedia&&!system.avatar_url&&baseline.avatar_storage_path&&avatarPath===baseline.avatar_storage_path){
+    cleanup.push({kind:"avatar",path:avatarPath});
+    avatarPath=null;
+    baseline.avatar_url=null;
+    baseline.avatar_storage_path=null;
   }
+
   if(copyMedia&&system.banner){
-    try{bannerPath=await storeImage(user.id,"banner",system.banner)}catch{}
+    const next=await copyPkImage(user.id,"banner",system.banner,"system banner");
+    if(next){
+      if(bannerPath&&bannerPath!==next)cleanup.push({kind:"banner",path:bannerPath});
+      bannerPath=next;
+      baseline.banner_url=system.banner;
+      baseline.banner_storage_path=next;
+    }
+  }else if(copyMedia&&!system.banner&&baseline.banner_storage_path&&bannerPath===baseline.banner_storage_path){
+    cleanup.push({kind:"banner",path:bannerPath});
+    bannerPath=null;
+    baseline.banner_url=null;
+    baseline.banner_storage_path=null;
   }
-  const profile={...old,...system,avatar_storage_path:avatarPath,banner_storage_path:bannerPath};
+
+  const profile={...old,...system,avatar_storage_path:avatarPath,banner_storage_path:bannerPath,pk_media_v1:baseline};
   const mergedSettings={...existingSettings,system_profile:profile,system_name:profile.name||null};
   await admin("/rest/v1/app_settings?on_conflict=user_id",{
     method:"POST",
     headers:{Prefer:"resolution=merge-duplicates,return=minimal"},
     body:JSON.stringify({user_id:user.id,settings:mergedSettings})
   });
+  await Promise.allSettled(cleanup.map(item=>deleteStoredMedia(user.id,item.kind,item.path)));
   return profile;
 }
 
@@ -1230,18 +1476,41 @@ async function actionImportPkGroups(user:any){
   const settingsRows=await admin("/rest/v1/app_settings?user_id=eq."+encodeURIComponent(user.id)+"&select=settings&limit=1");
   const existingSettings=settingsRows?.[0]?.settings||{};
   const oldSystem=existingSettings?.system_profile||{};
+  const oldSystemMedia=oldSystem.pk_media_v1||{};
   const systemAvatarUrl=pkSystem?.avatar_url||null;
   const systemBannerUrl=pkSystem?.banner||pkSystem?.banner_url||null;
   let systemAvatarPath=oldSystem.avatar_storage_path||null;
   let systemBannerPath=oldSystem.banner_storage_path||null;
-  if((oldSystem.avatar_url||null)!==systemAvatarUrl){
+  const nextSystemMedia:any={...oldSystemMedia};
+
+  const previousSystemAvatarUrl=oldSystemMedia.avatar_url??(oldSystem.avatar_url||null);
+  if(systemAvatarUrl&&(!systemAvatarPath||previousSystemAvatarUrl!==systemAvatarUrl)){
+    const copied=await copyPkImage(user.id,"avatar",systemAvatarUrl,"system avatar");
+    if(copied){
+      systemAvatarPath=copied;
+      nextSystemMedia.avatar_url=systemAvatarUrl;
+      nextSystemMedia.avatar_storage_path=copied;
+    }
+  }else if(!systemAvatarUrl&&oldSystemMedia.avatar_storage_path&&systemAvatarPath===oldSystemMedia.avatar_storage_path){
     systemAvatarPath=null;
-    if(systemAvatarUrl){try{systemAvatarPath=await storeImage(user.id,"avatar",systemAvatarUrl)}catch{}}
+    nextSystemMedia.avatar_url=null;
+    nextSystemMedia.avatar_storage_path=null;
   }
-  if((oldSystem.banner||oldSystem.banner_url||null)!==systemBannerUrl){
+
+  const previousSystemBannerUrl=oldSystemMedia.banner_url??(oldSystem.banner||oldSystem.banner_url||null);
+  if(systemBannerUrl&&(!systemBannerPath||previousSystemBannerUrl!==systemBannerUrl)){
+    const copied=await copyPkImage(user.id,"banner",systemBannerUrl,"system banner");
+    if(copied){
+      systemBannerPath=copied;
+      nextSystemMedia.banner_url=systemBannerUrl;
+      nextSystemMedia.banner_storage_path=copied;
+    }
+  }else if(!systemBannerUrl&&oldSystemMedia.banner_storage_path&&systemBannerPath===oldSystemMedia.banner_storage_path){
     systemBannerPath=null;
-    if(systemBannerUrl){try{systemBannerPath=await storeImage(user.id,"banner",systemBannerUrl)}catch{}}
+    nextSystemMedia.banner_url=null;
+    nextSystemMedia.banner_storage_path=null;
   }
+
   const importedSystem={
     id:pkSystem?.id||null,
     uuid:pkSystem?.uuid||null,
@@ -1254,7 +1523,8 @@ async function actionImportPkGroups(user:any){
     avatar_url:systemAvatarUrl,
     banner:systemBannerUrl,
     avatar_storage_path:systemAvatarPath,
-    banner_storage_path:systemBannerPath
+    banner_storage_path:systemBannerPath,
+    pk_media_v1:nextSystemMedia
   };
   const mergedSettings={...existingSettings,system_profile:importedSystem,system_name:importedSystem.name||importedSystem.display_name||null};
   await admin("/rest/v1/app_settings?on_conflict=user_id",{
@@ -1284,24 +1554,11 @@ async function actionImportPkGroups(user:any){
     const local=localByPk.get(String(pm.id))||(pm.uuid?localByPk.get(String(pm.uuid)):null);
     if(!local)continue;
 
+    const mediaResult=await syncPkMemberMedia(user,local,pm);
+    memberMediaCopied+=mediaResult.copied;
     const oldMetadata=local.metadata||{};
-    const avatarUrl=pm.avatar_url||null;
-    const bannerUrl=pm.banner||pm.banner_url||null;
-    let avatarPath=local.avatar_storage_path||null;
-    let bannerPath=local.banner_storage_path||null;
-
-    if((oldMetadata.pk_avatar_url||null)!==avatarUrl){
-      avatarPath=null;
-      if(avatarUrl){
-        try{avatarPath=await storeImage(user.id,"avatar",avatarUrl);memberMediaCopied++}catch{}
-      }
-    }
-    if((oldMetadata.pk_banner_url||null)!==bannerUrl){
-      bannerPath=null;
-      if(bannerUrl){
-        try{bannerPath=await storeImage(user.id,"banner",bannerUrl);memberMediaCopied++}catch{}
-      }
-    }
+    const avatarPath=local.avatar_storage_path||null;
+    const bannerPath=local.banner_storage_path||null;
 
     const next={
       name:pm.name||pm.display_name||pm.id,
@@ -1320,8 +1577,6 @@ async function actionImportPkGroups(user:any){
       metadata:{
         ...oldMetadata,
         pk_uuid:pm.uuid||oldMetadata.pk_uuid||null,
-        pk_avatar_url:avatarUrl,
-        pk_banner_url:bannerUrl,
         proxy_tags:Array.isArray(pm.proxy_tags)?pm.proxy_tags:[],
         keep_proxy:Boolean(pm.keep_proxy)
       }
@@ -1366,19 +1621,23 @@ async function actionImportPkGroups(user:any){
 
   for(const g of pkGroups||[]){
     let local=groupByPk.get(String(g.id))||(g.uuid?groupByPk.get(String(g.uuid)):null);
-    const oldMetadata=local?.metadata||{};
+    let oldMetadata=local?.metadata||{};
     const iconUrl=g.icon||g.icon_url||null;
     const bannerUrl=g.banner||g.banner_url||null;
     let iconPath=oldMetadata.icon_storage_path||null;
     let bannerPath=oldMetadata.banner_storage_path||null;
 
-    if((oldMetadata.pk_icon_url||null)!==iconUrl){
-      iconPath=null;
-      if(iconUrl){try{iconPath=await storeImage(user.id,"avatar",iconUrl);groupMediaCopied++}catch{}}
-    }
-    if((oldMetadata.pk_banner_url||null)!==bannerUrl){
-      bannerPath=null;
-      if(bannerUrl){try{bannerPath=await storeImage(user.id,"banner",bannerUrl);groupMediaCopied++}catch{}}
+    if(local){
+      const mediaResult=await syncPkGroupMedia(user,local,g);
+      groupMediaCopied+=mediaResult.copied;
+      oldMetadata=local.metadata||{};
+      iconPath=local.icon_storage_path||oldMetadata.icon_storage_path||null;
+      bannerPath=oldMetadata.banner_storage_path||null;
+    }else{
+      if(iconUrl)iconPath=await copyPkImage(user.id,"avatar",iconUrl,"group "+String(g.id||"")+" icon");
+      if(bannerUrl)bannerPath=await copyPkImage(user.id,"banner",bannerUrl,"group "+String(g.id||"")+" banner");
+      if(iconPath)groupMediaCopied++;
+      if(bannerPath)groupMediaCopied++;
     }
 
     if(!local){
@@ -1394,7 +1653,7 @@ async function actionImportPkGroups(user:any){
           icon_source:null,
           icon_storage_path:iconPath,
           pk_id:g.id,
-          metadata:{pk_uuid:g.uuid||null,pk_icon_url:iconUrl,pk_banner_url:bannerUrl,icon_storage_path:iconPath,banner_storage_path:bannerPath}
+          metadata:{pk_uuid:g.uuid||null,pk_icon_url:iconUrl,pk_banner_url:bannerUrl,pk_icon_storage_path:iconPath,pk_banner_storage_path:bannerPath,icon_storage_path:iconPath,banner_storage_path:bannerPath}
         })
       });
       local=created?.[0];
@@ -1411,8 +1670,6 @@ async function actionImportPkGroups(user:any){
       const metadata={
         ...oldMetadata,
         pk_uuid:g.uuid||oldMetadata.pk_uuid||null,
-        pk_icon_url:iconUrl,
-        pk_banner_url:bannerUrl,
         icon_storage_path:iconPath,
         banner_storage_path:bannerPath
       };
