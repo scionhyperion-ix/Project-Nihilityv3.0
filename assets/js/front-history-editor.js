@@ -345,7 +345,7 @@
       addDetail('Location','location',500);
       addDetail('Fronter note','note',4000,true);
       addDetail('Private note','privateNote',4000,true);
-      const hint=document.createElement('p');hint.className='muted history-detail-privacy-note';hint.textContent='Private note and location stay inside detail editors and are never sent to PluralKit.';
+      const hint=document.createElement('p');hint.className='muted history-detail-privacy-note';hint.textContent='Private note and location stay inside detail editors and are never sent to PluralKit. They are still included in Nihility backups.';
       fields.append(hint);details.append(fields);
       row.append(who,joinLabel,leaveLabel,remove,details);box.append(row);
     });
