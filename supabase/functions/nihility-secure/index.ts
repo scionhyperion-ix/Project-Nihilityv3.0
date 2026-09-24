@@ -1061,7 +1061,7 @@ async function importPkMemberForSync(user:any,pm:any){
       proxy_tags:undefined,keep_proxy:undefined,
       avatar_url:null,avatar_source:avatarPath?"supabase":null,avatar_storage_path:avatarPath,
       banner_url:null,banner_source:bannerPath?"supabase":null,banner_storage_path:bannerPath,
-      pk_id:pm.id,metadata:{pk_uuid:pm.uuid||null,pk_avatar_url:avatar,pk_banner_url:banner,proxy_tags:fields.proxy_tags,keep_proxy:fields.keep_proxy,pk_sync_v1:{fields}},archived_at:null
+      pk_id:pm.id,metadata:{pk_uuid:pm.uuid||null,pk_avatar_url:avatar,pk_banner_url:banner,pk_avatar_storage_path:avatarPath,pk_banner_storage_path:bannerPath,proxy_tags:fields.proxy_tags,keep_proxy:fields.keep_proxy,pk_sync_v1:{fields}},archived_at:null
     })
   });
   return rows?.[0]||null;
@@ -1077,7 +1077,7 @@ async function importPkGroupForSync(user:any,pg:any){
     body:JSON.stringify({
       user_id:user.id,...fields,
       icon_url:null,icon_source:null,icon_storage_path:iconPath,pk_id:pg.id,
-      metadata:{pk_uuid:pg.uuid||null,pk_icon_url:icon,pk_banner_url:banner,icon_storage_path:iconPath,banner_storage_path:bannerPath,pk_sync_v1:{fields,origin:"pk"}}
+      metadata:{pk_uuid:pg.uuid||null,pk_icon_url:icon,pk_banner_url:banner,pk_icon_storage_path:iconPath,pk_banner_storage_path:bannerPath,icon_storage_path:iconPath,banner_storage_path:bannerPath,pk_sync_v1:{fields,origin:"pk"}}
     })
   });
   return rows?.[0]||null;
@@ -1329,7 +1329,7 @@ async function actionImportPk(user:any,body:any){
         pronouns:m.pronouns||null,color:m.color||null,description:m.description||null,birthday:m.birthday||null,
         avatar_url:null,avatar_source:avatarPath?"supabase":null,avatar_storage_path:avatarPath,
         banner_url:null,banner_source:bannerPath?"supabase":null,banner_storage_path:bannerPath,
-        pk_id:m.id,metadata:{pk_uuid:m.uuid||null,pk_avatar_url:avatar,pk_banner_url:banner,proxy_tags:Array.isArray(m.proxy_tags)?m.proxy_tags:[],keep_proxy:Boolean(m.keep_proxy)},archived_at:null
+        pk_id:m.id,metadata:{pk_uuid:m.uuid||null,pk_avatar_url:avatar,pk_banner_url:banner,pk_avatar_storage_path:avatarPath,pk_banner_storage_path:bannerPath,proxy_tags:Array.isArray(m.proxy_tags)?m.proxy_tags:[],keep_proxy:Boolean(m.keep_proxy)},archived_at:null
       })
     });
     added++;
