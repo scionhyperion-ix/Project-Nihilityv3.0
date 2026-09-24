@@ -103,6 +103,7 @@
     padding-inline: 0;
     justify-content: center;
     overflow: hidden;
+    cursor: text;
     transition:
       flex-basis .2s ease,
       width .2s ease,
@@ -249,6 +250,8 @@
     flex: 1 1 100%;
     width: 100%;
     max-width: none;
+    padding-inline: 12px;
+    justify-content: flex-start;
   }
 
   #membersRoute .search-field input {
