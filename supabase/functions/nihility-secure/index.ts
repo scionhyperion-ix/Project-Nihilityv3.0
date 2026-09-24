@@ -1048,7 +1048,7 @@ async function buildPkSyncComparison(user:any,token:string){
       toPk:{count:membershipPush.length,items:trimSyncItems(membershipPush)},
       conflicts:{count:membershipConflicts.length,items:trimSyncItems(membershipConflicts)}
     },
-    mediaNote:"Two-way sync covers member/group details and group memberships. Private image files are left unchanged because PluralKit requires publicly accessible image URLs."
+    mediaNote:"PluralKit-hosted avatars, banners, and group images are copied into Nihility's private storage during sync. Nihility-only private images are never pushed to PluralKit automatically."
   };
 }
 async function actionPkSyncCompare(user:any){
@@ -1058,8 +1058,8 @@ async function actionPkSyncCompare(user:any){
 async function importPkMemberForSync(user:any,pm:any){
   let avatarPath=null,bannerPath=null;
   const avatar=pm.avatar_url||null,banner=pm.banner||pm.banner_url||null;
-  if(avatar){try{avatarPath=await storeImage(user.id,"avatar",avatar)}catch{}}
-  if(banner){try{bannerPath=await storeImage(user.id,"banner",banner)}catch{}}
+  if(avatar)avatarPath=await copyPkImage(user.id,"avatar",avatar,"member "+String(pm?.id||"")+" avatar");
+  if(banner)bannerPath=await copyPkImage(user.id,"banner",banner,"member "+String(pm?.id||"")+" banner");
   const fields=canonicalPkMember(pm);
   const rows=await admin("/rest/v1/members",{
     method:"POST",headers:{Prefer:"return=representation"},
@@ -1076,8 +1076,8 @@ async function importPkMemberForSync(user:any,pm:any){
 async function importPkGroupForSync(user:any,pg:any){
   let iconPath=null,bannerPath=null;
   const icon=pg.icon||pg.icon_url||null,banner=pg.banner||pg.banner_url||null;
-  if(icon){try{iconPath=await storeImage(user.id,"avatar",icon)}catch{}}
-  if(banner){try{bannerPath=await storeImage(user.id,"banner",banner)}catch{}}
+  if(icon)iconPath=await copyPkImage(user.id,"avatar",icon,"group "+String(pg?.id||"")+" icon");
+  if(banner)bannerPath=await copyPkImage(user.id,"banner",banner,"group "+String(pg?.id||"")+" banner");
   const fields=canonicalPkGroup(pg);
   const rows=await admin("/rest/v1/groups",{
     method:"POST",headers:{Prefer:"return=representation"},
@@ -1115,7 +1115,7 @@ async function actionPkSyncApply(user:any,body:any){
   const token=await getSecret(user.id);
   const conflictPolicy=["skip","nihility","pk"].includes(String(body?.conflictPolicy))?String(body.conflictPolicy):"skip";
   let state=await loadPkTwoWayState(user,token);
-  const result:any={members:{toNihility:0,toPk:0,createdInNihility:0,createdInPk:0},groups:{toNihility:0,toPk:0,createdInNihility:0,createdInPk:0},memberships:{toNihility:0,toPk:0},conflictsSkipped:0,blocked:[] as string[]};
+  const result:any={members:{toNihility:0,toPk:0,createdInNihility:0,createdInPk:0},groups:{toNihility:0,toPk:0,createdInNihility:0,createdInPk:0},memberships:{toNihility:0,toPk:0},media:{copied:0,removed:0,failed:0,conflicts:0},conflictsSkipped:0,blocked:[] as string[]};
 
   for(const remote of state.pkMembers){
     if(findLocalForPk(remote,state.localMemberByRemote))continue;
@@ -1214,6 +1214,8 @@ async function actionPkSyncApply(user:any,body:any){
   }
 
   state=await loadPkTwoWayState(user,token);
+  result.media=await syncPkMediaToNihility(user,token,state);
+  result.conflictsSkipped+=result.media.conflicts||0;
   const memberByLocalId=new Map<string,any>((state.localMembers||[]).map((m:any)=>[String(m.id),m]));
   for(const local of state.localGroups){
     const remote=findPkForLocal(local,state.pkGroupByKey);if(!remote)continue;
@@ -1268,6 +1270,10 @@ async function actionPkSyncApply(user:any,body:any){
           groups_created_in_pk:result.groups.createdInPk,
           memberships_to_nihility:result.memberships.toNihility,
           memberships_to_pk:result.memberships.toPk,
+          media_to_nihility:result.media.copied,
+          media_removed:result.media.removed,
+          media_failed:result.media.failed,
+          media_conflicts:result.media.conflicts,
           conflicts_skipped:result.conflictsSkipped,
           blocked_count:result.blocked.length
         }
@@ -1327,8 +1333,14 @@ async function actionImportPk(user:any,body:any){
     if(existingIds.has(String(m.id))){skipped++;continue}
     let avatarPath=null,bannerPath=null;
     const avatar=m.avatar_url||null,banner=m.banner||m.banner_url||null;
-    if(avatar){try{avatarPath=await storeImage(user.id,"avatar",avatar);mediaCopied++}catch{}}
-    if(banner){try{bannerPath=await storeImage(user.id,"banner",banner);mediaCopied++}catch{}}
+    if(avatar){
+      avatarPath=await copyPkImage(user.id,"avatar",avatar,"member "+String(m?.id||"")+" avatar");
+      if(avatarPath)mediaCopied++;
+    }
+    if(banner){
+      bannerPath=await copyPkImage(user.id,"banner",banner,"member "+String(m?.id||"")+" banner");
+      if(bannerPath)mediaCopied++;
+    }
     await admin("/rest/v1/members",{
       method:"POST",headers:{Prefer:"return=minimal"},
       body:JSON.stringify({
