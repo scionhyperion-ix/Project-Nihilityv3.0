@@ -14,6 +14,7 @@
   let loaded=0;
   let lockTimer=null;
   let editingId=null;
+  let editingMemberIds=new Set();
 
   const qs=s=>document.querySelector(s);
   const b64u=bytes=>{
@@ -98,6 +99,7 @@
   function clearPlaintext(){
     decryptedEntries=[];
     editingId=null;
+    editingMemberIds.clear();
     const body=qs('#journalBody');if(body)body.value='';
     const title=qs('#journalTitle');if(title)title.value='';
   }
@@ -257,7 +259,11 @@
       document.body.append(d);
       d.querySelector('#copyJournalRecovery').onclick=async()=>{await navigator.clipboard.writeText(d.querySelector('#journalRecoveryValue').textContent);toast('Recovery key copied')};
       d.querySelector('#journalRecoverySaved').onchange=e=>{d.querySelector('#closeJournalRecovery').disabled=!e.target.checked};
-      d.querySelector('#closeJournalRecovery').onclick=()=>d.close();
+      d.addEventListener('cancel',event=>event.preventDefault());
+      d.querySelector('#closeJournalRecovery').onclick=()=>{
+        d.close();
+        d.querySelector('#journalRecoveryValue').textContent='';
+      };
     }
     if(!qs('#journalSecurityDialog')){
       const d=document.createElement('dialog');d.id='journalSecurityDialog';d.className='modal-dialog';
@@ -367,28 +373,31 @@
 
   function clearEditor(){
     editingId=null;
+    editingMemberIds.clear();
     qs('#journalEntryError').hidden=true;
     qs('#journalBody').value='';qs('#journalTitle').value='';qs('#journalMemberSearch').value='';
   }
   function openEditor(entry=null){
     touchVault();editingId=entry?.id||null;
+    editingMemberIds=new Set(entry?.member_ids||[]);
     qs('#journalEntryDialogTitle').textContent=entry?'Edit entry':'New entry';
     qs('#journalDate').value=entry?.date||today();
     qs('#journalTitle').value=entry?.title||'';
     qs('#journalBody').value=entry?.body||'';
     qs('#journalDeleteEntryButton').hidden=!entry;
-    renderMemberPicker(entry?.member_ids||[]);
+    renderMemberPicker();
     qs('#journalEntryDialog').showModal();
   }
-  function selectedJournalMemberIds(){return[...document.querySelectorAll('#journalMemberPicker input:checked')].map(x=>x.value)}
-  function renderMemberPicker(selected=null){
+  function selectedJournalMemberIds(){return[...editingMemberIds]}
+  function renderMemberPicker(){
     const box=qs('#journalMemberPicker');if(!box)return;
-    const selectedSet=selected?new Set(selected):new Set(selectedJournalMemberIds());
+    const selectedSet=editingMemberIds;
     const q=(qs('#journalMemberSearch')?.value||'').trim().toLowerCase();box.replaceChildren();
     [...state.members].filter(m=>!q||[m.name,m.display_name,m.pronouns].filter(Boolean).some(v=>String(v).toLowerCase().includes(q)))
       .sort((a,b)=>label(a).localeCompare(label(b),undefined,{numeric:true,sensitivity:'base'})).slice(0,200).forEach(m=>{
         const l=document.createElement('label');l.className='journal-member-option';
         const c=document.createElement('input');c.type='checkbox';c.value=m.id;c.checked=selectedSet.has(m.id);
+        c.onchange=()=>{c.checked?editingMemberIds.add(m.id):editingMemberIds.delete(m.id)};
         const span=document.createElement('span');span.textContent=label(m)+(m.archived_at?' (archived)':'');l.append(c,span);box.append(l);
       });
   }
