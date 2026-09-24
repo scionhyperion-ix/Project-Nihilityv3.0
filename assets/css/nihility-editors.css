@@ -1986,7 +1986,7 @@ body:has(dialog[open]){
   position:absolute;
   right:11px;
   top:50%;
-  translate:0 -53%;
+  transform:translateY(-53%);
   color:var(--muted);
   font-size:.72rem;
   pointer-events:none;
