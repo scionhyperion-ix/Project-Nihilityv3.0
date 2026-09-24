@@ -35,6 +35,9 @@
   }
   function makeSelect(id,labelText,options){
     const label=document.createElement('label');label.className='feature-select';label.htmlFor=id;
+    const compactIcons={memberStatusFilter:'●',memberSort:'↕',memberGroupFilter:'◫',memberViewSelect:'▦'};
+    label.dataset.compactIcon=compactIcons[id]||'⌄';
+    label.title=labelText;
     const span=document.createElement('span');span.textContent=labelText;
     const select=document.createElement('select');select.id=id;
     options.forEach(([v,t])=>{const o=document.createElement('option');o.value=v;o.textContent=t;select.append(o)});
