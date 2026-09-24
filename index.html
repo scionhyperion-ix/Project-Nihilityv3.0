@@ -152,71 +152,82 @@
       </section>
 
       <section id="settingsRoute" class="route-view" hidden>
-        <article class="panel settings-simple-panel">
-          <section id="appearanceThemePanel" class="settings-simple-section">
-            <div class="settings-simple-heading">
+        <div class="settings-boxed-stack">
+          <section id="appearanceThemePanel" class="panel settings-boxed-section">
+            <div class="settings-boxed-heading">
               <div><p class="eyebrow">Appearance</p><h3>Theme</h3><p class="muted">Choose how Nihility looks on this browser.</p></div>
             </div>
-            <div id="themeOptions" class="theme-options settings-theme-options" role="radiogroup" aria-label="Nihility appearance theme"></div>
+            <div class="settings-list-box settings-theme-box">
+              <div id="themeOptions" class="theme-options settings-boxed-theme-options" role="radiogroup" aria-label="Nihility appearance theme"></div>
+            </div>
           </section>
 
-          <section id="pkSettingsPanel" class="settings-simple-section">
-            <div class="settings-simple-heading">
+          <section id="pkSettingsPanel" class="panel settings-boxed-section">
+            <div class="settings-boxed-heading">
               <div><p class="eyebrow">Integration</p><h3>PluralKit</h3><p class="muted">Optional. Connect only when you want to import, compare, or sync.</p></div>
             </div>
-            <div id="pkDisconnected" class="settings-simple-body">
-              <label>PluralKit token<input id="pkTokenInput" type="password" autocomplete="off" placeholder="Paste token from pk;token"></label>
-              <p class="settings-simple-note"><strong>Server protected.</strong> The token is encrypted by Nihility's backend and is never saved in this browser.</p>
-              <button id="connectPkButton" class="secondary-button" type="button">Connect PluralKit</button>
+
+            <div id="pkDisconnected" class="settings-list-box settings-pk-box">
+              <label class="settings-box-field">PluralKit token<input id="pkTokenInput" type="password" autocomplete="off" placeholder="Paste token from pk;token"></label>
+              <div class="settings-box-note"><strong>Server protected</strong><span>The token is encrypted by Nihility's backend and is never saved in this browser.</span></div>
+              <div class="settings-box-actions"><button id="connectPkButton" class="secondary-button" type="button">Connect PluralKit</button></div>
             </div>
-            <div id="pkConnected" class="settings-simple-body" hidden>
-              <dl class="detail-list settings-simple-details"><div><dt>System</dt><dd id="pkSystemName">Connected</dd></div><div><dt>System ID</dt><dd id="pkSystemId">...</dd></div></dl>
-              <p class="muted settings-simple-copy">Fronts stay in Nihility until you explicitly transfer the current front.</p>
-              <div class="button-row"><button id="importPkButton" class="secondary-button" type="button">Import system</button><button id="disconnectPkButton" class="text-button danger-text" type="button">Disconnect</button></div>
+
+            <div id="pkConnected" class="settings-list-box settings-pk-box" hidden>
+              <div class="settings-list-row"><span>System</span><strong id="pkSystemName">Connected</strong></div>
+              <div class="settings-list-row"><span>System ID</span><strong id="pkSystemId">...</strong></div>
+              <div class="settings-list-row settings-list-row-note"><span>Fronting</span><small>Fronts stay in Nihility until you explicitly transfer the current front.</small></div>
+              <div class="settings-box-actions"><button id="importPkButton" class="secondary-button" type="button">Import system</button><button id="disconnectPkButton" class="text-button danger-text" type="button">Disconnect</button></div>
             </div>
             <p id="pkMessage" class="form-message"></p>
           </section>
 
           <div id="memberMetadataMount"></div>
 
-          <section id="backupPanel" class="settings-simple-section backup-panel" hidden>
-            <div class="settings-simple-heading">
-              <div><p class="eyebrow">Data safety</p><h3>Backup and restore</h3><p class="muted">Create a portable backup, or preview a replacement restore before applying it.</p></div>
+          <section id="backupPanel" class="panel settings-boxed-section backup-panel" hidden>
+            <div class="settings-boxed-heading">
+              <div><p class="eyebrow">Data safety</p><h3>Backup and restore</h3><p class="muted">Create a portable backup, or inspect a replacement restore before applying it.</p></div>
             </div>
-            <div class="settings-backup-simple">
-              <div class="settings-backup-column">
-                <strong>Export</strong>
-                <p class="muted">JSON contains system data. ZIP also includes private media.</p>
-                <div class="backup-actions">
+
+            <div class="settings-box-grid">
+              <section class="settings-list-box settings-backup-box">
+                <div class="settings-list-box-heading"><div><strong>Export</strong><small>Save a portable copy of Nihility.</small></div></div>
+                <div class="settings-list-row settings-list-row-note"><span>JSON</span><small>System data without private media files.</small></div>
+                <div class="settings-list-row settings-list-row-note"><span>ZIP</span><small>System data plus private media.</small></div>
+                <div class="settings-box-actions backup-actions">
                   <button id="exportBackupJsonButton" class="secondary-button" type="button">Export JSON</button>
                   <button id="exportBackupMediaButton" class="secondary-button" type="button">Export ZIP with media</button>
                 </div>
-              </div>
-              <div class="settings-backup-column">
-                <strong>Restore</strong>
-                <p class="muted">Choose a Nihility JSON or ZIP backup. Nothing changes until you confirm the preview.</p>
-                <label class="backup-file-field">Backup file
+              </section>
+
+              <section class="settings-list-box settings-backup-box">
+                <div class="settings-list-box-heading"><div><strong>Restore</strong><small>Nothing changes until you confirm the preview.</small></div></div>
+                <label class="backup-file-field settings-box-field">Backup file
                   <input id="backupFileInput" type="file" accept=".json,.zip,application/json,application/zip">
                 </label>
                 <div id="backupFileSummary" class="backup-file-summary muted">No backup selected.</div>
-                <button id="previewRestoreButton" class="secondary-button" type="button" disabled>Preview restore</button>
+                <div class="settings-box-actions"><button id="previewRestoreButton" class="secondary-button" type="button" disabled>Preview restore</button></div>
                 <p id="backupMessage" class="form-message"></p>
-              </div>
+              </section>
             </div>
-            <p class="settings-simple-note settings-backup-note"><strong>Security data stays separate.</strong> Backups never include passwords, login sessions, invitations, integration credentials, or raw security-event logs. Journal entries remain encrypted.</p>
+
+            <div class="settings-box-note settings-security-note">
+              <strong>Security data stays separate</strong>
+              <span>Backups never include passwords, login sessions, invitations, integration credentials, or raw security-event logs. Journal entries remain encrypted.</span>
+            </div>
           </section>
 
-          <section id="dataOwnershipPanel" class="settings-simple-section settings-simple-section-last">
-            <div class="settings-simple-heading">
+          <section id="dataOwnershipPanel" class="panel settings-boxed-section">
+            <div class="settings-boxed-heading">
               <div><p class="eyebrow">Data ownership</p><h3>Nihility is primary</h3><p class="muted">External services never silently become the source of truth.</p></div>
             </div>
-            <ul class="settings-simple-list">
-              <li>Imported members become independent Nihility records.</li>
-              <li>Editing a Nihility member does not automatically rewrite PluralKit.</li>
-              <li>Fronting stays in Nihility unless you explicitly transfer it.</li>
-            </ul>
+            <div class="settings-list-box settings-ownership-list">
+              <div class="settings-list-row"><span>Imported members</span><small>Become independent Nihility records.</small></div>
+              <div class="settings-list-row"><span>Member edits</span><small>Do not automatically rewrite PluralKit.</small></div>
+              <div class="settings-list-row"><span>Fronting</span><small>Stays in Nihility unless you explicitly transfer it.</small></div>
+            </div>
           </section>
-        </article>
+        </div>
       </section>
 
       <section id="profileRoute" class="route-view" hidden>
