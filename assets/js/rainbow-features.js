@@ -354,7 +354,7 @@
   };
 
   saveMember=async function saveMemberWithRainbowFeatures(e){
-    e.preventDefault();const err=document.querySelector('#memberError');err.hidden=true;let au=null,bu=null;
+    e.preventDefault();const err=document.querySelector('#memberError');err.hidden=true;let au=null,bu=null,memberPersisted=false;
     try{
       const id=document.querySelector('#memberId').value,old=id?state.members.find(m=>m.id===id):null;
       au=await maybeUpload('avatar',document.querySelector('#memberAvatarFile'));bu=await maybeUpload('banner',document.querySelector('#memberBannerFile'));
@@ -367,14 +367,31 @@
       const body={user_id:state.user.id,name:document.querySelector('#memberName').value.trim(),display_name:document.querySelector('#memberDisplayName').value.trim()||null,pronouns:document.querySelector('#memberPronouns').value.trim()||null,color:c?c.slice(1).toLowerCase():null,description:document.querySelector('#memberDescription').value.trim()||null,birthday:document.querySelector('#memberBirthday').value||null,avatar_url:null,avatar_source:newAvatarPath?'supabase':null,avatar_storage_path:newAvatarPath,banner_url:null,banner_source:newBannerPath?'supabase':null,banner_storage_path:newBannerPath,pk_id:old?.pk_id||null,tupper_id:old?.tupper_id||null,metadata,archived_at:old?.archived_at||null};
       if(!body.name)throw new Error('Name is required.');
       let memberId=id;
-      if(id)await nihilityApi.rest('members',{method:'PATCH',query:'id=eq.'+encodeURIComponent(id),body,prefer:'return=minimal'});
-      else{const rows=await nihilityApi.rest('members',{method:'POST',body,prefer:'return=representation'});memberId=rows?.[0]?.id}
+      if(id){
+        await nihilityApi.rest('members',{method:'PATCH',query:'id=eq.'+encodeURIComponent(id),body,prefer:'return=minimal'});
+        memberPersisted=true;
+      }else{
+        const rows=await nihilityApi.rest('members',{method:'POST',body,prefer:'return=representation'});
+        memberId=rows?.[0]?.id;
+        if(!memberId)throw new Error('Member was saved but no identifier was returned.');
+        document.querySelector('#memberId').value=memberId;
+        memberPersisted=true;
+      }
       if(memberId)await saveMemberGroups(memberId);
       if(memberId&&window.nihilityMemberCustom?.saveMemberCustomData)await window.nihilityMemberCustom.saveMemberCustomData(memberId);
       if(old?.avatar_storage_path&&old.avatar_storage_path!==body.avatar_storage_path)await safeDelete('avatar',old.avatar_storage_path);
       if(old?.banner_storage_path&&old.banner_storage_path!==body.banner_storage_path)await safeDelete('banner',old.banner_storage_path);
       document.querySelector('#memberDialog').close();toast(id?'Member updated':'Member created');await loadData();
-    }catch(error){if(au?.path)await safeDelete('avatar',au.path);if(bu?.path)await safeDelete('banner',bu.path);err.textContent=error.message;err.hidden=false}
+    }catch(error){
+      if(!memberPersisted){
+        if(au?.path)await safeDelete('avatar',au.path);
+        if(bu?.path)await safeDelete('banner',bu.path);
+      }
+      err.textContent=memberPersisted
+        ?'Member profile was saved, but related metadata did not finish saving: '+error.message+' You can correct it and press Save again without creating a duplicate.'
+        :error.message;
+      err.hidden=false;
+    }
   };
   document.querySelector('#memberForm').onsubmit=saveMember;
 
