@@ -1111,7 +1111,8 @@ async function applyPkSync(){
   message.textContent='Rechecking both sides and applying safe changes...';
   try{
     const result=await nihilityApi.secure('pk_sync_apply',{conflictPolicy:policy});
-    const remaining=(result.comparison?.members?.conflicts?.count||0)+(result.comparison?.groups?.conflicts?.count||0)+(result.comparison?.memberships?.conflicts?.count||0);
+    const mediaConflicts=result.media?.conflicts||0;
+    const remaining=(result.comparison?.members?.conflicts?.count||0)+(result.comparison?.groups?.conflicts?.count||0)+(result.comparison?.memberships?.conflicts?.count||0)+mediaConflicts;
     await nihilityApi.rest('imports',{method:'POST',body:{user_id:state.user.id,source:'pluralkit',summary:{
       two_way_sync:true,
       members_created_in_nihility:result.members?.createdInNihility||0,
@@ -1124,6 +1125,10 @@ async function applyPkSync(){
       group_fields_to_pk:result.groups?.toPk||0,
       memberships_to_nihility:result.memberships?.toNihility||0,
       memberships_to_pk:result.memberships?.toPk||0,
+      media_to_nihility:result.media?.copied||0,
+      media_removed:result.media?.removed||0,
+      media_failed:result.media?.failed||0,
+      media_conflicts:result.media?.conflicts||0,
       conflicts_skipped:result.conflictsSkipped||0,
       blocked:Array.isArray(result.blocked)?result.blocked.length:0
     }},prefer:'return=minimal'});
@@ -1131,8 +1136,9 @@ async function applyPkSync(){
     $('#pkSyncDialog').close();
     await loadData();
     const blocked=Array.isArray(result.blocked)?result.blocked.length:0;
-    $('#pkMessage').textContent='Sync complete.'+(remaining?' '+remaining+' conflict'+(remaining===1?'':'s')+' remain unresolved.':'')+(blocked?' '+blocked+' change'+(blocked===1?' was':'s were')+' blocked by PluralKit limits.':'');
-    toast('PK sync complete',remaining?'Some conflicts were left for review.':'Both sides were reconciled.');
+    const mediaCopied=result.media?.copied||0,mediaFailed=result.media?.failed||0;
+    $('#pkMessage').textContent='Sync complete.'+(mediaCopied?' '+mediaCopied+' PK image'+(mediaCopied===1?' was':'s were')+' copied into private storage.':'')+(remaining?' '+remaining+' conflict'+(remaining===1?'':'s')+' remain unresolved.':'')+(mediaFailed?' '+mediaFailed+' PK image'+(mediaFailed===1?' could':'s could')+' not be copied and will be retried next sync.':'')+(blocked?' '+blocked+' change'+(blocked===1?' was':'s were')+' blocked by PluralKit limits.':'');
+    toast('PK sync complete',mediaFailed?'Some PK media could not be copied and will retry later.':remaining?'Some conflicts were left for review.':'Both sides were reconciled.');
   }catch(error){message.textContent=error.message}
   finally{if(button){button.disabled=false;button.textContent='Apply sync'}}
 }
