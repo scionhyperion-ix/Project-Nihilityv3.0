@@ -1033,3 +1033,184 @@ body:has(dialog[open]){
   }
   .history-editor-footer button{width:100%}
 }
+
+
+/* Optional front notes and per-fronter details. */
+.current-front-note{
+  margin:10px 0 2px;
+  padding:10px 12px;
+  border:1px solid var(--line);
+  border-radius:11px;
+  background:color-mix(in srgb,var(--theme-surface-1) 72%,transparent);
+  color:var(--muted);
+  font-size:.76rem;
+  line-height:1.48;
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+}
+.front-overall-note{
+  display:grid;
+  gap:7px;
+  margin-top:12px;
+}
+.front-overall-note textarea{
+  resize:vertical;
+  min-height:74px;
+}
+.front-details-section{
+  margin:12px 0;
+  border:1px solid var(--line);
+  border-radius:13px;
+  background:color-mix(in srgb,var(--theme-surface-1) 70%,transparent);
+  overflow:hidden;
+}
+.front-details-section>summary{
+  cursor:pointer;
+  list-style:none;
+  padding:12px 13px;
+  display:flex;
+  align-items:center;
+}
+.front-details-section>summary::-webkit-details-marker{display:none}
+.front-details-section>summary>span{
+  display:grid;
+  gap:2px;
+}
+.front-details-section>summary strong{font-size:.78rem}
+.front-details-section>summary small{
+  color:var(--muted);
+  font-size:.68rem;
+  line-height:1.35;
+}
+.front-details-section[open]>summary{
+  border-bottom:1px solid var(--line);
+}
+.front-selected-details{
+  padding:8px;
+  display:grid;
+  gap:7px;
+  max-height:360px;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+}
+.front-details-empty{
+  margin:0;
+  padding:10px;
+  font-size:.72rem;
+}
+.front-detail-card{
+  border:1px solid var(--line);
+  border-radius:11px;
+  background:var(--theme-surface-2);
+  overflow:hidden;
+}
+.front-detail-card>summary{
+  cursor:pointer;
+  list-style:none;
+  display:flex;
+  align-items:center;
+  gap:9px;
+  padding:9px 10px;
+}
+.front-detail-card>summary::-webkit-details-marker{display:none}
+.front-detail-card>summary>span{
+  min-width:0;
+  display:grid;
+  gap:2px;
+}
+.front-detail-card>summary strong,
+.front-detail-card>summary small{
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.front-detail-card>summary strong{font-size:.76rem}
+.front-detail-card>summary small{font-size:.66rem;color:var(--muted)}
+.front-detail-fields{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:9px;
+  padding:10px;
+  border-top:1px solid var(--line);
+}
+.front-detail-fields label{
+  min-width:0;
+  display:grid;
+  gap:5px;
+  font-size:.69rem;
+  color:var(--muted);
+}
+.front-detail-fields textarea{
+  resize:vertical;
+  min-height:64px;
+}
+.front-detail-fields label:nth-of-type(3),
+.front-detail-fields label:nth-of-type(5),
+.front-detail-fields label:nth-of-type(6),
+.front-detail-private-hint{
+  grid-column:1/-1;
+}
+.front-detail-private-hint{
+  margin:0;
+  font-size:.66rem;
+  line-height:1.4;
+}
+.history-member-detail-editor{
+  grid-column:1/-1;
+  border-top:1px solid var(--line);
+  margin-top:2px;
+  padding-top:8px;
+}
+.history-member-detail-editor>summary{
+  cursor:pointer;
+  color:var(--muted);
+  font-size:.7rem;
+  font-weight:700;
+}
+.history-member-detail-fields{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+  padding-top:9px;
+}
+.history-member-detail-fields label{
+  display:grid;
+  gap:5px;
+  min-width:0;
+  font-size:.69rem;
+  color:var(--muted);
+}
+.history-member-detail-fields textarea{
+  resize:vertical;
+  min-height:64px;
+}
+.history-member-detail-fields label:nth-of-type(3),
+.history-member-detail-fields label:nth-of-type(5),
+.history-member-detail-fields label:nth-of-type(6),
+.history-detail-privacy-note{
+  grid-column:1/-1;
+}
+.history-detail-privacy-note{
+  margin:0;
+  font-size:.66rem;
+  line-height:1.4;
+}
+
+@media(max-width:680px){
+  .front-detail-fields,
+  .history-member-detail-fields{
+    grid-template-columns:1fr;
+  }
+  .front-detail-fields label,
+  .front-detail-fields label:nth-of-type(3),
+  .front-detail-fields label:nth-of-type(5),
+  .front-detail-fields label:nth-of-type(6),
+  .front-detail-private-hint,
+  .history-member-detail-fields label,
+  .history-member-detail-fields label:nth-of-type(3),
+  .history-member-detail-fields label:nth-of-type(5),
+  .history-member-detail-fields label:nth-of-type(6),
+  .history-detail-privacy-note{
+    grid-column:1;
+  }
+}
