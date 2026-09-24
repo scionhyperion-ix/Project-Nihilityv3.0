@@ -40,92 +40,10 @@ create table public.journal_vaults (
     length(recovery_iv) between 16 and 64 and recovery_iv ~ '^[A-Za-z0-9_-]+$'
   ),
   constraint journal_vault_recovery_wrapped_key_check check (
-    length(recovery_wrapped_key) between 48 and 160 and recovery_wrapped_key ~ '^[A-Za-z0-9_-]+
-);
-
-create trigger journal_vaults_set_updated_at
-before update on public.journal_vaults
-for each row execute function public.set_updated_at();
-
-create table public.journal_entries (
-  id uuid primary key,
-  user_id uuid not null,
-  payload_version smallint not null default 1,
-  iv text not null,
-  ciphertext text not null,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  constraint journal_entries_vault_fkey
-    foreign key(user_id) references public.journal_vaults(user_id) on delete cascade,
-  constraint journal_entries_payload_version_check check (payload_version=1),
-  constraint journal_entries_iv_check check (
-    length(iv) between 16 and 64 and iv ~ '^[A-Za-z0-9_-]+$'
-  ),
-  constraint journal_entries_ciphertext_check check (
-    length(ciphertext) between 24 and 350000 and ciphertext ~ '^[A-Za-z0-9_-]+$'
-  )
-);
-
-create index journal_entries_user_updated_idx
-  on public.journal_entries(user_id,updated_at desc,id desc);
-
-create trigger journal_entries_set_updated_at
-before update on public.journal_entries
-for each row execute function public.set_updated_at();
-
-alter table public.journal_vaults enable row level security;
-alter table public.journal_entries enable row level security;
-
--- No browser policies are intentionally created.
-revoke all on public.journal_vaults from public,anon,authenticated;
-revoke all on public.journal_entries from public,anon,authenticated;
-grant select,insert,update,delete on public.journal_vaults to service_role;
-grant select,insert,update,delete on public.journal_entries to service_role;
-
+    length(recovery_wrapped_key) between 48 and 160 and recovery_wrapped_key ~ '^[A-Za-z0-9_-]+$'
   ),
   constraint journal_vault_key_verifier_check check (
-    length(key_verifier)=43 and key_verifier ~ '^[A-Za-z0-9_-]+
-);
-
-create trigger journal_vaults_set_updated_at
-before update on public.journal_vaults
-for each row execute function public.set_updated_at();
-
-create table public.journal_entries (
-  id uuid primary key,
-  user_id uuid not null,
-  payload_version smallint not null default 1,
-  iv text not null,
-  ciphertext text not null,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  constraint journal_entries_vault_fkey
-    foreign key(user_id) references public.journal_vaults(user_id) on delete cascade,
-  constraint journal_entries_payload_version_check check (payload_version=1),
-  constraint journal_entries_iv_check check (
-    length(iv) between 16 and 64 and iv ~ '^[A-Za-z0-9_-]+$'
-  ),
-  constraint journal_entries_ciphertext_check check (
-    length(ciphertext) between 24 and 350000 and ciphertext ~ '^[A-Za-z0-9_-]+$'
-  )
-);
-
-create index journal_entries_user_updated_idx
-  on public.journal_entries(user_id,updated_at desc,id desc);
-
-create trigger journal_entries_set_updated_at
-before update on public.journal_entries
-for each row execute function public.set_updated_at();
-
-alter table public.journal_vaults enable row level security;
-alter table public.journal_entries enable row level security;
-
--- No browser policies are intentionally created.
-revoke all on public.journal_vaults from public,anon,authenticated;
-revoke all on public.journal_entries from public,anon,authenticated;
-grant select,insert,update,delete on public.journal_vaults to service_role;
-grant select,insert,update,delete on public.journal_entries to service_role;
-
+    length(key_verifier)=43 and key_verifier ~ '^[A-Za-z0-9_-]+$'
   )
 );
 
