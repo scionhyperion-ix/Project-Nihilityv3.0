@@ -2459,6 +2459,26 @@ async function actionJournalRewrap(user:any,body:any){
   });
   return{rewrapped:true};
 }
+async function actionJournalRekey(user:any,body:any){
+  const v=body?.vault||{};
+  const iterations=Number(v.kdf_iterations);
+  if(!Number.isInteger(iterations)||iterations<600000||iterations>5000000)throw new ClientError("Invalid journal KDF settings",400);
+  const patch={
+    kdf_iterations:iterations,
+    kdf_salt:journalBase64url(v.kdf_salt,16,128,"journal KDF salt"),
+    wrap_iv:journalBase64url(v.wrap_iv,16,64,"journal wrap IV"),
+    wrapped_key:journalBase64url(v.wrapped_key,48,160,"wrapped journal key"),
+    recovery_salt:journalBase64url(v.recovery_salt,16,128,"journal recovery salt"),
+    recovery_iv:journalBase64url(v.recovery_iv,16,64,"journal recovery IV"),
+    recovery_wrapped_key:journalBase64url(v.recovery_wrapped_key,48,160,"journal recovery key")
+  };
+  const existing=await admin("/rest/v1/journal_vaults?user_id=eq."+encodeURIComponent(user.id)+"&select=user_id&limit=1");
+  if(!existing?.length)throw new ClientError("Journal vault is not configured",404);
+  await admin("/rest/v1/journal_vaults?user_id=eq."+encodeURIComponent(user.id),{
+    method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify(patch)
+  });
+  return{rekeyed:true};
+}
 async function actionJournalRotateRecovery(user:any,body:any){
   const v=body?.vault||{};
   const patch={
@@ -2511,13 +2531,14 @@ const ACTION_LIMITS:Record<string,{limit:number,window:number}> = {
   journal_delete:{limit:20,window:60},
   journal_rewrap:{limit:5,window:300},
   journal_rotate_recovery:{limit:5,window:300},
+  journal_rekey:{limit:3,window:300},
   journal_reset:{limit:2,window:600},
 };
 const AUDITED_ACTIONS=new Set([
   "pk_connect","pk_disconnect","pk_mirror_front","pk_import","pk_import_groups","pk_sync_apply",
   "pk_update_system","pk_import_fronts","import_media","upload_media","delete_member",
   "backup_export","backup_restore","front_history_correct","front_history_delete",
-  "journal_setup","journal_delete","journal_rewrap","journal_rotate_recovery","journal_reset"
+  "journal_setup","journal_delete","journal_rewrap","journal_rotate_recovery","journal_rekey","journal_reset"
 ]);
 async function consumeRateLimit(userId:string,action:string){
   const spec=ACTION_LIMITS[action]||{limit:30,window:60};
@@ -2660,6 +2681,7 @@ Deno.serve(async(req)=>{
     else if(action==="journal_delete")result=await actionJournalDelete(user,body);
     else if(action==="journal_rewrap")result=await actionJournalRewrap(user,body);
     else if(action==="journal_rotate_recovery")result=await actionJournalRotateRecovery(user,body);
+    else if(action==="journal_rekey")result=await actionJournalRekey(user,body);
     else if(action==="journal_reset")result=await actionJournalReset(user,body);
     else throw new ClientError("Unknown action",400);
 
