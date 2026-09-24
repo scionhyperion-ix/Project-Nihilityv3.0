@@ -126,10 +126,10 @@
   }
   function formatRecovery(secret){
     const raw=b64u(secret);
-    return 'NJR1-'+raw.match(/.{1,5}/g).join('-');
+    return 'NJR1-'+raw.match(/.{1,5}/g).join('.');
   }
   function parseRecovery(value){
-    const raw=String(value||'').trim().replace(/^NJR1-/i,'').replace(/[^A-Za-z0-9_-]/g,'');
+    const raw=String(value||'').trim().replace(/^NJR1-/i,'').replace(/[.\s]/g,'');
     const bytes=unb64u(raw);
     if(bytes.length!==32)throw new Error('Recovery key is invalid.');
     return bytes;
