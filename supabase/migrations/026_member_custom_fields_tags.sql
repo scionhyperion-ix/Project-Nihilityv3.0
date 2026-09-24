@@ -163,6 +163,12 @@ begin
     end loop;
   end if;
 
+  if tg_op='INSERT' then
+    perform pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended(new.user_id::text || ':member-field-definitions',0)
+    );
+  end if;
+
   if tg_op='INSERT' and (
     select count(*) from public.member_field_definitions d where d.user_id=new.user_id
   ) >= 64 then
@@ -207,7 +213,8 @@ declare
 begin
   select * into v_def
   from public.member_field_definitions
-  where id=new.field_id and user_id=new.user_id;
+  where id=new.field_id and user_id=new.user_id
+  for share;
 
   if not found then
     raise exception 'Custom field does not belong to this account';
@@ -240,6 +247,12 @@ set search_path=''
 as $$
 begin
   new.name := btrim(new.name);
+  if tg_op='INSERT' then
+    perform pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended(new.user_id::text || ':member-tags',0)
+    );
+  end if;
+
   if tg_op='INSERT' and (
     select count(*) from public.member_tags t where t.user_id=new.user_id
   ) >= 500 then
@@ -267,6 +280,12 @@ security invoker
 set search_path=''
 as $taglink$
 begin
+  if tg_op='INSERT' then
+    perform pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended(new.user_id::text || ':member-tags:' || new.member_id::text,0)
+    );
+  end if;
+
   if tg_op='INSERT' and (
     select count(*)
     from public.member_tag_links l
