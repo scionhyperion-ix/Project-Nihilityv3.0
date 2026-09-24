@@ -2258,3 +2258,25 @@ body:has(dialog[open]){
     grid-template-columns:1fr!important;
   }
 }
+
+
+#settingsRoute .backup-file-field input[type=file]::file-selector-button{
+  margin-right:9px;
+  padding:7px 10px;
+  border:1px solid var(--line-strong);
+  border-radius:8px;
+  background:var(--theme-surface-2);
+  color:var(--text);
+  font:inherit;
+  font-size:.65rem;
+  font-weight:700;
+  cursor:pointer;
+}
+#settingsRoute .backup-file-field input[type=file]::file-selector-button:hover{
+  background:var(--theme-surface-hover);
+}
+#settingsRoute #pkDisconnected>.secondary-button,
+#settingsRoute #pkConnected .secondary-button,
+#settingsRoute .settings-subsection>.secondary-button{
+  width:max-content;
+}
