@@ -5,6 +5,7 @@ const state={user:null,profile:null,members:[],fronts:[],frontMembers:[],integra
 let frontMutationVersion=0;
 let pendingPkSyncComparison=null;
 let pendingBackupRestore=null;
+let pendingFrontDetails=new Map();
 
 const THEME_KEY='nihility_appearance_theme';
 const THEMES=[
@@ -234,6 +235,13 @@ function renderHeader(){
 }
 function renderHome(){
   const front=activeFront(),members=front?frontMembers(front.id):[];
+  const currentNote=$('#currentFrontNote');
+  if(currentNote){
+    currentNote.hidden=!front?.note;
+    currentNote.textContent=front?.note||'';
+  }
+  const editDetails=$('#editCurrentFrontDetailsButton');
+  if(editDetails)editDetails.hidden=!front;
   const transferButton=$('#transferFrontToPkButton');
   if(transferButton){
     transferButton.hidden=!state.pkConnected;
@@ -598,11 +606,93 @@ async function permanentlyDeleteMember(){
   await loadData();
 }
 
+function emptyFrontDetail(){
+  return{note:'',private_note:'',mood:'',context:'',activity:'',location:''};
+}
+function detailFromFrontLink(link){
+  return{
+    note:link?.note||'',
+    private_note:link?.private_note||'',
+    mood:link?.mood||'',
+    context:link?.context||'',
+    activity:link?.activity||'',
+    location:link?.location||''
+  };
+}
+function effectiveFrontDetailMemberIds(){
+  const selected=$('#frontMemberPicker input:checked').map(i=>i.value);
+  const mode=$('input[name="frontMode"]:checked')?.value||'replace';
+  if(mode!=='add')return selected;
+  const current=activeFront();
+  return [...new Set([...(current?frontMembers(current.id).map(m=>m.id):[]),...selected])];
+}
+function renderFrontSelectedDetails(){
+  const box=$('#frontSelectedDetails');if(!box)return;
+  box.replaceChildren();
+  const ids=effectiveFrontDetailMemberIds();
+  if(!ids.length){
+    const empty=document.createElement('p');empty.className='muted front-details-empty';empty.textContent='Select a fronter to add optional details.';box.append(empty);return;
+  }
+  ids.forEach(id=>{
+    const member=state.members.find(m=>m.id===id);if(!member)return;
+    if(!pendingFrontDetails.has(id))pendingFrontDetails.set(id,emptyFrontDetail());
+    const values=pendingFrontDetails.get(id);
+    const card=document.createElement('details');card.className='front-detail-card';
+    const summary=document.createElement('summary');
+    summary.append(avatarEl(member,'picker-avatar'));
+    const copy=document.createElement('span');const strong=document.createElement('strong');strong.textContent=label(member);
+    const small=document.createElement('small');small.textContent='Optional details';
+    copy.append(strong,small);summary.append(copy);card.append(summary);
+    const fields=document.createElement('div');fields.className='front-detail-fields';
+    const addField=(title,key,max,textarea=false,placeholder='')=>{
+      const lab=document.createElement('label');lab.textContent=title;
+      const input=document.createElement(textarea?'textarea':'input');
+      if(textarea)input.rows=2;else input.type='text';
+      input.maxLength=max;input.value=values[key]||'';input.placeholder=placeholder;
+      input.addEventListener('input',()=>{values[key]=input.value});
+      lab.append(input);fields.append(lab);
+    };
+    addField('Mood','mood',200,false,'Optional mood');
+    addField('Activity','activity',500,false,'What are they doing?');
+    addField('Context','context',1000,true,'Reason, situation, or context');
+    addField('Location','location',500,false,'Optional location');
+    addField('Fronter note','note',4000,true,'Optional note about this fronter');
+    addField('Private note','private_note',4000,true,'Shown only inside detail editors');
+    const hint=document.createElement('p');hint.className='muted front-detail-private-hint';hint.textContent='Private note and location stay out of compact Home and History views. None of these fields are sent to PluralKit.';
+    fields.append(hint);card.append(fields);box.append(card);
+  });
+}
 function buildFrontPicker(selected=[]){
   const q=$('#frontMemberSearch').value.trim().toLowerCase(),set=new Set(selected);$('#frontMemberPicker').replaceChildren();
-  activeMembers().filter(m=>[m.name,m.display_name].filter(Boolean).some(v=>v.toLowerCase().includes(q))).forEach(m=>{const row=document.createElement('label');row.className='picker-row';row.append(avatarEl(m,'picker-avatar'));const c=document.createElement('span');c.className='picker-copy';const s=document.createElement('strong');s.textContent=label(m);const sm=document.createElement('small');sm.textContent=m.pk_id?'PK linked':'Nihility only';c.append(s,sm);const input=document.createElement('input');input.type='checkbox';input.value=m.id;input.checked=set.has(m.id);row.append(c,input);$('#frontMemberPicker').append(row)});
+  activeMembers().filter(m=>[m.name,m.display_name].filter(Boolean).some(v=>v.toLowerCase().includes(q))).forEach(m=>{
+    const row=document.createElement('label');row.className='picker-row';row.append(avatarEl(m,'picker-avatar'));
+    const c=document.createElement('span');c.className='picker-copy';const strong=document.createElement('strong');strong.textContent=label(m);
+    const sm=document.createElement('small');sm.textContent=m.pk_id?'PK linked':'Nihility only';c.append(strong,sm);
+    const input=document.createElement('input');input.type='checkbox';input.value=m.id;input.checked=set.has(m.id);
+    input.onchange=()=>{
+      if(input.checked&&!pendingFrontDetails.has(m.id))pendingFrontDetails.set(m.id,emptyFrontDetail());
+      if(!input.checked&&($('input[name="frontMode"]:checked')?.value||'replace')!=='add')pendingFrontDetails.delete(m.id);
+      renderFrontSelectedDetails();
+    };
+    row.append(c,input);$('#frontMemberPicker').append(row)
+  });
+  renderFrontSelectedDetails();
 }
-function openFront(mode='replace',pre=[]){$('input[name="frontMode"][value="'+mode+'"]').checked=true;$('#frontMemberSearch').value='';$('#frontError').hidden=true;$('#customFrontTimeEnabled').checked=false;$('#customFrontTimeRow').hidden=true;buildFrontPicker(pre);$('#frontDialog').showModal()}
+function openFront(mode='replace',pre=[]){
+  $('input[name="frontMode"][value="'+mode+'"]').checked=true;
+  $('#frontMemberSearch').value='';$('#frontError').hidden=true;$('#customFrontTimeEnabled').checked=false;$('#customFrontTimeRow').hidden=true;
+  pendingFrontDetails=new Map();
+  const current=activeFront();
+  if(mode==='add'&&current){
+    state.frontMembers.filter(x=>x.front_id===current.id).forEach(link=>pendingFrontDetails.set(link.member_id,detailFromFrontLink(link)));
+    $('#frontOverallNote').value=current.note||'';
+  }else{
+    $('#frontOverallNote').value='';
+  }
+  pre.forEach(id=>{if(!pendingFrontDetails.has(id))pendingFrontDetails.set(id,emptyFrontDetail())});
+  $('#frontDetailsSection').open=false;
+  buildFrontPicker(pre);$('#frontDialog').showModal()
+}
 async function mirrorFrontToPk(memberIds,timestamp){
   if(!state.pkConnected)return{shared:false,reason:'PluralKit is not connected.'};
   const chosen=memberIds.map(id=>state.members.find(m=>m.id===id)).filter(Boolean);
@@ -628,7 +718,7 @@ async function transferCurrentFrontToPk(){
     if(button){button.disabled=false;button.textContent='Transfer to PK'}
   }
 }
-function applyCommittedFront(frontId,memberIds,startedAt){
+function applyCommittedFront(frontId,memberDetails,startedAt,note=null){
   const previousActive=state.fronts.filter(f=>!f.ended_at);
   previousActive.forEach(f=>{f.ended_at=startedAt});
   const previousIds=new Set(previousActive.map(f=>f.id));
@@ -641,7 +731,7 @@ function applyCommittedFront(frontId,memberIds,startedAt){
     user_id:state.user?.id||null,
     started_at:startedAt,
     ended_at:null,
-    note:null,
+    note:note||null,
     source:'nihility',
     external_id:null,
     created_at:startedAt
@@ -650,12 +740,18 @@ function applyCommittedFront(frontId,memberIds,startedAt){
     .sort((a,b)=>new Date(b.started_at)-new Date(a.started_at))
     .slice(0,100);
 
-  const links=memberIds.map(memberId=>({
+  const links=memberDetails.map(item=>({
     user_id:state.user?.id||null,
     front_id:frontId,
-    member_id:memberId,
+    member_id:item.member_id,
     joined_at:startedAt,
-    left_at:null
+    left_at:null,
+    note:item.note||null,
+    private_note:item.private_note||null,
+    mood:item.mood||null,
+    context:item.context||null,
+    activity:item.activity||null,
+    location:item.location||null
   }));
   state.frontMembers=[...links,...state.frontMembers];
 
@@ -677,30 +773,46 @@ async function refreshFrontState(version=frontMutationVersion){
     console.warn('Unable to refresh front state',error);
   }
 }
-async function logFront(memberIds,timestamp){
+async function logFront(memberDetails,timestamp,note=null){
   const startedAt=timestamp||new Date().toISOString();
   const version=++frontMutationVersion;
-  const result=await nihilityApi.rpc('log_front',{p_member_ids:memberIds,p_started_at:startedAt,p_note:null});
+  const result=await nihilityApi.rpc('log_front_detailed',{p_member_details:memberDetails,p_started_at:startedAt,p_note:note||null});
   const frontId=typeof result==='string'?result:String(result?.id||'');
-  if(frontId)applyCommittedFront(frontId,memberIds,startedAt);
+  if(frontId)applyCommittedFront(frontId,memberDetails,startedAt,note);
   else void refreshFrontState(version);
 
-  // Nihility is authoritative. PluralKit is only updated when the user
-  // explicitly transfers the current front from the Home card.
+  // Nihility is authoritative. Notes and per-fronter details are never sent
+  // to PluralKit by the automatic/local front flow.
   void refreshFrontState(version);
 }
 async function saveFront(e){
   e.preventDefault();const err=$('#frontError');err.hidden=true;
   try{
-    const selected=$$('#frontMemberPicker input:checked').map(i=>i.value);if(!selected.length)throw new Error('Select at least one member.');
-    const mode=$('input[name="frontMode"]:checked')?.value||'replace';let ids=selected;
+    const selected=$('#frontMemberPicker input:checked').map(i=>i.value);
+    const mode=$('input[name="frontMode"]:checked')?.value||'replace';
+    if(mode!=='add'&&!selected.length)throw new Error('Select at least one member.');
+    let ids=selected;
     if(mode==='add'){const current=activeFront();ids=[...new Set([...(current?frontMembers(current.id).map(m=>m.id):[]),...selected])]}
+    if(!ids.length)throw new Error('Select at least one member.');
+    const details=ids.map(memberId=>{
+      const value=pendingFrontDetails.get(memberId)||emptyFrontDetail();
+      return{
+        member_id:memberId,
+        note:value.note.trim()||null,
+        private_note:value.private_note.trim()||null,
+        mood:value.mood.trim()||null,
+        context:value.context.trim()||null,
+        activity:value.activity.trim()||null,
+        location:value.location.trim()||null
+      };
+    });
     let ts=null;if($('#customFrontTimeEnabled').checked){const raw=$('#customFrontTime').value;if(!raw)throw new Error('Enter a valid start time.');ts=new Date(raw).toISOString()}
-    await logFront(ids,ts);$('#frontDialog').close();toast('Front updated','Saved to Nihility.');
+    const note=$('#frontOverallNote').value.trim()||null;
+    await logFront(details,ts,note);$('#frontDialog').close();toast('Front updated','Saved to Nihility.');
   }catch(error){err.textContent=error.message;err.hidden=false}
 }
-async function quickFront(m){if(!confirm('Start a new front with '+label(m)+' fronting?'))return;await logFront([m.id],null);toast('Front updated',label(m)+' is now fronting.')}
-async function switchOut(){if(!confirm('Switch out with nobody fronting?'))return;await logFront([],null);toast('Switched out')}
+async function quickFront(m){if(!confirm('Start a new front with '+label(m)+' fronting?'))return;await logFront([{member_id:m.id}],null,null);toast('Front updated',label(m)+' is now fronting.')}
+async function switchOut(){if(!confirm('Switch out with nobody fronting?'))return;await logFront([],null,null);toast('Switched out')}
 
 async function connectPk(){
   const message=$('#pkMessage');message.textContent='Connecting securely...';
@@ -982,9 +1094,9 @@ async function signOut(){
 }
 $('#signOutButton').onclick=signOut;$('#deniedSignOut').onclick=signOut;$('#sidebarProfileButton').onclick=()=>setRoute('profile');
 $$('[data-route]').forEach(b=>b.onclick=()=>setRoute(b.dataset.route));$$('[data-route-link]').forEach(b=>b.onclick=()=>setRoute(b.dataset.routeLink));
-$('#openFrontManager').onclick=()=>openFront('replace');$('#chooseAnyMemberButton').onclick=()=>openFront('replace');$('#newFrontButton').onclick=()=>openFront('replace');$('#addCoFronterButton').onclick=()=>openFront('add');$('#transferFrontToPkButton').onclick=transferCurrentFrontToPk;$('#switchOutButton').onclick=switchOut;
+$('#openFrontManager').onclick=()=>openFront('replace');$('#chooseAnyMemberButton').onclick=()=>openFront('replace');$('#newFrontButton').onclick=()=>openFront('replace');$('#addCoFronterButton').onclick=()=>openFront('add');$('#editCurrentFrontDetailsButton').onclick=()=>{const front=activeFront();if(front)window.nihilityOpenFrontHistoryEditor?.(front.id)};$('#transferFrontToPkButton').onclick=transferCurrentFrontToPk;$('#switchOutButton').onclick=switchOut;
 $('#createMemberButton').onclick=()=>openMember();$('#memberSearch').oninput=()=>renderMembers();$('#memberForm').onsubmit=saveMember;$('#deleteMemberButton').onclick=deleteMember;$('#restoreMemberButton').onclick=restoreMember;$('#permanentDeleteMemberButton').onclick=permanentlyDeleteMember;$('#closeMemberDialog').onclick=$('#cancelMemberButton').onclick=()=>$('#memberDialog').close();$('#memberColorPicker').oninput=e=>$('#memberColor').value=e.target.value.toUpperCase();$('#memberColor').oninput=e=>{const c=hex(e.target.value);if(c)$('#memberColorPicker').value=c};
-$('#frontForm').onsubmit=saveFront;$('#closeFrontDialog').onclick=$('#cancelFrontButton').onclick=()=>$('#frontDialog').close();$('#frontMemberSearch').oninput=()=>buildFrontPicker($$('#frontMemberPicker input:checked').map(i=>i.value));$('#customFrontTimeEnabled').onchange=e=>$('#customFrontTimeRow').hidden=!e.target.checked;
+$('#frontForm').onsubmit=saveFront;$('#closeFrontDialog').onclick=$('#cancelFrontButton').onclick=()=>$('#frontDialog').close();$('#frontMemberSearch').oninput=()=>buildFrontPicker($('#frontMemberPicker input:checked').map(i=>i.value));document.querySelectorAll('input[name="frontMode"]').forEach(i=>i.addEventListener('change',()=>renderFrontSelectedDetails()));$('#customFrontTimeEnabled').onchange=e=>$('#customFrontTimeRow').hidden=!e.target.checked;
 $('#connectPkButton').onclick=connectPk;$('#disconnectPkButton').onclick=disconnectPk;$('#importPkButton').onclick=importPk;
 $('#closePkSyncDialog').onclick=$('#cancelPkSyncButton').onclick=()=>$('#pkSyncDialog').close();$('#applyPkSyncButton').onclick=applyPkSync;
 document.querySelectorAll('input[name="themeMode"]').forEach(i=>i.onchange=()=>applyTheme(i.value));
