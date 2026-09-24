@@ -838,7 +838,7 @@ begin
     'fronts', jsonb_array_length(v_fronts),
     'front_members', jsonb_array_length(v_front_members),
     'imports', jsonb_array_length(v_imports),
-    'media_paths', jsonb_object_length(p_media_paths)
+    'media_paths', (select count(*) from pg_catalog.jsonb_object_keys(p_media_paths))
   );
 end
 $$;
