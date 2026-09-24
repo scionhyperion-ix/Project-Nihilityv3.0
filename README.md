@@ -105,6 +105,20 @@ The main application intentionally follows the Rainbow layout and interaction st
 
 GitHub Pages must be enabled once in repository Settings before the Pages workflow can deploy. The GitHub App token cannot perform this one-time repository setting change.
 
+## System timeline
+
+Nihility has a database-backed chronological system timeline.
+
+- Timeline events are written by database triggers for front logs, member create/archive/restore, group creation and membership changes, relationship changes, and import records.
+- Successful PluralKit two-way syncs add one safe summary event with counts only.
+- Successful backup replacement adds a restore event.
+- Browser accounts can read their own timeline through RLS but cannot directly insert, update, or delete timeline rows.
+- Timeline metadata deliberately excludes front notes, private notes, mood, context, activity, location, passwords, sessions, integration tokens, and raw security-event logs.
+- Permanent deletion cascades timeline rows that reference the deleted member/group/front, avoiding sensitive historical ghosts for erased records.
+- The initial migration backfills only history with trustworthy timestamps from existing data.
+- Timeline-aware backups preserve events with member/group/front ID remapping. Older backups reconstruct only exactly derivable historical events and then record the restore.
+- The UI loads timeline events in bounded pages and supports category, member, range, and text filtering.
+
 ## Member relationships and graph
 
 Nihility supports first-class connections between members.
