@@ -531,6 +531,18 @@ begin
     raise exception 'One or more per-fronter detail fields exceed Nihility limits';
   end if;
 
+  update public.front_members fm
+    set left_at=effective_started_at
+    where fm.user_id=uid
+      and fm.left_at is null
+      and exists (
+        select 1
+        from public.fronts f
+        where f.id=fm.front_id
+          and f.user_id=uid
+          and f.ended_at is null
+      );
+
   update public.fronts
     set ended_at=effective_started_at
     where user_id=uid and ended_at is null;
