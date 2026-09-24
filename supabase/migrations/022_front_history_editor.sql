@@ -352,11 +352,36 @@ begin
     p_user_id,p_front_id,p_started_at,p_ended_at,p_note,p_source,p_member_links
   );
 
+  -- Detaching an imported PluralKit record turns it into a purely local
+  -- correction. Tombstone the original switch ID first so a later PK import
+  -- cannot recreate the detached record as a duplicate.
+  if v_snapshot->'front'->>'source' = 'pluralkit'
+     and v_validation->>'source' = 'nihility'
+     and nullif(v_snapshot->'front'->>'external_id','') is not null then
+    insert into private.front_history_tombstones(
+      user_id,provider,external_id,deleted_at
+    )
+    values(
+      p_user_id,
+      'pluralkit',
+      v_snapshot->'front'->>'external_id',
+      pg_catalog.clock_timestamp()
+    )
+    on conflict(user_id,provider,external_id)
+    do update set deleted_at = excluded.deleted_at;
+  end if;
+
   update public.fronts
   set started_at = p_started_at,
       ended_at = p_ended_at,
       note = nullif(p_note,''),
-      source = v_validation->>'source'
+      source = v_validation->>'source',
+      external_id = case
+        when v_snapshot->'front'->>'source' = 'pluralkit'
+         and v_validation->>'source' = 'nihility'
+        then null
+        else external_id
+      end
   where user_id = p_user_id
     and id = p_front_id;
 
@@ -426,7 +451,7 @@ begin
   -- Imported PK entries keep a private deletion tombstone so a later history
   -- import does not silently resurrect a record the user explicitly removed.
   if v_front.external_id is not null
-     and v_front.source in ('pluralkit','nihility') then
+     and v_front.source = 'pluralkit' then
     insert into private.front_history_tombstones(
       user_id,provider,external_id,deleted_at
     )
