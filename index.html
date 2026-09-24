@@ -19,7 +19,7 @@
   <link rel="stylesheet" href="assets/rainbowpk/member-color-picker.css?v=1">
   <link rel="stylesheet" href="assets/rainbowpk/app-theme-shell.css?v=1">
   <link rel="stylesheet" href="assets/css/nihility-rainbow-adapter.css?v=9">
-  <link rel="stylesheet" href="assets/css/nihility-editors.css?v=7">
+  <link rel="stylesheet" href="assets/css/nihility-editors.css?v=8">
   <link rel="stylesheet" href="assets/rainbowpk/member-sort.css?v=1">
   <link rel="stylesheet" href="assets/rainbowpk/member-view-menu.css?v=1">
   <link rel="stylesheet" href="assets/rainbowpk/groups-route.css?v=1">
@@ -161,6 +161,27 @@
             <p id="pkMessage" class="form-message"></p>
           </article>
           
+          <article id="backupPanel" class="panel section-panel backup-panel" hidden>
+            <p class="eyebrow">Data safety</p>
+            <h3>Backup and restore</h3>
+            <p class="muted">Create a portable copy of your Nihility system. JSON contains system data only. ZIP also includes private media.</p>
+            <div class="backup-actions">
+              <button id="exportBackupJsonButton" class="secondary-button" type="button">Export JSON</button>
+              <button id="exportBackupMediaButton" class="secondary-button" type="button">Export ZIP with media</button>
+            </div>
+            <div class="backup-divider"></div>
+            <label class="backup-file-field">Restore from backup
+              <input id="backupFileInput" type="file" accept=".json,.zip,application/json,application/zip">
+            </label>
+            <div id="backupFileSummary" class="backup-file-summary muted">Choose a Nihility JSON or ZIP backup to inspect it.</div>
+            <button id="previewRestoreButton" class="secondary-button" type="button" disabled>Preview restore</button>
+            <p id="backupMessage" class="form-message"></p>
+            <div class="security-note backup-security-note">
+              <strong>Security data stays separate</strong>
+              <p>Backups never include passwords, login sessions, invitations, integration credentials, or raw security-event logs.</p>
+            </div>
+          </article>
+
           <article class="panel section-panel"><p class="eyebrow">Data ownership</p><h3>Nihility is primary</h3><div class="prose-stack"><p>Imported members become independent Nihility records.</p><p>Editing a Nihility member does not rewrite PluralKit.</p><p>Fronting changes stay in Nihility unless you manually transfer the current front to PluralKit.</p></div></article>
         </div>
       </section>
@@ -330,9 +351,36 @@
     </div>
   </dialog>
 
+  <dialog id="backupRestoreDialog" class="modal-dialog backup-restore-dialog">
+    <div class="modal-card backup-restore-card">
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">Backup restore</p>
+          <h3>Review before replacing data</h3>
+          <p class="muted">Nothing changes until you confirm the restore.</p>
+        </div>
+        <button id="closeBackupRestoreDialog" class="icon-button" type="button" aria-label="Close">×</button>
+      </div>
+      <div id="backupRestorePreview" class="backup-restore-preview"></div>
+      <div class="security-note backup-danger-note">
+        <strong>This is a replacement restore</strong>
+        <p>Your current members, groups, front history, app settings, import history, and safe profile fields will be replaced. Account identity and integration credentials stay unchanged.</p>
+      </div>
+      <label class="backup-confirm-field">Type <strong>RESTORE</strong> to continue
+        <input id="backupRestoreConfirmInput" autocomplete="off" spellcheck="false" placeholder="RESTORE">
+      </label>
+      <p id="backupRestoreMessage" class="form-message"></p>
+      <div class="modal-footer">
+        <button id="cancelBackupRestoreButton" class="secondary-button" type="button">Cancel</button>
+        <button id="applyBackupRestoreButton" class="primary-button danger-button" type="button" disabled>Replace and restore</button>
+      </div>
+    </div>
+  </dialog>
+
   <script src="assets/js/config.js?v=2" defer></script>
-  <script src="assets/js/api.js?v=13" defer></script>
-  <script src="assets/js/app.js?v=38" defer></script>
+  <script src="assets/js/api.js?v=14" defer></script>
+  <script src="assets/js/backup.js?v=1" defer></script>
+  <script src="assets/js/app.js?v=39" defer></script>
   <script src="assets/js/rainbow-features.js?v=14" defer></script>
   <script src="assets/js/system-controls.js?v=3" defer></script>
 </body>

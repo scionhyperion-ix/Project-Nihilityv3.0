@@ -120,19 +120,23 @@
     return{path:data.path,url:await privateMediaUrl(kind,data.path),source:'supabase'}
   }
   const privateMediaCache=new Map();
-  async function privateMediaUrl(kind,path){
-    if(!path)return null;
+  async function privateMediaBlob(kind,path){
+    if(!path)throw new Error('Media path is required.');
     const bucket=BUCKETS[kind];if(!bucket)throw new Error('Unknown media type.');
-    const cacheKey=bucket+':'+path;
-    if(privateMediaCache.has(cacheKey))return privateMediaCache.get(cacheKey);
-    if(!path)return null;
     const s=await refresh();if(!s?.access_token)throw new Error('You are signed out.');
     const response=await fetch(
       cfg.SUPABASE_URL+'/storage/v1/object/authenticated/'+encodeURIComponent(bucket)+'/'+encPath(path),
       {headers:{apikey:cfg.SUPABASE_ANON_KEY,Authorization:'Bearer '+s.access_token}}
     );
     if(!response.ok)throw new Error('Unable to load private media.');
-    const blob=await response.blob();
+    return response.blob();
+  }
+  async function privateMediaUrl(kind,path){
+    if(!path)return null;
+    const bucket=BUCKETS[kind];if(!bucket)throw new Error('Unknown media type.');
+    const cacheKey=bucket+':'+path;
+    if(privateMediaCache.has(cacheKey))return privateMediaCache.get(cacheKey);
+    const blob=await privateMediaBlob(kind,path);
     const objectUrl=URL.createObjectURL(blob);
     privateMediaCache.set(cacheKey,objectUrl);
     return objectUrl;
@@ -178,5 +182,36 @@
     return data;
   }
 
-  window.nihilityApi={configured,getSession,saveSession,sendMagicLink,sendPasswordReset,signInWithPassword,setPassword,signOut,checkPwnedPassword,readSessionFromUrl,refresh,user,rest,rpc,upload,privateMediaUrl,deleteMedia,secure};
+  async function secureBackup(action,backup,extra={}){
+    if(!['backup_preview','backup_restore'].includes(action))throw new Error('Invalid backup action.');
+    const s=await refresh();
+    if(!s?.access_token)throw new Error('You are signed out.');
+    const source=new TextEncoder().encode(JSON.stringify({backup,...extra}));
+    let body=new Blob([source],{type:'application/json'});
+    let contentType='application/json';
+    if('CompressionStream' in window){
+      try{
+        const stream=new Blob([source]).stream().pipeThrough(new CompressionStream('gzip'));
+        body=await new Response(stream).blob();
+        contentType='application/gzip';
+      }catch(error){
+        console.warn('Backup request compression unavailable; sending JSON.',error);
+      }
+    }
+    const r=await fetch(cfg.SUPABASE_URL+'/functions/v1/nihility-secure',{
+      method:'POST',
+      headers:{
+        apikey:cfg.SUPABASE_ANON_KEY,
+        Authorization:'Bearer '+s.access_token,
+        'Content-Type':contentType,
+        'x-nihility-action':action
+      },
+      body
+    });
+    const data=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(data?.error||data?.message||'Backup request failed.');
+    return data;
+  }
+
+  window.nihilityApi={configured,getSession,saveSession,sendMagicLink,sendPasswordReset,signInWithPassword,setPassword,signOut,checkPwnedPassword,readSessionFromUrl,refresh,user,rest,rpc,upload,privateMediaBlob,privateMediaUrl,deleteMedia,secure,secureBackup};
 })();
