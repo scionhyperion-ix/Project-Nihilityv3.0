@@ -6,6 +6,7 @@ let frontMutationVersion=0;
 let pendingPkSyncComparison=null;
 let pendingBackupRestore=null;
 let pendingFrontDetails=new Map();
+let pendingFrontSelected=new Set();
 
 const THEME_KEY='nihility_appearance_theme';
 const THEMES=[
@@ -620,7 +621,7 @@ function detailFromFrontLink(link){
   };
 }
 function effectiveFrontDetailMemberIds(){
-  const selected=$$('#frontMemberPicker input:checked').map(i=>i.value);
+  const selected=[...pendingFrontSelected];
   const mode=$('input[name="frontMode"]:checked')?.value||'replace';
   if(mode!=='add')return selected;
   const current=activeFront();
@@ -676,15 +677,21 @@ function renderFrontSelectedDetails(){
   });
 }
 function buildFrontPicker(selected=[]){
-  const q=$('#frontMemberSearch').value.trim().toLowerCase(),set=new Set(selected);$('#frontMemberPicker').replaceChildren();
+  selected.forEach(id=>pendingFrontSelected.add(id));
+  const q=$('#frontMemberSearch').value.trim().toLowerCase(),set=pendingFrontSelected;$('#frontMemberPicker').replaceChildren();
   activeMembers().filter(m=>[m.name,m.display_name].filter(Boolean).some(v=>v.toLowerCase().includes(q))).forEach(m=>{
     const row=document.createElement('label');row.className='picker-row';row.append(avatarEl(m,'picker-avatar'));
     const c=document.createElement('span');c.className='picker-copy';const strong=document.createElement('strong');strong.textContent=label(m);
     const sm=document.createElement('small');sm.textContent=m.pk_id?'PK linked':'Nihility only';c.append(strong,sm);
     const input=document.createElement('input');input.type='checkbox';input.value=m.id;input.checked=set.has(m.id);
     input.onchange=()=>{
-      if(input.checked&&!pendingFrontDetails.has(m.id))pendingFrontDetails.set(m.id,emptyFrontDetail());
-      if(!input.checked&&($('input[name="frontMode"]:checked')?.value||'replace')!=='add')pendingFrontDetails.delete(m.id);
+      if(input.checked){
+        pendingFrontSelected.add(m.id);
+        if(!pendingFrontDetails.has(m.id))pendingFrontDetails.set(m.id,emptyFrontDetail());
+      }else{
+        pendingFrontSelected.delete(m.id);
+        if(($('input[name="frontMode"]:checked')?.value||'replace')!=='add')pendingFrontDetails.delete(m.id);
+      }
       renderFrontSelectedDetails();
     };
     row.append(c,input);$('#frontMemberPicker').append(row)
@@ -695,6 +702,7 @@ function openFront(mode='replace',pre=[]){
   $('input[name="frontMode"][value="'+mode+'"]').checked=true;
   $('#frontMemberSearch').value='';$('#frontError').hidden=true;$('#customFrontTimeEnabled').checked=false;$('#customFrontTimeRow').hidden=true;
   pendingFrontDetails=new Map();
+  pendingFrontSelected=new Set(pre);
   const current=activeFront();
   if(mode==='add'&&current){
     state.frontMembers.filter(x=>x.front_id===current.id).forEach(link=>pendingFrontDetails.set(link.member_id,detailFromFrontLink(link)));
@@ -801,7 +809,7 @@ async function logFront(memberDetails,timestamp,note=null){
 async function saveFront(e){
   e.preventDefault();const err=$('#frontError');err.hidden=true;
   try{
-    const selected=$$('#frontMemberPicker input:checked').map(i=>i.value);
+    const selected=[...pendingFrontSelected];
     const mode=$('input[name="frontMode"]:checked')?.value||'replace';
     if(mode!=='add'&&!selected.length)throw new Error('Select at least one member.');
     let ids=selected;
@@ -1109,7 +1117,7 @@ $('#signOutButton').onclick=signOut;$('#deniedSignOut').onclick=signOut;$('#side
 $$('[data-route]').forEach(b=>b.onclick=()=>setRoute(b.dataset.route));$$('[data-route-link]').forEach(b=>b.onclick=()=>setRoute(b.dataset.routeLink));
 $('#openFrontManager').onclick=()=>openFront('replace');$('#chooseAnyMemberButton').onclick=()=>openFront('replace');$('#newFrontButton').onclick=()=>openFront('replace');$('#addCoFronterButton').onclick=()=>openFront('add');$('#editCurrentFrontDetailsButton').onclick=()=>{const front=activeFront();if(front)window.nihilityOpenFrontHistoryEditor?.(front.id)};$('#transferFrontToPkButton').onclick=transferCurrentFrontToPk;$('#switchOutButton').onclick=switchOut;
 $('#createMemberButton').onclick=()=>openMember();$('#memberSearch').oninput=()=>renderMembers();$('#memberForm').onsubmit=saveMember;$('#deleteMemberButton').onclick=deleteMember;$('#restoreMemberButton').onclick=restoreMember;$('#permanentDeleteMemberButton').onclick=permanentlyDeleteMember;$('#closeMemberDialog').onclick=$('#cancelMemberButton').onclick=()=>$('#memberDialog').close();$('#memberColorPicker').oninput=e=>$('#memberColor').value=e.target.value.toUpperCase();$('#memberColor').oninput=e=>{const c=hex(e.target.value);if(c)$('#memberColorPicker').value=c};
-$('#frontForm').onsubmit=saveFront;$('#closeFrontDialog').onclick=$('#cancelFrontButton').onclick=()=>$('#frontDialog').close();$('#frontMemberSearch').oninput=()=>buildFrontPicker($$('#frontMemberPicker input:checked').map(i=>i.value));document.querySelectorAll('input[name="frontMode"]').forEach(i=>i.addEventListener('change',syncFrontModeDetails));$('#customFrontTimeEnabled').onchange=e=>$('#customFrontTimeRow').hidden=!e.target.checked;
+$('#frontForm').onsubmit=saveFront;$('#closeFrontDialog').onclick=$('#cancelFrontButton').onclick=()=>$('#frontDialog').close();$('#frontMemberSearch').oninput=()=>buildFrontPicker();document.querySelectorAll('input[name="frontMode"]').forEach(i=>i.addEventListener('change',syncFrontModeDetails));$('#customFrontTimeEnabled').onchange=e=>$('#customFrontTimeRow').hidden=!e.target.checked;
 $('#connectPkButton').onclick=connectPk;$('#disconnectPkButton').onclick=disconnectPk;$('#importPkButton').onclick=importPk;
 $('#closePkSyncDialog').onclick=$('#cancelPkSyncButton').onclick=()=>$('#pkSyncDialog').close();$('#applyPkSyncButton').onclick=applyPkSync;
 document.querySelectorAll('input[name="themeMode"]').forEach(i=>i.onchange=()=>applyTheme(i.value));
