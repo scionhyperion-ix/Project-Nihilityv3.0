@@ -155,11 +155,20 @@ begin
     return new;
   end if;
 
-  insert into public.system_events(
-    user_id,event_type,occurred_at,member_id,group_id
-  ) values(
-    old.user_id,'member_group_removed',pg_catalog.clock_timestamp(),old.member_id,old.group_id
-  );
+  if exists(
+       select 1 from public.members m
+       where m.id=old.member_id and m.user_id=old.user_id
+     )
+     and exists(
+       select 1 from public.groups g
+       where g.id=old.group_id and g.user_id=old.user_id
+     ) then
+    insert into public.system_events(
+      user_id,event_type,occurred_at,member_id,group_id
+    ) values(
+      old.user_id,'member_group_removed',pg_catalog.clock_timestamp(),old.member_id,old.group_id
+    );
+  end if;
   return old;
 end
 $timeline$;
@@ -255,16 +264,25 @@ begin
     return new;
   end if;
 
-  v_metadata:=pg_catalog.jsonb_build_object(
-    'source_label',old.source_label,
-    'target_label',old.target_label
-  );
-  insert into public.system_events(
-    user_id,event_type,occurred_at,member_id,related_member_id,metadata
-  ) values(
-    old.user_id,'connection_removed',pg_catalog.clock_timestamp(),
-    old.source_member_id,old.target_member_id,v_metadata
-  );
+  if exists(
+       select 1 from public.members m
+       where m.id=old.source_member_id and m.user_id=old.user_id
+     )
+     and exists(
+       select 1 from public.members m
+       where m.id=old.target_member_id and m.user_id=old.user_id
+     ) then
+    v_metadata:=pg_catalog.jsonb_build_object(
+      'source_label',old.source_label,
+      'target_label',old.target_label
+    );
+    insert into public.system_events(
+      user_id,event_type,occurred_at,member_id,related_member_id,metadata
+    ) values(
+      old.user_id,'connection_removed',pg_catalog.clock_timestamp(),
+      old.source_member_id,old.target_member_id,v_metadata
+    );
+  end if;
   return old;
 end
 $timeline$;
