@@ -272,10 +272,17 @@
   }
   function selectedMemberGroups(){return [...document.querySelectorAll('#memberGroupPicker input:checked')].map(i=>i.value)}
   async function saveMemberGroups(memberId){
-    await nihilityApi.rest('member_groups',{method:'DELETE',query:'member_id=eq.'+encodeURIComponent(memberId),prefer:'return=minimal'});
-    const groups=selectedMemberGroups();
-    for(const groupId of groups){
-      await nihilityApi.rest('member_groups',{method:'POST',body:{user_id:state.user.id,member_id:memberId,group_id:groupId},prefer:'return=minimal'});
+    const wanted=new Set(selectedMemberGroups());
+    const current=new Set((state.memberGroups||[]).filter(x=>x.member_id===memberId).map(x=>x.group_id));
+    for(const groupId of current){
+      if(!wanted.has(groupId)){
+        await nihilityApi.rest('member_groups',{method:'DELETE',query:'member_id=eq.'+encodeURIComponent(memberId)+'&group_id=eq.'+encodeURIComponent(groupId),prefer:'return=minimal'});
+      }
+    }
+    for(const groupId of wanted){
+      if(!current.has(groupId)){
+        await nihilityApi.rest('member_groups',{method:'POST',body:{user_id:state.user.id,member_id:memberId,group_id:groupId},prefer:'return=minimal'});
+      }
     }
   }
 
@@ -615,9 +622,17 @@
       else{const rows=await nihilityApi.rest('groups',{method:'POST',body,prefer:'return=representation'});groupId=rows?.[0]?.id}
 
       if(groupId){
-        await nihilityApi.rest('member_groups',{method:'DELETE',query:'group_id=eq.'+encodeURIComponent(groupId),prefer:'return=minimal'});
-        for(const memberId of workingGroupMembers){
-          await nihilityApi.rest('member_groups',{method:'POST',body:{user_id:state.user.id,member_id:memberId,group_id:groupId},prefer:'return=minimal'});
+        const wanted=new Set(workingGroupMembers);
+        const current=new Set((state.memberGroups||[]).filter(x=>x.group_id===groupId).map(x=>x.member_id));
+        for(const memberId of current){
+          if(!wanted.has(memberId)){
+            await nihilityApi.rest('member_groups',{method:'DELETE',query:'member_id=eq.'+encodeURIComponent(memberId)+'&group_id=eq.'+encodeURIComponent(groupId),prefer:'return=minimal'});
+          }
+        }
+        for(const memberId of wanted){
+          if(!current.has(memberId)){
+            await nihilityApi.rest('member_groups',{method:'POST',body:{user_id:state.user.id,member_id:memberId,group_id:groupId},prefer:'return=minimal'});
+          }
         }
       }
       if(oldIconPath&&oldIconPath!==iconPath)await safeDelete('avatar',oldIconPath);
