@@ -76,9 +76,7 @@
       });
       const text=await response.text();let data=null;try{data=text?JSON.parse(text):null}catch{data=text}
       if(!response.ok){
-        const error=serviceError(data?.message||data?.msg||data?.error_description||data?.error||response.statusText,response.status);
-        reportFailure(error,path,response.status);
-        throw error;
+        throw serviceError(data?.message||data?.msg||data?.error_description||data?.error||response.statusText,response.status);
       }
       reportSuccess();
       return data;
