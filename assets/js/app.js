@@ -82,6 +82,10 @@ function avatarEl(item,cls='member-card-avatar'){
 
 function setView(name){$('#loadingView').hidden=name!=='loading';$('#setupView').hidden=name!=='setup';$('#loginView').hidden=name!=='login';$('#resetView').hidden=name!=='reset';$('#deniedView').hidden=name!=='denied';$('#appView').hidden=name!=='app'}
 window.nihilityCoreDataReady=false;
+function setLoadingStatus(message){
+  const status=document.querySelector('#loadingView .app-loading-copy span');
+  if(status&&message)status.textContent=message;
+}
 function renderHomePending(){
   renderHeader();
   $('#currentFrontHeading').textContent='Loading front...';
@@ -1392,6 +1396,7 @@ async function invite(e){
 
 async function boot(){
   initTheme();
+  setLoadingStatus('Checking your saved session...');
   localStorage.removeItem('nihility_pk_token');sessionStorage.removeItem('nihility_pk_token_session');
   if(!nihilityApi.configured()){setView('setup');return}
   try{
@@ -1403,12 +1408,21 @@ async function boot(){
     if(message)message.textContent=error.message||'Unable to verify this sign-in link.';
     return;
   }
-  state.user=await nihilityApi.user();if(!state.user){setView('login');return}
+  state.user=await nihilityApi.user();
+  if(!state.user){
+    setView('login');
+    const message=$('#loginMessage');
+    if(message)message.textContent='Your session could not be verified. Sign in again, or retry when the data service is available.';
+    return;
+  }
   window.nihilityEmergency?.setCurrentUser?.(state.user.id);
   if(new URLSearchParams(location.search).get('reset')==='1'){setView('reset');return}
+
+  setLoadingStatus('Checking account access...');
   if(!await bootstrapProfile()){setView('denied');return}
 
   setView('loading');
+  setLoadingStatus(window.nihilityEmergency?.isActive?.()?'Opening cached Nihility data...':'Loading members and current fronts...');
   window.nihilityInitialHydration=true;
   window.nihilityCoreDataReady=false;
 
@@ -1430,6 +1444,7 @@ async function boot(){
     new Promise(resolve=>setTimeout(resolve,1800))
   ]);
 
+  if(!coreResolved)setLoadingStatus('The data service is taking longer than usual. Opening what is available...');
   setView('app');
   setRoute('home');
 
