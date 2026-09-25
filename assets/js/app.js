@@ -80,6 +80,27 @@ function avatarEl(item,cls='member-card-avatar'){
 }
 
 function setView(name){$('#loadingView').hidden=name!=='loading';$('#setupView').hidden=name!=='setup';$('#loginView').hidden=name!=='login';$('#resetView').hidden=name!=='reset';$('#deniedView').hidden=name!=='denied';$('#appView').hidden=name!=='app'}
+window.nihilityCoreDataReady=false;
+function renderHomePending(){
+  renderHeader();
+  $('#currentFrontHeading').textContent='Loading front...';
+  $('#frontDuration').textContent='...';
+  $('#currentFrontMembers').replaceChildren();
+  const frontWait=document.createElement('p');frontWait.className='muted';frontWait.textContent='Loading current front data...';$('#currentFrontMembers').append(frontWait);
+  $('#currentFrontNote').hidden=true;
+  $('#addCoFronterButton').disabled=true;
+  $('#chooseAnyMemberButton').disabled=true;
+  $('#transferFrontToPkButton').hidden=true;
+  $('#homeProfileName').textContent=state.profile?.display_name||'Nihility';
+  $('#homeIntegrationState').textContent='Loading system data...';
+  $('#homeMemberCount').textContent='...';
+  $('#homeFrontCount').textContent='...';
+  $('#homeShareState').textContent='...';
+  $('#frequentMembers').replaceChildren();
+  const memberWait=document.createElement('p');memberWait.className='muted';memberWait.textContent='Loading members...';$('#frequentMembers').append(memberWait);
+  $('#recentFronts').replaceChildren();
+  const historyWait=document.createElement('p');historyWait.className='muted';historyWait.textContent='Loading recent activity...';$('#recentFronts').append(historyWait);
+}
 function setRoute(route){
   state.route=route;
   const meta={home:['Overview','Home'],members:['System directory','Members'],history:['Front tracking','Front history'],settings:['Connection and privacy','Settings'],profile:['Account','Profile']};
@@ -89,7 +110,7 @@ function setRoute(route){
 
   // Render only the route the user is actually opening. Building every hidden
   // route at startup is expensive for large systems and should not block Home.
-  if(route==='home'){renderHeader();renderHome()}
+  if(route==='home'){window.nihilityCoreDataReady?(renderHeader(),renderHome()):renderHomePending()}
   else if(route==='members')renderMembers();
   else if(route==='history')renderHistory();
   else if(route==='settings')renderSettings();
@@ -231,6 +252,7 @@ async function loadData(){
 
   // The homepage can render as soon as core directory/front data exists.
   // Private media signing is useful, but it must not hold the loading screen.
+  window.nihilityCoreDataReady=true;
   document.dispatchEvent(new CustomEvent('nihility-core-data-ready'));
   const mediaPromise=hydrateHomeMedia();
   if(window.nihilityInitialHydration){
@@ -273,6 +295,8 @@ function noteHelpEl(note,ariaLabel='Show note'){
   return wrap;
 }
 function renderHome(){
+  $('#addCoFronterButton').disabled=false;
+  $('#chooseAnyMemberButton').disabled=false;
   const front=activeFront(),members=front?frontMembers(front.id):[];
   const currentNote=$('#currentFrontNote');
   if(currentNote){
@@ -1300,36 +1324,36 @@ async function boot(){
 
   setView('loading');
   window.nihilityInitialHydration=true;
+  window.nihilityCoreDataReady=false;
 
+  let coreResolved=false;
   let resolveCore;
-  const coreReady=new Promise(resolve=>{resolveCore=resolve});
-  const onCoreReady=()=>resolveCore();
+  const coreReady=new Promise(resolve=>{resolveCore=()=>{coreResolved=true;resolve()}});
+  const onCoreReady=()=>{
+    resolveCore();
+    if(!$('#appView')?.hidden&&state.route==='home')setRoute('home');
+  };
   document.addEventListener('nihility-core-data-ready',onCoreReady,{once:true});
 
-  let fullLoadPromise;
-  try{
-    fullLoadPromise=Promise.resolve().then(()=>loadData());
-    await Promise.race([coreReady,fullLoadPromise]);
-    document.removeEventListener('nihility-core-data-ready',onCoreReady);
+  const fullLoadPromise=Promise.resolve().then(()=>loadData());
 
-    // Do not make the user wait for hidden-route DOM construction either.
-    // Home is cheap enough to render immediately; Members/History/etc. are
-    // rendered lazily when their route is opened.
-    setView('app');
-    setRoute('home');
-  }catch(error){
-    document.removeEventListener('nihility-core-data-ready',onCoreReady);
-    window.nihilityInitialHydration=false;
-    throw error;
-  }
+  // Never let the full-screen loader monopolize the UI. If Supabase is slow,
+  // reveal the app shell and show a local loading state while data continues.
+  await Promise.race([
+    coreReady,
+    new Promise(resolve=>setTimeout(resolve,1800))
+  ]);
+
+  setView('app');
+  setRoute('home');
 
   void fullLoadPromise.then(()=>{
     window.nihilityInitialHydration=false;
     if($('#appView')?.hidden)return;
 
-    // Update the visible route immediately, then let the expensive hidden
-    // route DOM build happen when the browser is idle.
-    setRoute(state.route||'home');
+    if(window.nihilityCoreDataReady)setRoute(state.route||'home');
+
+    // Heavy hidden routes can be prepared only when the browser has spare time.
     const finish=()=>{
       if($('#appView')?.hidden)return;
       renderAll();
@@ -1341,7 +1365,15 @@ async function boot(){
   }).catch(error=>{
     window.nihilityInitialHydration=false;
     console.warn('Background startup hydration did not finish',error);
-    if(!$('#appView')?.hidden)toast('Some background data is still loading','Nihility opened with the core data and will retry automatically.');
+    if(!$('#appView')?.hidden){
+      toast(
+        window.nihilityCoreDataReady?'Some background data is still loading':'Nihility data is taking longer than expected',
+        window.nihilityCoreDataReady?'The core app is ready. Secondary data will retry automatically.':'The app shell is available while the data service recovers.',
+        'error'
+      );
+    }
+  }).finally(()=>{
+    if(!coreResolved)document.removeEventListener('nihility-core-data-ready',onCoreReady);
   });
 }
 
