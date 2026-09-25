@@ -249,7 +249,7 @@
 
 /* Wide member view: banner-led identity cards with a centered avatar. */
 .member-card-grid[data-member-view="wide"] {
-  grid-template-columns: repeat(auto-fit, minmax(min(430px, 100%), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(430px, 100%), 1fr));
   gap: 18px;
   align-items: start;
 }
