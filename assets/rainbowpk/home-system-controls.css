@@ -44,7 +44,7 @@
 }
 
 .system-editor-dialog {
-  width: min(820px, calc(100vw - 28px));
+  width: min(940px, calc(100vw - 28px));
   max-height: calc(100dvh - 28px);
 }
 
@@ -166,6 +166,54 @@
   grid-column: 1 / -1;
 }
 
+.system-editor-media-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 14px;
+}
+.system-editor-media-card {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--theme-surface-1) 72%, transparent);
+}
+.system-editor-media-card > div {
+  display: grid;
+  gap: 3px;
+}
+.system-editor-media-card > div > strong {
+  font-size: .78rem;
+}
+.system-editor-media-card > div > small,
+.system-editor-public-media-note {
+  color: var(--muted);
+  font-size: .66rem;
+  line-height: 1.45;
+}
+.system-editor-media-card label {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  font-size: .7rem;
+}
+.system-editor-media-card input {
+  min-width: 0;
+}
+.system-editor-media-card input[type="file"] {
+  width: 100%;
+  padding: 7px;
+}
+.system-editor-media-card .media-edit-actions {
+  margin-top: 0;
+}
+.system-editor-public-media-note {
+  margin: 10px 0 0;
+}
 .system-editor-description {
   display: grid;
   gap: 7px;
@@ -274,6 +322,15 @@
   .system-editor-grid input,
   .system-editor-description textarea {
     font-size: 16px;
+  }
+
+  .system-editor-media-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .system-editor-media-card {
+    padding: 10px;
   }
 
   .system-editor-description textarea {
