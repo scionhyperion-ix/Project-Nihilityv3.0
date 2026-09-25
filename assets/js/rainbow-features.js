@@ -437,7 +437,7 @@
           <div>
             <p class="eyebrow">Nihility group</p>
             <h3 id="groupsManagerTitle">Create group</h3>
-            <p class="muted groups-manager-subtitle">Edit the group profile, preview the banner, and choose members in one place.</p>
+            <p class="muted groups-manager-subtitle">Edit the group profile, preview the banner, and manage its current members.</p>
           </div>
           <button class="icon-button groups-manager-close" type="button" aria-label="Close">×</button>
         </div>
@@ -461,13 +461,18 @@
 
             <section class="groups-members-editor groups-members-under-preview">
               <div class="groups-section-heading">
-                <strong>Members</strong>
-                <small id="groupsSelectedCount">0 selected</small>
+                <strong>Current members</strong>
+                <small id="groupsSelectedCount">0 members</small>
               </div>
-              <label class="dialog-search groups-member-search">Find members
-                <input id="groupsMemberSearch" type="search" placeholder="Search members" autocomplete="off">
-              </label>
-              <div id="groupsMemberPicker" class="front-member-picker groups-member-picker"></div>
+              <div id="groupsCurrentMembers" class="groups-current-members"></div>
+              <button id="groupsAddMembersButton" class="secondary-button groups-add-members-button" type="button" aria-expanded="false">+ Add members</button>
+              <div id="groupsAddMembersPanel" class="groups-add-members-panel" hidden>
+                <label class="search-field groups-member-search">
+                  <span>⌕</span>
+                  <input id="groupsMemberSearch" type="search" placeholder="Search" autocomplete="off" aria-label="Search members to add">
+                </label>
+                <div id="groupsMemberPicker" class="front-member-picker groups-member-picker"></div>
+              </div>
             </section>
           </aside>
 
@@ -499,6 +504,7 @@
     dialog.querySelector('#groupsManagerForm').onsubmit=saveGroup;
     dialog.querySelector('#deleteGroupButton').onclick=deleteGroup;
     dialog.querySelector('#groupsMemberSearch').oninput=renderGroupMemberPicker;
+    dialog.querySelector('#groupsAddMembersButton').onclick=()=>toggleGroupAddMembers();
     ['groupsManagerName','groupsManagerDisplayName','groupsManagerColor','groupsManagerDescription','groupsManagerIconUrl','groupsManagerBannerUrl']
       .forEach(id=>dialog.querySelector('#'+id)?.addEventListener('input',updateGroupPreview));
     ['groupsManagerIconFile','groupsManagerBannerFile'].forEach(id=>dialog.querySelector('#'+id)?.addEventListener('change',updateGroupPreview));
@@ -518,6 +524,33 @@
   function selectedGroupMembers(){
     return [...workingGroupMembers].map(id=>state.members.find(m=>m.id===id)).filter(Boolean);
   }
+  function groupDialogAvatarEl(member,cls){
+    const fallback=()=>{
+      const d=document.createElement('div');
+      d.className=cls+' fallback-avatar';
+      d.textContent=initial(memberName(member));
+      return d;
+    };
+    const image=()=>{
+      if(!member?.avatar_url)return null;
+      const img=document.createElement('img');
+      img.className=cls;img.src=member.avatar_url;img.alt='';
+      img.onerror=()=>{
+        if(img.isConnected)img.replaceWith(fallback());
+      };
+      return img;
+    };
+    const ready=image();
+    if(ready)return ready;
+    const placeholder=fallback();
+    if(member?.avatar_storage_path&&window.nihilityHydrateMemberMedia){
+      void window.nihilityHydrateMemberMedia(member).then(()=>{
+        if(!placeholder.isConnected||!member.avatar_url)return;
+        const img=image();if(img)placeholder.replaceWith(img);
+      });
+    }
+    return placeholder;
+  }
   function updateGroupPreview(){
     const group=currentEditingGroup();
     const name=document.querySelector('#groupsManagerDisplayName')?.value.trim()||document.querySelector('#groupsManagerName')?.value.trim()||'Group name';
@@ -531,7 +564,7 @@
     const previews=document.querySelector('#groupPreviewMembers');
     if(previews){
       previews.replaceChildren();
-      members.slice(0,4).forEach(m=>previews.append(avatarEl(m,'group-member-mini')));
+      members.slice(0,4).forEach(m=>previews.append(groupDialogAvatarEl(m,'group-member-mini')));
       if(count>4){const more=document.createElement('span');more.className='group-member-more';more.textContent='+'+(count-4);previews.append(more)}
     }
 
@@ -547,28 +580,82 @@
     const banner=document.querySelector('#groupPreviewBanner');
     if(banner)banner.style.backgroundImage=bannerUrl?'url("'+bannerUrl.replaceAll('"','%22')+'")':'';
   }
-  function renderGroupMemberPicker(){
-    const box=document.querySelector('#groupsMemberPicker');if(!box)return;
-    box.querySelectorAll('input[type="checkbox"]').forEach(input=>{
-      input.checked?workingGroupMembers.add(input.value):workingGroupMembers.delete(input.value);
-    });
+  function renderGroupCurrentMembers(){
+    const box=document.querySelector('#groupsCurrentMembers');if(!box)return;
     box.replaceChildren();
-    const q=(document.querySelector('#groupsMemberSearch')?.value||'').trim().toLowerCase();
-    sortedMembers(activeMembers().filter(m=>!q||[m.name,m.display_name,m.pronouns].filter(Boolean).some(v=>String(v).toLowerCase().includes(q)))).forEach(m=>{
-      const row=document.createElement('label');row.className='picker-row';row.append(avatarEl(m,'picker-avatar'));
-      const copy=document.createElement('span');copy.className='picker-copy';
-      const strong=document.createElement('strong');strong.textContent=memberName(m);
-      const small=document.createElement('small');small.textContent=m.pronouns||m.name;
+    const members=selectedGroupMembers().sort(byName);
+    if(!members.length){
+      const empty=document.createElement('p');
+      empty.className='groups-current-members-empty muted';
+      empty.textContent='No members in this group yet.';
+      box.append(empty);
+      updateGroupSelectedCount();
+      return;
+    }
+    members.forEach(member=>{
+      const row=document.createElement('div');row.className='groups-current-member-row';
+      row.append(groupDialogAvatarEl(member,'groups-current-member-avatar'));
+      const copy=document.createElement('div');copy.className='groups-current-member-copy';
+      const strong=document.createElement('strong');strong.textContent=memberName(member);
+      const small=document.createElement('small');
+      small.textContent=member.archived_at?(member.pronouns?member.pronouns+' · Archived':'Archived'):(member.pronouns||member.name||'');
       copy.append(strong,small);
-      const input=document.createElement('input');input.type='checkbox';input.value=m.id;input.checked=workingGroupMembers.has(m.id);
-      input.onchange=()=>{input.checked?workingGroupMembers.add(m.id):workingGroupMembers.delete(m.id);updateGroupSelectedCount();updateGroupPreview()};
-      row.append(copy,input);box.append(row);
+      const remove=document.createElement('button');remove.type='button';remove.className='icon-button groups-current-member-remove';
+      remove.textContent='×';remove.setAttribute('aria-label','Remove '+memberName(member)+' from group');
+      remove.onclick=()=>{
+        workingGroupMembers.delete(member.id);
+        renderGroupCurrentMembers();
+        renderGroupMemberPicker();
+        updateGroupPreview();
+      };
+      row.append(copy,remove);box.append(row);
     });
     updateGroupSelectedCount();
   }
+  function renderGroupMemberPicker(){
+    const box=document.querySelector('#groupsMemberPicker');if(!box)return;
+    box.replaceChildren();
+    const q=(document.querySelector('#groupsMemberSearch')?.value||'').trim().toLowerCase();
+    const candidates=sortedMembers(activeMembers().filter(m=>!workingGroupMembers.has(m.id)&&(!q||[m.name,m.display_name,m.pronouns].filter(Boolean).some(v=>String(v).toLowerCase().includes(q)))));
+    if(!candidates.length){
+      const empty=document.createElement('p');empty.className='groups-add-members-empty muted';
+      empty.textContent=q?'No matching members.':'Everyone available is already in this group.';
+      box.append(empty);return;
+    }
+    candidates.forEach(member=>{
+      const row=document.createElement('button');row.type='button';row.className='picker-row group-member-add-row';
+      row.append(groupDialogAvatarEl(member,'picker-avatar'));
+      const copy=document.createElement('span');copy.className='picker-copy';
+      const strong=document.createElement('strong');strong.textContent=memberName(member);
+      const small=document.createElement('small');small.textContent=member.pronouns||member.name;
+      copy.append(strong,small);
+      const add=document.createElement('span');add.className='group-member-add-icon';add.textContent='+';
+      row.append(copy,add);
+      row.onclick=()=>{
+        workingGroupMembers.add(member.id);
+        renderGroupCurrentMembers();
+        renderGroupMemberPicker();
+        updateGroupPreview();
+      };
+      box.append(row);
+    });
+  }
+  function toggleGroupAddMembers(force){
+    const panel=document.querySelector('#groupsAddMembersPanel');
+    const button=document.querySelector('#groupsAddMembersButton');
+    if(!panel||!button)return;
+    const open=typeof force==='boolean'?force:panel.hidden;
+    panel.hidden=!open;
+    button.setAttribute('aria-expanded',String(open));
+    button.textContent=open?'Done adding':'+ Add members';
+    if(open){
+      renderGroupMemberPicker();
+      requestAnimationFrame(()=>document.querySelector('#groupsMemberSearch')?.focus());
+    }
+  }
   function updateGroupSelectedCount(){
     const count=workingGroupMembers.size;
-    const el=document.querySelector('#groupsSelectedCount');if(el)el.textContent=count+' selected';
+    const el=document.querySelector('#groupsSelectedCount');if(el)el.textContent=count+' member'+(count===1?'':'s');
   }
   function openGroupManager(group=null){
     const dialog=ensureGroupDialog();workingGroupMembers=new Set(group?groupMemberIds(group.id):[]);
@@ -586,7 +673,11 @@
     document.querySelector('#deleteGroupButton').hidden=!group;
     document.querySelector('#groupsManagerError').hidden=true;
     clearGroupPreviewObjectUrls();
-    renderGroupMemberPicker();updateGroupPreview();dialog.showModal();
+    toggleGroupAddMembers(false);
+    renderGroupCurrentMembers();
+    renderGroupMemberPicker();
+    updateGroupPreview();
+    dialog.showModal();
   }
   async function saveGroup(e){
     e.preventDefault();const err=document.querySelector('#groupsManagerError');err.hidden=true;let iconUpload=null,bannerUpload=null;
