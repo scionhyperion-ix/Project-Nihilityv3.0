@@ -327,8 +327,10 @@
 
     const avatarFile=previewFileUrl(document.querySelector('#memberAvatarFile'));
     const bannerFile=previewFileUrl(document.querySelector('#memberBannerFile'));
-    const avatarUrl=avatarFile||current?.avatar_url||'';
-    const bannerUrl=bannerFile||current?.banner_url||'';
+    const avatarLinkPreview=window.nihilityMediaEditor?.getPreviewUrl('member-avatar')||'';
+    const bannerLinkPreview=window.nihilityMediaEditor?.getPreviewUrl('member-banner')||'';
+    const avatarUrl=avatarFile||avatarLinkPreview||current?.avatar_url||'';
+    const bannerUrl=bannerFile||bannerLinkPreview||current?.banner_url||'';
     setMemberPreviewImage(document.querySelector('#memberPreviewAvatar'),document.querySelector('#memberPreviewAvatarFallback'),avatarUrl,initial(display||name));
     const banner=document.querySelector('#memberPreviewBanner'),bannerFallback=document.querySelector('#memberPreviewBannerFallback');
     if(bannerUrl){banner.hidden=false;banner.src=bannerUrl;bannerFallback.hidden=true;banner.onerror=()=>{banner.hidden=true;bannerFallback.hidden=false}}
@@ -570,8 +572,10 @@
     }
 
     clearGroupPreviewObjectUrls();
-    const iconUrl=groupPreviewFileUrl(document.querySelector('#groupsManagerIconFile'))||group?.icon_display_url||'';
-    const bannerUrl=groupPreviewFileUrl(document.querySelector('#groupsManagerBannerFile'))||group?.banner_display_url||'';
+    const iconLinkPreview=window.nihilityMediaEditor?.getPreviewUrl('group-icon')||'';
+    const bannerLinkPreview=window.nihilityMediaEditor?.getPreviewUrl('group-banner')||'';
+    const iconUrl=groupPreviewFileUrl(document.querySelector('#groupsManagerIconFile'))||iconLinkPreview||group?.icon_display_url||'';
+    const bannerUrl=groupPreviewFileUrl(document.querySelector('#groupsManagerBannerFile'))||bannerLinkPreview||group?.banner_display_url||'';
 
     const iconImg=document.querySelector('#groupPreviewIconImage'),iconFallback=document.querySelector('#groupPreviewIconFallback');
     if(iconImg&&iconFallback){
@@ -971,4 +975,17 @@
   };
 
   refreshFeatureControls();
+
+  document.addEventListener('nihility-media-preview',event=>{
+    const key=event.detail?.key||'';
+    if((key==='member-avatar'||key==='member-banner')&&document.querySelector('#memberDialog')?.open){
+      clearMemberPreviewObjectUrls();
+      updateMemberPreview();
+    }
+    if((key==='group-icon'||key==='group-banner')&&document.querySelector('#groupsManagerDialog')?.open){
+      clearGroupPreviewObjectUrls();
+      updateGroupPreview();
+    }
+  });
+
 })();
