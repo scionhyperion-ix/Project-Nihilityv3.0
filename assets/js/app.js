@@ -82,6 +82,10 @@ function avatarEl(item,cls='member-card-avatar'){
 
 function setView(name){$('#loadingView').hidden=name!=='loading';$('#setupView').hidden=name!=='setup';$('#loginView').hidden=name!=='login';$('#resetView').hidden=name!=='reset';$('#deniedView').hidden=name!=='denied';$('#appView').hidden=name!=='app'}
 window.nihilityCoreDataReady=false;
+function setLoadingStatus(message){
+  const status=document.querySelector('#loadingView .app-loading-copy span');
+  if(status&&message)status.textContent=message;
+}
 function renderHomePending(){
   renderHeader();
   $('#currentFrontHeading').textContent='Loading front...';
@@ -184,16 +188,33 @@ function updateFrontTimers(){
 }
 
 async function bootstrapProfile(){
-  window.nihilityEmergency?.setCurrentUser?.(state.user?.id||null);
+  const emergency=window.nihilityEmergency;
+  emergency?.setCurrentUser?.(state.user?.id||null);
+
+  // If Auth already had to fall back to the locally verified session identity,
+  // do not wait on another unhealthy Supabase request before using the matching
+  // encrypted Emergency Mode snapshot.
+  if(state.user?.__emergency_cached_identity){
+    const cached=await emergency?.restoreState?.(state.user.id,state).catch(()=>null);
+    if(cached?.data?.profile){
+      state.profile=cached.data.profile;
+      emergency?.enter?.('Supabase is temporarily unavailable. Showing your last synchronized Nihility data.');
+      return true;
+    }
+  }
+
   try{
-    const rows=await nihilityApi.rest('profiles',{query:'select=*&user_id=eq.'+state.user.id+'&limit=1',timeoutMs:7000});
+    const rows=await nihilityApi.rest('profiles',{
+      query:'select=*&user_id=eq.'+state.user.id+'&limit=1',
+      timeoutMs:4500
+    });
     state.profile=rows?.[0]||null;
     return Boolean(state.profile);
   }catch(error){
-    const snapshot=await window.nihilityEmergency?.restoreState?.(state.user?.id,state);
+    const snapshot=await emergency?.restoreState?.(state.user?.id,state);
     if(snapshot?.data?.profile){
       state.profile=snapshot.data.profile;
-      window.nihilityEmergency?.enter?.('Supabase is temporarily unavailable. Showing your last synchronized Nihility data.');
+      emergency?.enter?.('Supabase is temporarily unavailable. Showing your last synchronized Nihility data.');
       return true;
     }
     throw error;
@@ -1375,6 +1396,7 @@ async function invite(e){
 
 async function boot(){
   initTheme();
+  setLoadingStatus('Checking your saved session...');
   localStorage.removeItem('nihility_pk_token');sessionStorage.removeItem('nihility_pk_token_session');
   if(!nihilityApi.configured()){setView('setup');return}
   try{
@@ -1386,12 +1408,21 @@ async function boot(){
     if(message)message.textContent=error.message||'Unable to verify this sign-in link.';
     return;
   }
-  state.user=await nihilityApi.user();if(!state.user){setView('login');return}
+  state.user=await nihilityApi.user();
+  if(!state.user){
+    setView('login');
+    const message=$('#loginMessage');
+    if(message)message.textContent='Your session could not be verified. Sign in again, or retry when the data service is available.';
+    return;
+  }
   window.nihilityEmergency?.setCurrentUser?.(state.user.id);
   if(new URLSearchParams(location.search).get('reset')==='1'){setView('reset');return}
+
+  setLoadingStatus('Checking account access...');
   if(!await bootstrapProfile()){setView('denied');return}
 
   setView('loading');
+  setLoadingStatus(window.nihilityEmergency?.isActive?.()?'Opening cached Nihility data...':'Loading members and current fronts...');
   window.nihilityInitialHydration=true;
   window.nihilityCoreDataReady=false;
 
@@ -1413,6 +1444,7 @@ async function boot(){
     new Promise(resolve=>setTimeout(resolve,1800))
   ]);
 
+  if(!coreResolved)setLoadingStatus('The data service is taking longer than usual. Opening what is available...');
   setView('app');
   setRoute('home');
 

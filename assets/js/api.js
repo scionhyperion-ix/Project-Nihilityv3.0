@@ -161,6 +161,7 @@
     if(!flow)throw new Error('This secure sign-in link must be opened in the same browser where it was requested. Request a new link.');
     const data=await raw('/auth/v1/token?grant_type=pkce',{
       method:'POST',
+      timeoutMs:7000,
       body:{auth_code:code,code_verifier:flow.verifier}
     });
     const s={access_token:data.access_token,refresh_token:data.refresh_token,expires_at:Date.now()+Number(data.expires_in||3600)*1000};
@@ -177,9 +178,13 @@
     if(!s.expires_at||s.expires_at-Date.now()>60000)return s;
     if(!s.refresh_token)return s.expires_at&&s.expires_at>Date.now()?s:null;
     if(emergencyBlocksNetwork())return s.expires_at&&s.expires_at>Date.now()?s:null;
+
+    const controller=new AbortController();
+    const timer=setTimeout(()=>controller.abort(),4500);
     try{
       const r=await fetch(cfg.SUPABASE_URL+'/auth/v1/token?grant_type=refresh_token',{
         method:'POST',
+        signal:controller.signal,
         headers:{apikey:cfg.SUPABASE_ANON_KEY,'Content-Type':'application/json'},
         body:JSON.stringify({refresh_token:s.refresh_token})
       });
@@ -196,15 +201,20 @@
       s={access_token:d.access_token,refresh_token:d.refresh_token||s.refresh_token,expires_at:Date.now()+Number(d.expires_in||3600)*1000};
       saveSession(s);return s;
     }catch(error){
-      reportFailure(error,'/auth/v1/token',0);
+      const actual=error?.name==='AbortError'
+        ?serviceError('Session refresh took too long.',0,error)
+        :error;
+      reportFailure(actual,'/auth/v1/token',0);
       return s.expires_at&&s.expires_at>Date.now()?s:null;
+    }finally{
+      clearTimeout(timer);
     }
   }
   async function user(){
     const s=await refresh();if(!s)return null;
     const cached=cachedSessionUser(s);
     if(emergencyBlocksNetwork())return cached;
-    try{return await raw('/auth/v1/user')}
+    try{return await raw('/auth/v1/user',{timeoutMs:4500})}
     catch(error){
       if((Number(error?.status||0)===0||Number(error?.status||0)>=500)&&cached)return cached;
       if(Number(error?.status||0)===401||Number(error?.status||0)===403)saveSession(null);
