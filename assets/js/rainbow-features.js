@@ -88,6 +88,7 @@
 
     state.groups=groups||[];
     state.memberGroups=links||[];
+    if(initial&&state.route==='groups')renderGroups();
     state.groups.forEach(g=>{g.icon_display_url=null;g.banner_display_url=null});
     const groupMediaPromise=Promise.all(state.groups.map(async g=>{
       const iconPath=g.metadata?.icon_storage_path||g.icon_storage_path||null;
@@ -942,7 +943,10 @@
     state.route='groups';document.querySelector('#pageEyebrow').textContent='System organization';document.querySelector('#pageTitle').textContent='Groups';
     document.querySelectorAll('.route-view').forEach(v=>v.hidden=v.id!=='groupsRoute');
     document.querySelectorAll('[data-route]').forEach(b=>b.classList.toggle('active',b.dataset.route==='groups'));
-    document.querySelector('#openFrontManager').hidden=true;history.replaceState(null,'',location.pathname+'#groups');renderGroups();
+    const openFrontManager=document.querySelector('#openFrontManager');
+    if(openFrontManager)openFrontManager.hidden=true;
+    history.replaceState(null,'',location.pathname+'#groups');
+    renderGroups();
   };
 
   function installHistoryTools(){
