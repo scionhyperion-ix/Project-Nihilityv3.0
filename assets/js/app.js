@@ -184,16 +184,33 @@ function updateFrontTimers(){
 }
 
 async function bootstrapProfile(){
-  window.nihilityEmergency?.setCurrentUser?.(state.user?.id||null);
+  const emergency=window.nihilityEmergency;
+  emergency?.setCurrentUser?.(state.user?.id||null);
+
+  // If Auth already had to fall back to the locally verified session identity,
+  // do not wait on another unhealthy Supabase request before using the matching
+  // encrypted Emergency Mode snapshot.
+  if(state.user?.__emergency_cached_identity){
+    const cached=await emergency?.restoreState?.(state.user.id,state).catch(()=>null);
+    if(cached?.data?.profile){
+      state.profile=cached.data.profile;
+      emergency?.enter?.('Supabase is temporarily unavailable. Showing your last synchronized Nihility data.');
+      return true;
+    }
+  }
+
   try{
-    const rows=await nihilityApi.rest('profiles',{query:'select=*&user_id=eq.'+state.user.id+'&limit=1',timeoutMs:7000});
+    const rows=await nihilityApi.rest('profiles',{
+      query:'select=*&user_id=eq.'+state.user.id+'&limit=1',
+      timeoutMs:4500
+    });
     state.profile=rows?.[0]||null;
     return Boolean(state.profile);
   }catch(error){
-    const snapshot=await window.nihilityEmergency?.restoreState?.(state.user?.id,state);
+    const snapshot=await emergency?.restoreState?.(state.user?.id,state);
     if(snapshot?.data?.profile){
       state.profile=snapshot.data.profile;
-      window.nihilityEmergency?.enter?.('Supabase is temporarily unavailable. Showing your last synchronized Nihility data.');
+      emergency?.enter?.('Supabase is temporarily unavailable. Showing your last synchronized Nihility data.');
       return true;
     }
     throw error;
