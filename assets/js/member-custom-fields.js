@@ -25,7 +25,6 @@
   loadData=async function(){
     const initial=Boolean(window.nihilityInitialHydration);
     if(initial)await coreLoadData();
-    if(window.nihilityEmergency?.isActive?.()&&!window.nihilityEmergency?.canUseNetwork?.())return;
     const customPromise=Promise.all([
       restAll('member_field_definitions','select=*&order=position.asc,id.asc'),
       restAll('member_field_values','select=*&order=member_id.asc,field_id.asc'),
