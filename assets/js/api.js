@@ -205,6 +205,7 @@
     return{path:data.path};
   }
   const privateMediaCache=new Map();
+  const privateMediaPending=new Map();
   async function privateMediaBlob(kind,path){
     if(!path)throw new Error('Media path is required.');
     const bucket=BUCKETS[kind];if(!bucket)throw new Error('Unknown media type.');
@@ -221,12 +222,19 @@
     const bucket=BUCKETS[kind];if(!bucket)throw new Error('Unknown media type.');
     const cacheKey=bucket+':'+path;
     if(privateMediaCache.has(cacheKey))return privateMediaCache.get(cacheKey);
-    const blob=await privateMediaBlob(kind,path);
-    const objectUrl=URL.createObjectURL(blob);
-    privateMediaCache.set(cacheKey,objectUrl);
-    return objectUrl;
+    if(privateMediaPending.has(cacheKey))return privateMediaPending.get(cacheKey);
+    const pending=privateMediaBlob(kind,path)
+      .then(blob=>{
+        if(privateMediaCache.has(cacheKey))return privateMediaCache.get(cacheKey);
+        const objectUrl=URL.createObjectURL(blob);
+        privateMediaCache.set(cacheKey,objectUrl);
+        return objectUrl;
+      })
+      .finally(()=>privateMediaPending.delete(cacheKey));
+    privateMediaPending.set(cacheKey,pending);
+    return pending;
   }
-  async function deleteMedia(kind,path){if(!path)return;const bucket=BUCKETS[kind];if(!bucket)return;const cacheKey=bucket+':'+path;const cached=privateMediaCache.get(cacheKey);if(cached){URL.revokeObjectURL(cached);privateMediaCache.delete(cacheKey)}const s=await refresh();if(!s?.access_token)return;const r=await fetch(cfg.SUPABASE_URL+'/storage/v1/object/'+encodeURIComponent(bucket)+'/'+encPath(path),{method:'DELETE',headers:{apikey:cfg.SUPABASE_ANON_KEY,Authorization:'Bearer '+s.access_token}});if(!r.ok&&r.status!==404)throw new Error('Unable to delete stored media.')}
+  async function deleteMedia(kind,path){if(!path)return;const bucket=BUCKETS[kind];if(!bucket)return;const cacheKey=bucket+':'+path;const pending=privateMediaPending.get(cacheKey);if(pending){try{await pending}catch{}}const cached=privateMediaCache.get(cacheKey);if(cached){URL.revokeObjectURL(cached);privateMediaCache.delete(cacheKey)}const s=await refresh();if(!s?.access_token)return;const r=await fetch(cfg.SUPABASE_URL+'/storage/v1/object/'+encodeURIComponent(bucket)+'/'+encPath(path),{method:'DELETE',headers:{apikey:cfg.SUPABASE_ANON_KEY,Authorization:'Bearer '+s.access_token}});if(!r.ok&&r.status!==404)throw new Error('Unable to delete stored media.')}
   async function sha1Hex(value){
     const bytes=new TextEncoder().encode(value);
     const digest=await crypto.subtle.digest('SHA-1',bytes);

@@ -255,6 +255,7 @@
       if(existing){existing.src=m.banner_url;return}
       const img=document.createElement('img');
       img.className='member-wide-banner-image';
+      img.decoding='async';
       img.src=m.banner_url;
       img.alt='';
       img.onerror=()=>img.remove();
@@ -272,7 +273,7 @@
         if(!member)return;
         void window.nihilityHydrateMemberMedia?.(member,{banner:true}).then(()=>setWideBanner(media,member));
       });
-    },{rootMargin:'220px 0px'});
+    },{rootMargin:'720px 0px'});
     return wideBannerObserver;
   }
   function makeWideMemberCard(m){
