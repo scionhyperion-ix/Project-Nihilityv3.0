@@ -1597,8 +1597,12 @@ async function autoRefreshData({force=false,full=false}={}){
   if(refreshed&&before!==after){
     requestAnimationFrame(()=>{
       if(document.hidden||document.querySelector('dialog[open]'))return;
-      setRoute(state.route||'home');
-      document.dispatchEvent(new CustomEvent('nihility-silent-refresh-applied'));
+      if(doFull){
+        setRoute(state.route||'home');
+        document.dispatchEvent(new CustomEvent('nihility-silent-refresh-applied'));
+      }else if(state.route==='home'||state.route==='history'){
+        setRoute(state.route);
+      }
     });
   }
 }
