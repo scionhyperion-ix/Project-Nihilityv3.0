@@ -511,6 +511,7 @@
     return dialog;
   }
   let workingGroupMembers=new Set();
+  let groupAddBaseMembers=new Set();
   let groupPreviewObjectUrls=[];
   function clearGroupPreviewObjectUrls(){groupPreviewObjectUrls.forEach(url=>URL.revokeObjectURL(url));groupPreviewObjectUrls=[]}
   function groupPreviewFileUrl(input){
@@ -617,29 +618,30 @@
     box.replaceChildren();
     if(document.querySelector('#groupsAddMembersPanel')?.hidden)return;
     const q=(document.querySelector('#groupsMemberSearch')?.value||'').trim().toLowerCase();
-    const candidates=sortedMembers(activeMembers().filter(m=>!workingGroupMembers.has(m.id)&&(!q||[m.name,m.display_name,m.pronouns].filter(Boolean).some(v=>String(v).toLowerCase().includes(q)))));
+    const candidates=sortedMembers(activeMembers().filter(m=>!groupAddBaseMembers.has(m.id)&&(!q||[m.name,m.display_name,m.pronouns].filter(Boolean).some(v=>String(v).toLowerCase().includes(q)))));
     if(!candidates.length){
       const empty=document.createElement('p');empty.className='groups-add-members-empty muted';
       empty.textContent=q?'No matching members.':'Everyone available is already in this group.';
       box.append(empty);return;
     }
     candidates.forEach(member=>{
-      const row=document.createElement('button');row.type='button';row.className='picker-row group-member-add-row';
+      const row=document.createElement('label');row.className='picker-row group-member-add-row';
       row.append(avatarEl(member,'picker-avatar'));
       const copy=document.createElement('span');copy.className='picker-copy';
       const strong=document.createElement('strong');strong.textContent=memberName(member);
       const small=document.createElement('small');small.textContent=member.pronouns||member.name;
       copy.append(strong,small);
-      const add=document.createElement('span');add.className='group-member-add-icon';add.textContent='+';
-      row.append(copy,add);
-      row.onclick=()=>{
-        workingGroupMembers.add(member.id);
-        renderGroupCurrentMembers();
-        renderGroupMemberPicker();
+      const input=document.createElement('input');input.type='checkbox';input.value=member.id;input.checked=workingGroupMembers.has(member.id);
+      input.setAttribute('aria-label','Select '+memberName(member));
+      input.onchange=()=>{
+        input.checked?workingGroupMembers.add(member.id):workingGroupMembers.delete(member.id);
+        updateGroupSelectedCount();
         updateGroupPreview();
       };
+      row.append(copy,input);
       box.append(row);
     });
+    updateGroupSelectedCount();
   }
   function toggleGroupAddMembers(force){
     const panel=document.querySelector('#groupsAddMembersPanel');
@@ -649,24 +651,34 @@
     const current=document.querySelector('#groupsCurrentMembers');
     if(!panel||!button||!section)return;
     const open=typeof force==='boolean'?force:panel.hidden;
+    if(open&&!section.classList.contains('is-adding'))groupAddBaseMembers=new Set(workingGroupMembers);
     panel.hidden=!open;
     section.classList.toggle('is-adding',open);
     if(current)current.hidden=open;
     if(heading)heading.textContent=open?'Add members':'Current members';
     button.setAttribute('aria-expanded',String(open));
     button.textContent=open?'Done adding':'+ Add members';
+    updateGroupSelectedCount();
     if(open){
       renderGroupMemberPicker();
       requestAnimationFrame(()=>document.querySelector('#groupsMemberSearch')?.focus());
     }else{
       const search=document.querySelector('#groupsMemberSearch');
       if(search)search.value='';
+      groupAddBaseMembers=new Set();
       renderGroupCurrentMembers();
     }
   }
   function updateGroupSelectedCount(){
+    const el=document.querySelector('#groupsSelectedCount');if(!el)return;
+    const adding=document.querySelector('.groups-members-under-preview')?.classList.contains('is-adding');
+    if(adding){
+      const count=[...workingGroupMembers].filter(id=>!groupAddBaseMembers.has(id)).length;
+      el.textContent=count+' selected';
+      return;
+    }
     const count=workingGroupMembers.size;
-    const el=document.querySelector('#groupsSelectedCount');if(el)el.textContent=count+' member'+(count===1?'':'s');
+    el.textContent=count+' member'+(count===1?'':'s');
   }
   function openGroupManager(group=null){
     const dialog=ensureGroupDialog();workingGroupMembers=new Set(group?groupMemberIds(group.id):[]);

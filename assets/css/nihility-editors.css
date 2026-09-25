@@ -738,11 +738,40 @@ body:has(dialog[open]){
   width:100%;
   max-width:none;
   min-width:0;
-  min-height:38px;
+  min-height:42px;
   margin:0;
+  padding:0 11px;
+  gap:8px;
+  border:1px solid var(--line);
+  border-radius:11px;
+  background:color-mix(in srgb,var(--theme-input) 82%,transparent);
+  box-shadow:none;
+}
+.groups-add-members-panel .groups-member-search:focus-within{
+  border-color:var(--accent);
+  box-shadow:0 0 0 3px var(--accent-soft);
+}
+.groups-add-members-panel .groups-member-search>span{
+  flex:0 0 auto;
+  color:var(--muted);
 }
 .groups-add-members-panel .groups-member-search input{
+  width:100%;
   min-width:0;
+  min-height:40px;
+  padding:0!important;
+  border:0!important;
+  border-radius:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  color:var(--text);
+}
+.groups-add-members-panel .groups-member-search input:hover,
+.groups-add-members-panel .groups-member-search input:focus{
+  border:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  outline:none;
 }
 .groups-add-members-panel .groups-member-picker{
   min-height:0;
@@ -760,24 +789,21 @@ body:has(dialog[open]){
   font:inherit;
   text-align:left;
 }
-.group-member-add-row:hover,
-.group-member-add-row:focus-visible{
+.group-member-add-row:hover{
   border-color:var(--line);
   background:var(--theme-surface-hover);
-  outline:none;
 }
-.group-member-add-icon{
+.group-member-add-row:has(input:checked){
+  border-color:color-mix(in srgb,var(--accent) 34%,var(--line));
+  background:var(--accent-soft);
+}
+.group-member-add-row input[type="checkbox"]{
+  width:17px;
+  height:17px;
   margin-left:auto;
-  width:24px;
-  height:24px;
-  display:grid;
-  place-items:center;
   flex:0 0 auto;
-  border:1px solid var(--line);
-  border-radius:7px;
-  color:var(--accent-2);
-  font-size:.8rem;
-  font-weight:800;
+  accent-color:var(--accent);
+  cursor:pointer;
 }
 @media(max-width:760px){
   .groups-current-members{
