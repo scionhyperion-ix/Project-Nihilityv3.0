@@ -267,8 +267,16 @@
     <nav class="mobile-nav" aria-label="Mobile navigation">
       <button class="mobile-nav-item active" data-route="home" type="button"><span>⌂</span>Home</button>
       <button class="mobile-nav-item" data-route="members" type="button"><span>𐀪</span>Members</button>
-      <button class="mobile-nav-item" data-route="history" type="button"><span>↻</span>History</button>
-      <button class="mobile-nav-item" data-route="settings" type="button"><span>⚙</span>Settings</button>
+      <button class="mobile-nav-item" data-route="groups" type="button"><span>▦</span>Groups</button>
+      <button class="mobile-nav-item" data-route="journal" type="button"><span>✎</span>Journal</button>
+      <div class="mobile-nav-more">
+        <button id="mobileNavMoreButton" class="mobile-nav-item mobile-nav-more-button" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="mobileNavMoreMenu"><span>•••</span>Others</button>
+        <div id="mobileNavMoreMenu" class="mobile-nav-more-menu" role="menu" hidden>
+          <button class="mobile-nav-more-option" data-route="settings" role="menuitem" type="button"><span>⚙</span><span>Settings</span></button>
+          <button class="mobile-nav-more-option" data-route="timeline" role="menuitem" type="button"><span>◷</span><span>Timeline</span></button>
+          <button class="mobile-nav-more-option" data-route="history" role="menuitem" type="button"><span>↻</span><span>History</span></button>
+        </div>
+      </div>
     </nav>
   </div>
 
