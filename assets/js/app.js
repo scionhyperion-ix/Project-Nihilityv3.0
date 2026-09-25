@@ -1513,8 +1513,10 @@ document.addEventListener('nihility-media-preview',event=>{
 });
 $('#inviteForm').onsubmit=invite;
 const AUTO_REFRESH_MS=15000;
+const FULL_AUTO_REFRESH_MS=90000;
 let autoRefreshBusy=false;
 let lastAutoRefreshAt=0;
+let lastFullAutoRefreshAt=0;
 
 function autoRefreshFingerprint(){
   const rows=(list,keys)=>(list||[]).map(row=>keys.map(key=>row?.[key]??null));
@@ -1539,32 +1541,62 @@ function autoRefreshFingerprint(){
     system
   });
 }
+function liveFrontFingerprint(){
+  const rows=(list,keys)=>(list||[]).map(row=>keys.map(key=>row?.[key]??null));
+  return JSON.stringify({
+    fronts:rows(state.fronts,['id','updated_at','started_at','ended_at','note','source']),
+    frontMembers:rows(state.frontMembers,['id','updated_at','front_id','member_id','joined_at','left_at','note','private_note','mood','context','activity','location'])
+  });
+}
+async function refreshLiveFrontData(){
+  const frontVersion=frontMutationVersion;
+  const [fronts,links]=await Promise.all([
+    nihilityApi.rest('fronts',{query:'select=*&order=started_at.desc&limit=100',timeoutMs:12000}),
+    nihilityApi.rest('front_members',{query:'select=*&order=joined_at.desc',timeoutMs:12000})
+  ]);
+  if(frontVersion===frontMutationVersion){
+    state.fronts=fronts||[];
+    state.frontMembers=links||[];
+  }
+}
 
-async function autoRefreshData({force=false}={}){
+async function autoRefreshData({force=false,full=false}={}){
   if(autoRefreshBusy||!state.user||document.hidden||!navigator.onLine)return;
   if($('#appView')?.hidden)return;
   if(document.querySelector('dialog[open]'))return;
   if(state.route==='settings'||state.route==='profile'||state.route==='journal')return;
   const now=Date.now();
   if(!force&&now-lastAutoRefreshAt<AUTO_REFRESH_MS-500)return;
+
+  const routeNeedsDirectory=['members','groups','timeline'].includes(state.route);
+  const fullDue=now-lastFullAutoRefreshAt>=(routeNeedsDirectory?45000:FULL_AUTO_REFRESH_MS);
+  const doFull=Boolean(full||fullDue);
+  const before=doFull?autoRefreshFingerprint():liveFrontFingerprint();
+
   autoRefreshBusy=true;
-  const before=autoRefreshFingerprint();
   let refreshed=false;
-  window.nihilitySilentRefresh=true;
+  if(doFull)window.nihilitySilentRefresh=true;
   try{
-    await loadData();
+    if(doFull){
+      await loadData();
+      lastFullAutoRefreshAt=Date.now();
+    }else{
+      await refreshLiveFrontData();
+    }
     refreshed=true;
     lastAutoRefreshAt=Date.now();
   }catch(error){
     console.warn('Automatic refresh failed',error);
   }finally{
-    window.nihilitySilentRefresh=false;
+    if(doFull)window.nihilitySilentRefresh=false;
     autoRefreshBusy=false;
   }
-  if(refreshed&&before!==autoRefreshFingerprint()){
+
+  const after=doFull?autoRefreshFingerprint():liveFrontFingerprint();
+  if(refreshed&&before!==after){
     requestAnimationFrame(()=>{
       if(document.hidden||document.querySelector('dialog[open]'))return;
-      renderAll();
+      setRoute(state.route||'home');
       document.dispatchEvent(new CustomEvent('nihility-silent-refresh-applied'));
     });
   }
@@ -1573,7 +1605,7 @@ async function autoRefreshData({force=false}={}){
 setInterval(()=>{void autoRefreshData()},AUTO_REFRESH_MS);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)void autoRefreshData({force:true})});
 window.addEventListener('focus',()=>{if(Date.now()-lastAutoRefreshAt>5000)void autoRefreshData({force:true})});
-window.addEventListener('online',()=>void autoRefreshData({force:true}));
+window.addEventListener('online',()=>void autoRefreshData({force:true,full:true}));
 
 setInterval(updateFrontTimers,15000);
-boot().then(()=>{lastAutoRefreshAt=Date.now()}).catch(error=>{console.error(error);toast('Unable to start Nihility',error.message,'error')});
+boot().then(()=>{lastAutoRefreshAt=Date.now()}).catch(error=>{console.error(error);setView('app');setRoute('home');toast('Unable to start Nihility',error.message,'error')});
