@@ -29,6 +29,7 @@ const BUCKETS: Record<string,{name:string,max:number}> = {
   profile:{name:"nihility-profile-avatars",max:2*1024*1024},
 };
 const MEDIA_QUOTA_BYTES = 1024*1024*1024; // 1 GiB per account.
+const PK_SYSTEM_PUBLIC_BUCKET = "nihility-pk-system-media";
 const MAX_IMAGE_DIMENSION = 8192;
 const MAX_IMAGE_PIXELS = 40_000_000;
 
@@ -485,13 +486,14 @@ async function finalizeMediaReservation(userId:string,reservationId:string,bucke
     console.warn("Unable to finalize media quota reservation",error);
   }
 }
-async function storeImageBytes(userId:string,kind:string,bytes:Uint8Array,type:string){
+async function storeImageBytes(userId:string,kind:string,bytes:Uint8Array,type:string,scope:string|null=null){
   const cfg=BUCKETS[kind];
   if(!cfg)throw new ClientError("Invalid media kind");
   validateImageBytes(bytes,type,kind);
+  if(scope!==null&&!/^[a-z0-9-]{1,40}$/.test(scope))throw new Error("Invalid internal media scope");
 
   const reservationId=await reserveMediaQuota(userId,bytes.length);
-  const path=userId+"/"+crypto.randomUUID()+"."+MIME_EXT[type];
+  const path=userId+"/"+(scope?scope+"/":"")+crypto.randomUUID()+"."+MIME_EXT[type];
   let response:Response;
   try{
     response=await fetch(SUPABASE_URL+"/storage/v1/object/"+encodeURIComponent(cfg.name)+"/"+path.split("/").map(encodeURIComponent).join("/"),{
@@ -513,6 +515,76 @@ async function storeImageBytes(userId:string,kind:string,bytes:Uint8Array,type:s
   await finalizeMediaReservation(userId,reservationId,cfg.name,path);
   return path;
 }
+const PK_SYSTEM_PUBLIC_PATH_RE=/^(avatar|banner)\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(png|jpg|webp|gif)$/;
+function pkSystemPublicUrl(path:string){
+  if(!PK_SYSTEM_PUBLIC_PATH_RE.test(path))throw new Error("Invalid public PK media path");
+  return SUPABASE_URL+"/storage/v1/object/public/"+encodeURIComponent(PK_SYSTEM_PUBLIC_BUCKET)+"/"+path.split("/").map(encodeURIComponent).join("/");
+}
+async function deletePkSystemPublicMedia(path:string|null|undefined){
+  if(!path)return;
+  const normalized=String(path);
+  if(!PK_SYSTEM_PUBLIC_PATH_RE.test(normalized))throw new Error("Refusing to delete an invalid public PK media path");
+  const response=await fetch(SUPABASE_URL+"/storage/v1/object/"+encodeURIComponent(PK_SYSTEM_PUBLIC_BUCKET)+"/"+normalized.split("/").map(encodeURIComponent).join("/"),{
+    method:"DELETE",
+    headers:{apikey:SERVICE_KEY,Authorization:"Bearer "+SERVICE_KEY}
+  });
+  if(!response.ok&&response.status!==404)console.warn("Unable to delete public PK system media",response.status);
+}
+async function getPkSystemMediaRegistry(userId:string){
+  const rows=await admin("/rest/v1/pk_system_media_registry?user_id=eq."+encodeURIComponent(userId)+"&select=kind,object_path");
+  const out:Record<string,string>={};
+  for(const row of rows||[])if(row?.kind&&row?.object_path)out[String(row.kind)]=String(row.object_path);
+  return out;
+}
+async function setPkSystemMediaRegistry(userId:string,kind:string,path:string){
+  if(!["avatar","banner"].includes(kind)||!PK_SYSTEM_PUBLIC_PATH_RE.test(path)||!path.startsWith(kind+"/"))throw new Error("Invalid PK system media registry update");
+  await admin("/rest/v1/pk_system_media_registry?on_conflict=user_id,kind",{
+    method:"POST",
+    headers:{Prefer:"resolution=merge-duplicates,return=minimal"},
+    body:JSON.stringify({user_id:userId,kind,object_path:path,updated_at:new Date().toISOString()})
+  });
+}
+async function clearPkSystemMediaRegistry(userId:string,kind:string){
+  if(!["avatar","banner"].includes(kind))return;
+  await admin("/rest/v1/pk_system_media_registry?user_id=eq."+encodeURIComponent(userId)+"&kind=eq."+encodeURIComponent(kind),{
+    method:"DELETE",headers:{Prefer:"return=minimal"}
+  });
+}
+function validPkSystemPrivatePath(userId:string,path:string,kind:string){
+  if(!["avatar","banner"].includes(kind))return false;
+  const prefix=userId+"/pk-system/";
+  if(!path.startsWith(prefix))return false;
+  const tail=path.slice(prefix.length);
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(png|jpg|webp|gif)$/.test(tail);
+}
+async function readPrivatePkSystemMedia(userId:string,kind:string,path:string){
+  if(!validPkSystemPrivatePath(userId,path,kind))throw new ClientError("Invalid system media upload",400);
+  const cfg=BUCKETS[kind];
+  const response=await fetch(SUPABASE_URL+"/storage/v1/object/authenticated/"+encodeURIComponent(cfg.name)+"/"+path.split("/").map(encodeURIComponent).join("/"),{
+    headers:{apikey:SERVICE_KEY,Authorization:"Bearer "+SERVICE_KEY}
+  });
+  if(!response.ok)throw new ClientError("System media upload is unavailable. Please choose the image again.",400);
+  const type=(response.headers.get("content-type")||"").split(";")[0].toLowerCase();
+  if(!MIME_EXT[type])throw new ClientError("Unsupported system image type",400);
+  const bytes=await readRawBody(response,cfg.max);
+  validateImageBytes(bytes,type,kind);
+  return{bytes,type};
+}
+async function publishPkSystemMedia(userId:string,kind:string,privatePath:string){
+  const {bytes,type}=await readPrivatePkSystemMedia(userId,kind,privatePath);
+  const publicPath=kind+"/"+crypto.randomUUID()+"."+MIME_EXT[type];
+  const response=await fetch(SUPABASE_URL+"/storage/v1/object/"+encodeURIComponent(PK_SYSTEM_PUBLIC_BUCKET)+"/"+publicPath.split("/").map(encodeURIComponent).join("/"),{
+    method:"POST",
+    headers:{apikey:SERVICE_KEY,Authorization:"Bearer "+SERVICE_KEY,"Content-Type":type,"x-upsert":"false","Cache-Control":"public, max-age=31536000, immutable"},
+    body:bytes
+  });
+  if(!response.ok){
+    console.error("Public PK system media upload failed",response.status,await response.text().catch(()=>""));
+    throw new Error("Unable to publish system media");
+  }
+  return{path:publicPath,url:pkSystemPublicUrl(publicPath)};
+}
+
 async function safeImage(url:string,kind:string){
   const cfg=BUCKETS[kind]; if(!cfg)throw new ClientError("Invalid media kind");
   let current:URL;
@@ -788,6 +860,16 @@ async function actionUploadMedia(user:any,req:Request){
   const bytes=await readRawBody(req,cfg.max);
   const path=await storeImageBytes(user.id,kind,bytes,type);
   return {path};
+}
+async function actionUploadPkSystemMedia(user:any,req:Request){
+  const kind=String(req.headers.get("x-media-kind")||"");
+  if(!["avatar","banner"].includes(kind))throw new ClientError("Invalid system media kind");
+  const cfg=BUCKETS[kind];
+  const type=(req.headers.get("content-type")||"").split(";")[0].toLowerCase();
+  if(!MIME_EXT[type])throw new ClientError("Unsupported image type");
+  const bytes=await readRawBody(req,cfg.max);
+  const path=await storeImageBytes(user.id,kind,bytes,type,"pk-system");
+  return{path};
 }
 
 async function actionConnect(user:any,body:any){
