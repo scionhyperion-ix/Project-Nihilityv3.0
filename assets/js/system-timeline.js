@@ -17,6 +17,7 @@
   loadData=async function(){
     const initial=Boolean(window.nihilityInitialHydration);
     if(initial)await coreLoadData();
+    if(window.nihilityEmergency?.isActive?.()&&!window.nihilityEmergency?.canUseNetwork?.())return;
     const timelinePromise=fetchTimelinePage(0);
     if(!initial)await coreLoadData();
     const rows=await timelinePromise;

@@ -72,6 +72,10 @@
     // On first paint, let the core members/fronts requests finish before
     // secondary directory/system requests compete for the connection pool.
     if(initial)await coreLoadData();
+    if(window.nihilityEmergency?.isActive?.()&&!window.nihilityEmergency?.canUseNetwork?.()){
+      state.historyHasMore=state.fronts.length>=100;
+      return;
+    }
 
     const groupPromise=nihilityApi.rest('groups',{query:'select=*&order=name.asc'});
     const linkPromise=nihilityApi.rest('member_groups',{query:'select=*&order=created_at.asc'});

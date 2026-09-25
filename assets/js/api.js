@@ -7,8 +7,54 @@
   const configured=()=>Boolean(cfg.SUPABASE_URL&&cfg.SUPABASE_ANON_KEY);
   const getSession=()=>{try{return JSON.parse(sessionStorage.getItem(SESSION_KEY)||'null')}catch{return null}};
   const saveSession=s=>s?sessionStorage.setItem(SESSION_KEY,JSON.stringify(s)):sessionStorage.removeItem(SESSION_KEY);
+
+  function decodeJwtPayload(token){
+    try{
+      const part=String(token||'').split('.')[1];
+      if(!part)return null;
+      const normalized=part.replace(/-/g,'+').replace(/_/g,'/');
+      const padded=normalized+'='.repeat((4-normalized.length%4)%4);
+      return JSON.parse(atob(padded));
+    }catch{return null}
+  }
+  function cachedSessionUser(session=getSession()){
+    if(!session?.access_token)return null;
+    if(session.expires_at&&Number(session.expires_at)<=Date.now())return null;
+    const payload=decodeJwtPayload(session.access_token);
+    if(!payload?.sub)return null;
+    return{
+      id:payload.sub,
+      email:payload.email||null,
+      aud:payload.aud||'authenticated',
+      role:payload.role||'authenticated',
+      app_metadata:payload.app_metadata||{},
+      user_metadata:payload.user_metadata||{},
+      __emergency_cached_identity:true
+    };
+  }
+  function emergencyBlocksNetwork(){
+    return Boolean(window.nihilityEmergency?.isActive?.()&&!window.nihilityEmergency?.canUseNetwork?.());
+  }
+  function serviceError(message,status=0,cause=null){
+    const error=new Error(message);
+    error.status=Number(status||0);
+    if(cause)error.cause=cause;
+    return error;
+  }
+  function reportFailure(error,path,status=0){
+    const code=Number(status||error?.status||0);
+    if(code===0||code>=500){
+      window.nihilityEmergency?.noteFailure?.({status:code,path,message:error?.message||String(error)});
+    }
+  }
+  function reportSuccess(){
+    window.nihilityEmergency?.noteSuccess?.();
+  }
+
   async function raw(path,options={}){
     const {timeoutMs=0,...requestOptions}=options;
+    if(emergencyBlocksNetwork())throw serviceError('Emergency mode is using cached data. Retry when Supabase is available.',0);
+
     const session=getSession(),headers={apikey:cfg.SUPABASE_ANON_KEY,...(requestOptions.headers||{})};
     if(session?.access_token)headers.Authorization='Bearer '+session.access_token;
     if(requestOptions.body!==undefined&&requestOptions.body!==null&&typeof requestOptions.body!=='string'&&!(requestOptions.body instanceof Blob))headers['Content-Type']='application/json';
@@ -29,10 +75,18 @@
           :requestOptions.body
       });
       const text=await response.text();let data=null;try{data=text?JSON.parse(text):null}catch{data=text}
-      if(!response.ok)throw new Error(data?.message||data?.msg||data?.error_description||data?.error||response.statusText);
+      if(!response.ok){
+        throw serviceError(data?.message||data?.msg||data?.error_description||data?.error||response.statusText,response.status);
+      }
+      reportSuccess();
       return data;
     }catch(error){
-      if(error?.name==='AbortError')throw new Error('The data service took too long to respond.');
+      if(error?.name==='AbortError'){
+        const timed=serviceError('The data service took too long to respond.',0,error);
+        reportFailure(timed,path,0);
+        throw timed;
+      }
+      reportFailure(error,path,error?.status||0);
       throw error;
     }finally{
       if(timer)clearTimeout(timer);
@@ -118,12 +172,50 @@
     history.replaceState(null,'',url.pathname+(url.searchParams.toString()?'?'+url.searchParams.toString():''));
     return s;
   }
-  async function refresh(){let s=getSession();if(!s)return null;if(!s.expires_at||s.expires_at-Date.now()>60000)return s;if(!s.refresh_token)return s;const r=await fetch(cfg.SUPABASE_URL+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{apikey:cfg.SUPABASE_ANON_KEY,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:s.refresh_token})});if(!r.ok){saveSession(null);return null}const d=await r.json();s={access_token:d.access_token,refresh_token:d.refresh_token||s.refresh_token,expires_at:Date.now()+Number(d.expires_in||3600)*1000};saveSession(s);return s}
-  async function user(){const s=await refresh();if(!s)return null;try{return await raw('/auth/v1/user')}catch{saveSession(null);return null}}
+  async function refresh(){
+    let s=getSession();if(!s)return null;
+    if(!s.expires_at||s.expires_at-Date.now()>60000)return s;
+    if(!s.refresh_token)return s.expires_at&&s.expires_at>Date.now()?s:null;
+    if(emergencyBlocksNetwork())return s.expires_at&&s.expires_at>Date.now()?s:null;
+    try{
+      const r=await fetch(cfg.SUPABASE_URL+'/auth/v1/token?grant_type=refresh_token',{
+        method:'POST',
+        headers:{apikey:cfg.SUPABASE_ANON_KEY,'Content-Type':'application/json'},
+        body:JSON.stringify({refresh_token:s.refresh_token})
+      });
+      if(!r.ok){
+        if(r.status>=500){
+          const error=serviceError('Session refresh service is unavailable.',r.status);
+          reportFailure(error,'/auth/v1/token',r.status);
+          return s.expires_at&&s.expires_at>Date.now()?s:null;
+        }
+        saveSession(null);return null;
+      }
+      reportSuccess();
+      const d=await r.json();
+      s={access_token:d.access_token,refresh_token:d.refresh_token||s.refresh_token,expires_at:Date.now()+Number(d.expires_in||3600)*1000};
+      saveSession(s);return s;
+    }catch(error){
+      reportFailure(error,'/auth/v1/token',0);
+      return s.expires_at&&s.expires_at>Date.now()?s:null;
+    }
+  }
+  async function user(){
+    const s=await refresh();if(!s)return null;
+    const cached=cachedSessionUser(s);
+    if(emergencyBlocksNetwork())return cached;
+    try{return await raw('/auth/v1/user')}
+    catch(error){
+      if((Number(error?.status||0)===0||Number(error?.status||0)>=500)&&cached)return cached;
+      if(Number(error?.status||0)===401||Number(error?.status||0)===403)saveSession(null);
+      return null;
+    }
+  }
   async function rest(table,{method='GET',query='',body=null,prefer='',timeoutMs=0}={}){const headers={};if(prefer)headers.Prefer=prefer;return raw('/rest/v1/'+table+(query?'?'+query:''),{method,headers,body,timeoutMs})}
   async function rpc(name,body={}){return raw('/rest/v1/rpc/'+encodeURIComponent(name),{method:'POST',body})}
   function encPath(path){return String(path).split('/').map(encodeURIComponent).join('/')}
   async function upload(kind,file){
+    if(emergencyBlocksNetwork())throw new Error('Media uploads are unavailable in Emergency Mode. Your cached data is still safe.');
     if(!BUCKETS[kind])throw new Error('Unknown media type.');
     const s=await refresh();if(!s?.access_token)throw new Error('You are signed out.');
     const r=await fetch(cfg.SUPABASE_URL+'/functions/v1/nihility-secure',{
@@ -143,6 +235,7 @@
     return{path:data.path,url:await privateMediaUrl(kind,data.path),source:'supabase'}
   }
   async function uploadPkSystemMedia(kind,file){
+    if(emergencyBlocksNetwork())throw new Error('PluralKit media uploads are unavailable in Emergency Mode.');
     if(!['avatar','banner'].includes(kind))throw new Error('Unknown system media type.');
     if(!(file instanceof Blob)||!file.type.startsWith('image/'))throw new Error('Choose a valid image first.');
     const s=await refresh();if(!s?.access_token)throw new Error('You are signed out.');
@@ -164,6 +257,7 @@
   }
   const privateMediaCache=new Map();
   async function privateMediaBlob(kind,path){
+    if(emergencyBlocksNetwork())throw new Error('Private media is temporarily unavailable in Emergency Mode.');
     if(!path)throw new Error('Media path is required.');
     const bucket=BUCKETS[kind];if(!bucket)throw new Error('Unknown media type.');
     const s=await refresh();if(!s?.access_token)throw new Error('You are signed out.');
@@ -209,6 +303,7 @@
   }
 
   async function secure(action,payload={}){
+    if(emergencyBlocksNetwork())throw new Error('This server action is unavailable in Emergency Mode.');
     const s=await refresh();
     if(!s?.access_token)throw new Error('You are signed out.');
     const headers={
@@ -258,5 +353,5 @@
     return data;
   }
 
-  window.nihilityApi={configured,getSession,saveSession,sendMagicLink,sendPasswordReset,signInWithPassword,setPassword,signOut,checkPwnedPassword,readSessionFromUrl,refresh,user,rest,rpc,upload,uploadPkSystemMedia,privateMediaBlob,privateMediaUrl,deleteMedia,secure,secureBackup};
+  window.nihilityApi={configured,getSession,saveSession,cachedSessionUser,sendMagicLink,sendPasswordReset,signInWithPassword,setPassword,signOut,checkPwnedPassword,readSessionFromUrl,refresh,user,rest,rpc,upload,uploadPkSystemMedia,privateMediaBlob,privateMediaUrl,deleteMedia,secure,secureBackup};
 })();
