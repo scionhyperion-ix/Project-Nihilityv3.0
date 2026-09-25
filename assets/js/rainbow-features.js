@@ -159,7 +159,7 @@
     }
     if(!document.querySelector('#memberViewSelect')){
       const view=makeSelect('memberViewSelect','View',[
-        ['cards','Card'],['compact','Compact'],['list','List'],['tiles','Card tiles']
+        ['cards','Normal'],['compact','Compact'],['list','List'],['tiles','Card tiles'],['wide','Wide']
       ]);
       view.select.value=localStorage.getItem(MEMBER_VIEW_KEY)||'cards';
       view.select.onchange=()=>{localStorage.setItem(MEMBER_VIEW_KEY,view.select.value);renderMembers()};
@@ -216,6 +216,87 @@
     const bar=document.createElement('span');bar.className='member-color-bar';bar.style.background=m.color?'#'+m.color:'var(--accent)';card.append(bar);addArchivedBadge(card,m);
     card.onclick=()=>openMember(m);return card;
   }
+  let wideBannerObserver=null;
+  function setWideBanner(media,m){
+    if(!media?.isConnected)return;
+    const existing=media.querySelector('img');
+    if(m?.banner_url){
+      if(existing){existing.src=m.banner_url;return}
+      const img=document.createElement('img');
+      img.className='member-wide-banner-image';
+      img.src=m.banner_url;
+      img.alt='';
+      img.onerror=()=>img.remove();
+      media.append(img);
+    }else if(existing)existing.remove();
+  }
+  function ensureWideBannerObserver(){
+    if(wideBannerObserver||!('IntersectionObserver' in window))return wideBannerObserver;
+    wideBannerObserver=new IntersectionObserver(entries=>{
+      entries.forEach(entry=>{
+        if(!entry.isIntersecting)return;
+        const media=entry.target;
+        wideBannerObserver.unobserve(media);
+        const member=state.members.find(item=>item.id===media.dataset.memberWideBannerId);
+        if(!member)return;
+        void window.nihilityHydrateMemberMedia?.(member,{banner:true}).then(()=>setWideBanner(media,member));
+      });
+    },{rootMargin:'220px 0px'});
+    return wideBannerObserver;
+  }
+  function makeWideMemberCard(m){
+    const card=document.createElement('button');
+    card.type='button';
+    card.className='member-card member-card-wide';
+    card.setAttribute('aria-label','Open '+memberName(m));
+
+    const banner=document.createElement('div');
+    banner.className='member-wide-banner';
+    banner.style.setProperty('--member-wide-accent',m.color?'#'+m.color:'var(--accent)');
+    if(m.banner_url)setWideBanner(banner,m);
+    else if(m.banner_storage_path){
+      banner.dataset.memberWideBannerId=m.id;
+      requestAnimationFrame(()=>{
+        if(!banner.isConnected)return;
+        const observer=ensureWideBannerObserver();
+        if(observer)observer.observe(banner);
+        else void window.nihilityHydrateMemberMedia?.(m,{banner:true}).then(()=>setWideBanner(banner,m));
+      });
+    }
+
+    const body=document.createElement('div');
+    body.className='member-wide-body';
+    const avatarWrap=document.createElement('div');
+    avatarWrap.className='member-wide-avatar-wrap';
+    avatarWrap.append(avatarEl(m,'member-wide-avatar'));
+
+    const copy=document.createElement('div');
+    copy.className='member-wide-copy';
+    const display=document.createElement('strong');
+    display.className='member-wide-display-name';
+    display.textContent=m.display_name||m.name||'Unnamed member';
+    copy.append(display);
+
+    if(m.name&&m.display_name&&m.display_name!==m.name){
+      const name=document.createElement('span');
+      name.className='member-wide-name';
+      name.textContent=m.name;
+      copy.append(name);
+    }
+
+    if(m.pronouns){
+      const pronouns=document.createElement('span');
+      pronouns.className='member-wide-pronouns';
+      pronouns.textContent=m.pronouns;
+      copy.append(pronouns);
+    }
+
+    body.append(avatarWrap,copy);
+    card.append(banner,body);
+    if(m.archived_at)card.classList.add('archived-member');
+    card.onclick=()=>openMember(m);
+    return card;
+  }
 
   renderMembers=function renderMembersWithRainbowFeatures(){
     installMemberToolbar();
@@ -236,7 +317,7 @@
     const emptyTitle=empty.querySelector('h3'),emptyCopy=empty.querySelector('p');
     if(emptyTitle)emptyTitle.textContent=status==='archived'?'No archived members found':'No members found';
     if(emptyCopy)emptyCopy.textContent=status==='archived'?'Archived members will appear here.':'Create a member or import a copy from PluralKit.';
-    list.forEach(m=>grid.append(view==='tiles'?makeTileMemberCard(m):makeStandardMemberCard(m)));
+    list.forEach(m=>grid.append(view==='tiles'?makeTileMemberCard(m):view==='wide'?makeWideMemberCard(m):makeStandardMemberCard(m)));
   };
 
   function installMemberFields(){
