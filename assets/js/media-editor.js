@@ -345,14 +345,20 @@
     };
 
     file.addEventListener('change',()=>{
-      if(file.files?.[0])status.textContent=file.dataset.mediaAdjusted==='true'?'Adjusted image ready':'Image selected, adjust if needed';
-      else{
-        delete file.dataset.mediaAdjusted;
-        status.textContent='Crop, reposition or rotate';
-      }
+      const selected=file.files?.[0]||null;
+      const adjusted=Boolean(selected&&/^nihility-(avatar|banner)\.webp$/i.test(selected.name));
+      if(adjusted)file.dataset.mediaAdjusted='true';
+      else delete file.dataset.mediaAdjusted;
+      status.textContent=selected?(adjusted?'Adjusted image ready':'Image selected, adjust if needed'):'Crop, reposition or rotate';
     });
     url.addEventListener('input',()=>{
       status.textContent=url.value.trim()?'Link ready, adjust if needed':file.files?.[0]?'Image selected, adjust if needed':'Crop, reposition or rotate';
+    });
+    file.closest('form')?.addEventListener('reset',()=>{
+      setTimeout(()=>{
+        delete file.dataset.mediaAdjusted;
+        status.textContent='Crop, reposition or rotate';
+      },0);
     });
   }
 
