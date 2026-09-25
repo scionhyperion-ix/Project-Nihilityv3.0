@@ -347,6 +347,25 @@ function noteHelpEl(note,ariaLabel='Show note'){
   wrap.append(button,tooltip);
   return wrap;
 }
+function updateCurrentFrontViewport(){
+  const box=$('#currentFrontMembers');
+  if(!box)return;
+  box.removeAttribute('data-front-scroll');
+  box.style.removeProperty('--front-list-limit');
+
+  const rows=[...box.querySelectorAll('.front-person')];
+  if(rows.length<=4)return;
+
+  box.dataset.frontScroll='true';
+  box.style.setProperty('--front-list-limit','none');
+
+  const boxRect=box.getBoundingClientRect();
+  const fourthRect=rows[3].getBoundingClientRect();
+  const paddingBottom=parseFloat(getComputedStyle(box).paddingBottom)||0;
+  const limit=Math.ceil(fourthRect.bottom-boxRect.top+paddingBottom);
+  box.style.setProperty('--front-list-limit',Math.max(1,limit)+'px');
+}
+
 function renderHome(){
   $('#addCoFronterButton').disabled=false;
   $('#chooseAnyMemberButton').disabled=false;
@@ -400,6 +419,8 @@ function renderHome(){
     });
     updateFrontTimers();
   }
+  updateCurrentFrontViewport();
+
   const system=state.systemProfile||{};
   const systemName=system.name||system.display_name||state.integration?.external_system_name||'Nihility system';
   const systemId=system.id||state.integration?.external_system_id||'...';

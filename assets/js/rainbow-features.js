@@ -1060,8 +1060,19 @@
     if(homeName)homeName.textContent=name;
   }
 
+  const coreRenderHome=renderHome;
+  renderHome=function renderHomeWithFeatureParity(){
+    coreRenderHome();
+    renderTopFronter();
+    applyImportedSystemIdentity();
+  };
+
   const coreRenderAll=renderAll;
-  renderAll=function renderAllWithFeatureParity(){coreRenderAll();renderGroups();renderTopFronter();refreshFeatureControls();applyImportedSystemIdentity()};
+  renderAll=function renderAllWithFeatureParity(){
+    coreRenderAll();
+    renderGroups();
+    refreshFeatureControls();
+  };
 
   function refreshFeatureControls(){
     installMemberToolbar();installMemberFields();installGroupsRoute();installHistoryTools();installMultiCofronter();refreshGroupOptions();refreshHistoryMembers();
