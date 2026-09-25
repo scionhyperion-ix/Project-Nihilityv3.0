@@ -256,4 +256,8 @@
 
   installTimelineRoute();
   window.nihilitySystemTimeline={render:renderTimeline,loadOlder:loadOlderTimeline};
+  document.addEventListener('nihility-silent-refresh-applied',()=>{
+    if(state.route==='timeline')renderTimeline();
+  });
+
 })();
