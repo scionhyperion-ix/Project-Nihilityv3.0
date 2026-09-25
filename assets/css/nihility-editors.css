@@ -623,6 +623,160 @@ body:has(dialog[open]){
 }
 
 
+/* Group editor v5: show current members first, add members second. */
+.groups-members-under-preview{
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+}
+.groups-current-members{
+  flex:1 1 auto;
+  min-height:128px;
+  display:grid;
+  align-content:start;
+  gap:6px;
+  margin-top:9px;
+  padding-right:3px;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+}
+.groups-current-member-row{
+  min-width:0;
+  display:grid;
+  grid-template-columns:34px minmax(0,1fr) 28px;
+  align-items:center;
+  gap:9px;
+  padding:7px 7px 7px 8px;
+  border:1px solid transparent;
+  border-radius:10px;
+  background:color-mix(in srgb,var(--theme-surface-1) 48%,transparent);
+}
+.groups-current-member-row:hover{
+  border-color:var(--line);
+  background:color-mix(in srgb,var(--theme-surface-hover) 68%,transparent);
+}
+.groups-current-member-avatar{
+  width:34px;
+  height:34px;
+  border-radius:9px;
+  object-fit:cover;
+  flex:0 0 auto;
+}
+.groups-current-member-copy{
+  min-width:0;
+  display:grid;
+  gap:2px;
+}
+.groups-current-member-copy strong,
+.groups-current-member-copy small{
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.groups-current-member-copy strong{
+  font-size:.72rem;
+}
+.groups-current-member-copy small{
+  color:var(--muted);
+  font-size:.63rem;
+}
+.groups-current-member-remove{
+  width:28px;
+  min-width:28px;
+  height:28px;
+  padding:0;
+  border-radius:8px;
+  color:var(--muted);
+}
+.groups-current-member-remove:hover{
+  color:var(--danger);
+  background:color-mix(in srgb,var(--danger) 9%,transparent);
+  border-color:color-mix(in srgb,var(--danger) 30%,var(--line));
+}
+.groups-current-members-empty,
+.groups-add-members-empty{
+  margin:0;
+  padding:12px 9px;
+  font-size:.68rem;
+  line-height:1.4;
+}
+.groups-add-members-button{
+  flex:0 0 auto;
+  width:100%;
+  margin-top:9px;
+  padding:8px 10px;
+  border-radius:10px;
+  font-size:.68rem;
+}
+.groups-add-members-panel{
+  flex:0 1 230px;
+  min-height:150px;
+  display:grid;
+  grid-template-rows:auto minmax(0,1fr);
+  gap:7px;
+  margin-top:9px;
+  padding-top:9px;
+  border-top:1px solid var(--line);
+  overflow:hidden;
+}
+.groups-add-members-panel[hidden]{
+  display:none!important;
+}
+.groups-add-members-panel .groups-member-search{
+  width:100%;
+  max-width:none;
+  min-width:0;
+  min-height:38px;
+  margin:0;
+}
+.groups-add-members-panel .groups-member-search input{
+  min-width:0;
+}
+.groups-add-members-panel .groups-member-picker{
+  min-height:0;
+  max-height:none;
+  margin:0;
+  padding-right:3px;
+  overflow-y:auto;
+}
+.group-member-add-row{
+  width:100%;
+  min-width:0;
+  border:1px solid transparent;
+  background:transparent;
+  color:inherit;
+  font:inherit;
+  text-align:left;
+}
+.group-member-add-row:hover,
+.group-member-add-row:focus-visible{
+  border-color:var(--line);
+  background:var(--theme-surface-hover);
+  outline:none;
+}
+.group-member-add-icon{
+  margin-left:auto;
+  width:24px;
+  height:24px;
+  display:grid;
+  place-items:center;
+  flex:0 0 auto;
+  border:1px solid var(--line);
+  border-radius:7px;
+  color:var(--accent-2);
+  font-size:.8rem;
+  font-weight:800;
+}
+@media(max-width:760px){
+  .groups-current-members{
+    max-height:260px;
+  }
+  .groups-add-members-panel{
+    flex:none;
+    min-height:220px;
+  }
+}
+
 /* Owner backup and restore workspace. */
 .backup-panel .backup-actions{
   display:flex;
