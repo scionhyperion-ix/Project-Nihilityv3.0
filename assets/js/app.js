@@ -1367,6 +1367,30 @@ const AUTO_REFRESH_MS=15000;
 let autoRefreshBusy=false;
 let lastAutoRefreshAt=0;
 
+function autoRefreshFingerprint(){
+  const rows=(list,keys)=>(list||[]).map(row=>keys.map(key=>row?.[key]??null));
+  const system=state.systemProfile
+    ?Object.fromEntries(Object.entries(state.systemProfile).filter(([key])=>!['avatar_display_url','banner_display_url'].includes(key)))
+    :null;
+  return JSON.stringify({
+    members:rows(state.members,['id','updated_at','name','display_name','pronouns','color','description','birthday','archived_at','avatar_storage_path','banner_storage_path','metadata']),
+    fronts:rows(state.fronts,['id','updated_at','started_at','ended_at','note','source']),
+    frontMembers:rows(state.frontMembers,['id','updated_at','front_id','member_id','joined_at','left_at','note','private_note','mood','context','activity','location']),
+    groups:rows(state.groups,['id','updated_at','name','display_name','color','description','icon_storage_path','metadata']),
+    memberGroups:rows(state.memberGroups,['id','member_id','group_id','created_at']),
+    fieldDefinitions:rows(state.memberFieldDefinitions,['id','updated_at','key','label','field_type','position','description','options']),
+    fieldValues:rows(state.memberFieldValues,['id','updated_at','member_id','field_id','value']),
+    tags:rows(state.memberTags,['id','updated_at','name','color']),
+    tagLinks:rows(state.memberTagLinks,['id','member_id','tag_id','created_at']),
+    connections:rows(state.memberConnections,['id','updated_at','source_member_id','target_member_id','source_label','target_label']),
+    timeline:rows(state.timelineEvents,['id','updated_at','event_type','occurred_at','member_id','related_member_id','group_id','front_id','metadata']),
+    integration:state.integration?[state.integration.id,state.integration.updated_at,state.integration.external_system_id,state.integration.external_system_name]:null,
+    pkConnected:Boolean(state.pkConnected),
+    pkImported:Boolean(state.pkImported),
+    system
+  });
+}
+
 async function autoRefreshData({force=false}={}){
   if(autoRefreshBusy||!state.user||document.hidden||!navigator.onLine)return;
   if($('#appView')?.hidden)return;
@@ -1375,13 +1399,23 @@ async function autoRefreshData({force=false}={}){
   const now=Date.now();
   if(!force&&now-lastAutoRefreshAt<AUTO_REFRESH_MS-500)return;
   autoRefreshBusy=true;
+  const before=autoRefreshFingerprint();
+  let refreshed=false;
+  window.nihilitySilentRefresh=true;
   try{
     await loadData();
+    refreshed=true;
     lastAutoRefreshAt=Date.now();
   }catch(error){
     console.warn('Automatic refresh failed',error);
   }finally{
+    window.nihilitySilentRefresh=false;
     autoRefreshBusy=false;
+  }
+  if(refreshed&&before!==autoRefreshFingerprint()){
+    requestAnimationFrame(()=>{
+      if(!document.hidden&&!document.querySelector('dialog[open]'))renderAll();
+    });
   }
 }
 
