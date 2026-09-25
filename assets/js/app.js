@@ -80,6 +80,22 @@ function avatarEl(item,cls='member-card-avatar'){
   return d
 }
 
+async function removeLegacyEmergencyWorker(){
+  if('serviceWorker' in navigator){
+    try{
+      const scope=new URL('./',document.baseURI).href;
+      const registrations=await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.filter(registration=>registration.scope===scope).map(registration=>registration.unregister()));
+    }catch(error){console.warn('Unable to unregister the retired Emergency Mode service worker',error)}
+  }
+  if('caches' in window){
+    try{
+      const keys=await caches.keys();
+      await Promise.all(keys.filter(key=>key.startsWith('nihility-shell-')).map(key=>caches.delete(key)));
+    }catch(error){console.warn('Unable to clear the retired Emergency Mode app-shell cache',error)}
+  }
+}
+
 function setView(name){$('#loadingView').hidden=name!=='loading';$('#setupView').hidden=name!=='setup';$('#loginView').hidden=name!=='login';$('#resetView').hidden=name!=='reset';$('#deniedView').hidden=name!=='denied';$('#appView').hidden=name!=='app'}
 window.nihilityCoreDataReady=false;
 function setLoadingStatus(message){
@@ -188,37 +204,12 @@ function updateFrontTimers(){
 }
 
 async function bootstrapProfile(){
-  const emergency=window.nihilityEmergency;
-  emergency?.setCurrentUser?.(state.user?.id||null);
-
-  // If Auth already had to fall back to the locally verified session identity,
-  // do not wait on another unhealthy Supabase request before using the matching
-  // encrypted Emergency Mode snapshot.
-  if(state.user?.__emergency_cached_identity){
-    const cached=await emergency?.restoreState?.(state.user.id,state).catch(()=>null);
-    if(cached?.data?.profile){
-      state.profile=cached.data.profile;
-      emergency?.enter?.('Supabase is temporarily unavailable. Showing your last synchronized Nihility data.');
-      return true;
-    }
-  }
-
-  try{
-    const rows=await nihilityApi.rest('profiles',{
-      query:'select=*&user_id=eq.'+state.user.id+'&limit=1',
-      timeoutMs:4500
-    });
-    state.profile=rows?.[0]||null;
-    return Boolean(state.profile);
-  }catch(error){
-    const snapshot=await emergency?.restoreState?.(state.user?.id,state);
-    if(snapshot?.data?.profile){
-      state.profile=snapshot.data.profile;
-      emergency?.enter?.('Supabase is temporarily unavailable. Showing your last synchronized Nihility data.');
-      return true;
-    }
-    throw error;
-  }
+  const rows=await nihilityApi.rest('profiles',{
+    query:'select=*&user_id=eq.'+state.user.id+'&limit=1',
+    timeoutMs:4500
+  });
+  state.profile=rows?.[0]||null;
+  return Boolean(state.profile);
 }
 async function hydrateMemberMedia(member,{banner=false}={}){
   if(!member)return member;
@@ -268,33 +259,12 @@ async function hydrateHomeMedia(){
 async function loadData(){
   const frontVersion=frontMutationVersion;
   const initial=Boolean(window.nihilityInitialHydration);
-  const emergency=window.nihilityEmergency;
 
-  if(emergency?.isActive?.()&&!emergency?.canUseNetwork?.()){
-    const snapshot=await emergency.restoreState(state.user?.id,state);
-    if(!snapshot)throw new Error('Emergency Mode has no cached snapshot for this account yet.');
-    window.nihilityCoreDataReady=true;
-    document.dispatchEvent(new CustomEvent('nihility-core-data-ready'));
-    return;
-  }
-
-  let core;
-  try{
-    core=await Promise.all([
-      nihilityApi.rest('members',{query:'select=*&order=name.asc',timeoutMs:12000}),
-      nihilityApi.rest('fronts',{query:'select=*&order=started_at.desc&limit=100',timeoutMs:12000}),
-      nihilityApi.rest('front_members',{query:'select=*&order=joined_at.desc',timeoutMs:12000})
-    ]);
-  }catch(error){
-    const snapshot=await emergency?.restoreState?.(state.user?.id,state);
-    if(snapshot){
-      emergency?.enter?.('Supabase is not responding reliably. Showing your last synchronized Nihility data.');
-      window.nihilityCoreDataReady=true;
-      document.dispatchEvent(new CustomEvent('nihility-core-data-ready'));
-      return;
-    }
-    throw error;
-  }
+  const core=await Promise.all([
+    nihilityApi.rest('members',{query:'select=*&order=name.asc',timeoutMs:12000}),
+    nihilityApi.rest('fronts',{query:'select=*&order=started_at.desc&limit=100',timeoutMs:12000}),
+    nihilityApi.rest('front_members',{query:'select=*&order=joined_at.desc',timeoutMs:12000})
+  ]);
 
   state.members=core[0]||[];
   if(frontVersion===frontMutationVersion){
@@ -1011,19 +981,6 @@ async function refreshFrontState(version=frontMutationVersion){
 async function logFront(memberDetails,timestamp,note=null){
   const startedAt=timestamp||new Date().toISOString();
   const version=++frontMutationVersion;
-  const emergency=window.nihilityEmergency;
-
-  if(emergency?.isActive?.()&&!emergency?.canUseNetwork?.()){
-    const operation=await emergency.queueOperation(state.user.id,'front-log',{
-      memberDetails,
-      startedAt,
-      note:note||null
-    });
-    applyCommittedFront('offline:'+operation.id,memberDetails,startedAt,note);
-    await emergency.captureState(state.user.id,state);
-    return{queued:true,operationId:operation.id};
-  }
-
   const result=await nihilityApi.rpc('log_front_detailed',{p_member_details:memberDetails,p_started_at:startedAt,p_note:note||null});
   const frontId=typeof result==='string'?result:String(result?.id||'');
   if(frontId)applyCommittedFront(frontId,memberDetails,startedAt,note);
@@ -1395,6 +1352,7 @@ async function invite(e){
 }
 
 async function boot(){
+  void removeLegacyEmergencyWorker();
   initTheme();
   setLoadingStatus('Checking your saved session...');
   localStorage.removeItem('nihility_pk_token');sessionStorage.removeItem('nihility_pk_token_session');
@@ -1415,14 +1373,13 @@ async function boot(){
     if(message)message.textContent='Your session could not be verified. Sign in again, or retry when the data service is available.';
     return;
   }
-  window.nihilityEmergency?.setCurrentUser?.(state.user.id);
   if(new URLSearchParams(location.search).get('reset')==='1'){setView('reset');return}
 
   setLoadingStatus('Checking account access...');
   if(!await bootstrapProfile()){setView('denied');return}
 
   setView('loading');
-  setLoadingStatus(window.nihilityEmergency?.isActive?.()?'Opening cached Nihility data...':'Loading members and current fronts...');
+  setLoadingStatus('Loading members and current fronts...');
   window.nihilityInitialHydration=true;
   window.nihilityCoreDataReady=false;
 
@@ -1451,10 +1408,6 @@ async function boot(){
   void fullLoadPromise.then(async()=>{
     window.nihilityInitialHydration=false;
     lastFullAutoRefreshAt=Date.now();
-    if(!window.nihilityEmergency?.isActive?.()){
-      try{await window.nihilityEmergency?.captureState?.(state.user.id,state)}
-      catch(error){console.warn('Unable to update Emergency Mode snapshot',error)}
-    }
     if($('#appView')?.hidden)return;
 
     if(window.nihilityCoreDataReady)setRoute(state.route||'home');
@@ -1506,14 +1459,9 @@ $('#passwordForm').onsubmit=async e=>{e.preventDefault();const m=$('#passwordMes
 async function signOut(){
   const button=$('#signOutButton');
   if(button)button.disabled=true;
-  const userId=state.user?.id||null;
   try{await nihilityApi.signOut('local')}
   catch(error){console.warn('Server sign-out failed; local session will still be cleared.',error)}
   finally{
-    if(userId){
-      try{await window.nihilityEmergency?.deleteSnapshot?.(userId)}
-      catch(error){console.warn('Unable to clear local Emergency Mode cache during sign-out',error)}
-    }
     nihilityApi.saveSession(null);
     location.reload();
   }
@@ -1610,53 +1558,6 @@ document.addEventListener('nihility-media-preview',event=>{
   }
 });
 $('#inviteForm').onsubmit=invite;
-async function replayEmergencyOperation(operation){
-  if(operation.type==='front-log'){
-    const payload=operation.payload||{};
-    return nihilityApi.rpc('log_front_detailed',{
-      p_member_details:Array.isArray(payload.memberDetails)?payload.memberDetails:[],
-      p_started_at:payload.startedAt||operation.created_at,
-      p_note:payload.note||null
-    });
-  }
-  throw new Error('Unsupported queued Emergency Mode operation: '+operation.type);
-}
-
-let emergencyRecoveryBusy=false;
-async function attemptEmergencyRecovery({automatic=false}={}){
-  const emergency=window.nihilityEmergency;
-  if(!emergency?.isActive?.()||!state.user||emergencyRecoveryBusy||!navigator.onLine)return false;
-  emergencyRecoveryBusy=true;
-  try{
-    await emergency.withNetworkAccess(async()=>{
-      await nihilityApi.rest('profiles',{
-        query:'select=user_id&user_id=eq.'+encodeURIComponent(state.user.id)+'&limit=1',
-        timeoutMs:5000
-      });
-      await emergency.flushQueue(state.user.id,replayEmergencyOperation);
-      window.nihilitySilentRefresh=true;
-      try{await loadData()}
-      finally{window.nihilitySilentRefresh=false}
-    });
-
-    await emergency.captureState(state.user.id,state);
-    emergency.exit('Supabase is responding again. Cached changes were synchronized.');
-    lastAutoRefreshAt=Date.now();
-    lastFullAutoRefreshAt=Date.now();
-    setRoute(state.route||'home');
-    if(!automatic)toast('Back online','Cached Nihility data and queued front changes are synchronized.');
-    return true;
-  }catch(error){
-    console.warn('Emergency Mode recovery check failed',error);
-    emergency.enter('Supabase is still unavailable. Nihility is continuing from the local cache.');
-    if(!automatic)toast('Still in Emergency Mode',error.message||'Supabase is not ready yet.','error');
-    return false;
-  }finally{
-    emergencyRecoveryBusy=false;
-  }
-}
-window.nihilityEmergency?.setRetryHandler?.(attemptEmergencyRecovery);
-
 const AUTO_REFRESH_MS=15000;
 const FULL_AUTO_REFRESH_MS=90000;
 let autoRefreshBusy=false;
@@ -1706,10 +1607,6 @@ async function refreshLiveFrontData(){
 }
 
 async function autoRefreshData({force=false,full=false}={}){
-  if(window.nihilityEmergency?.isActive?.()){
-    if(force&&navigator.onLine)void attemptEmergencyRecovery({automatic:true});
-    return;
-  }
   if(autoRefreshBusy||!state.user||document.hidden||!navigator.onLine)return;
   if($('#appView')?.hidden)return;
   if(document.querySelector('dialog[open]'))return;
@@ -1729,7 +1626,6 @@ async function autoRefreshData({force=false,full=false}={}){
     if(doFull){
       await loadData();
       lastFullAutoRefreshAt=Date.now();
-      await window.nihilityEmergency?.captureState?.(state.user.id,state);
     }else{
       await refreshLiveFrontData();
     }
@@ -1761,14 +1657,10 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)void autoR
 window.addEventListener('focus',()=>{if(Date.now()-lastAutoRefreshAt>5000)void autoRefreshData({force:true})});
 window.addEventListener('online',()=>void autoRefreshData({force:true,full:true}));
 
-document.addEventListener('nihility-emergency-queue-change',()=>{
-  if(state.user)void window.nihilityEmergency?.captureState?.(state.user.id,state);
-});
-
 setInterval(updateFrontTimers,15000);
 boot().then(()=>{lastAutoRefreshAt=Date.now()}).catch(error=>{
   console.error(error);
   setView('login');
   const message=$('#loginMessage');
-  if(message)message.textContent='Nihility could not verify this account and no Emergency Mode snapshot was available. '+(error.message||'Try again shortly.');
+  if(message)message.textContent='Nihility could not verify this account. '+(error.message||'Try again shortly.');
 });
