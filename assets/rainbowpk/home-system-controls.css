@@ -281,7 +281,7 @@
   }
 
   #homeRoute .current-front-panel .current-front-actions {
-    margin-bottom: 5px;
+    margin-bottom: 0;
   }
 }
 
