@@ -18,7 +18,7 @@
   <link rel="stylesheet" href="assets/rainbowpk/site-features.css?v=1">
   <link rel="stylesheet" href="assets/rainbowpk/member-color-picker.css?v=1">
   <link rel="stylesheet" href="assets/rainbowpk/app-theme-shell.css?v=1">
-  <link rel="stylesheet" href="assets/css/nihility-rainbow-adapter.css?v=11">
+  <link rel="stylesheet" href="assets/css/nihility-rainbow-adapter.css?v=12">
   <link rel="stylesheet" href="assets/css/nihility-editors.css?v=31">
   <link rel="stylesheet" href="assets/css/media-editor.css?v=1">
   <link rel="stylesheet" href="assets/rainbowpk/member-sort.css?v=4">
@@ -267,8 +267,16 @@
     <nav class="mobile-nav" aria-label="Mobile navigation">
       <button class="mobile-nav-item active" data-route="home" type="button"><span>⌂</span>Home</button>
       <button class="mobile-nav-item" data-route="members" type="button"><span>𐀪</span>Members</button>
-      <button class="mobile-nav-item" data-route="history" type="button"><span>↻</span>History</button>
-      <button class="mobile-nav-item" data-route="settings" type="button"><span>⚙</span>Settings</button>
+      <button class="mobile-nav-item" data-route="groups" type="button"><span>▦</span>Groups</button>
+      <button class="mobile-nav-item" data-route="journal" type="button"><span>✎</span>Journal</button>
+      <div class="mobile-nav-more">
+        <button id="mobileNavMoreButton" class="mobile-nav-item mobile-nav-more-button" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="mobileNavMoreMenu"><span>•••</span>Others</button>
+        <div id="mobileNavMoreMenu" class="mobile-nav-more-menu" role="menu" hidden>
+          <button class="mobile-nav-more-option" data-route="settings" role="menuitem" type="button"><span>⚙</span><span>Settings</span></button>
+          <button class="mobile-nav-more-option" data-route="timeline" role="menuitem" type="button"><span>◷</span><span>Timeline</span></button>
+          <button class="mobile-nav-more-option" data-route="history" role="menuitem" type="button"><span>↻</span><span>History</span></button>
+        </div>
+      </div>
     </nav>
   </div>
 
@@ -436,7 +444,7 @@
   <script src="assets/js/api.js?v=16" defer></script>
   <script src="assets/js/media-editor.js?v=3" defer></script>
   <script src="assets/js/backup.js?v=1" defer></script>
-  <script src="assets/js/app.js?v=49" defer></script>
+  <script src="assets/js/app.js?v=50" defer></script>
   <script src="assets/js/rainbow-features.js?v=25" defer></script>
   <script src="assets/js/member-custom-fields.js?v=7" defer></script>
   <script src="assets/js/member-connections.js?v=1" defer></script>
