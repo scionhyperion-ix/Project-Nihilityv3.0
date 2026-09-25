@@ -81,19 +81,32 @@ function avatarEl(item,cls='member-card-avatar'){
 }
 
 async function removeLegacyEmergencyWorker(){
+  let controlledByLegacyWorker=false;
+  let removedLegacyWorker=false;
+  let removedLegacyCache=false;
+
   if('serviceWorker' in navigator){
     try{
+      const controllerUrl=navigator.serviceWorker.controller?.scriptURL||'';
+      controlledByLegacyWorker=/\/sw\.js(?:$|\?)/.test(controllerUrl);
       const scope=new URL('./',document.baseURI).href;
       const registrations=await navigator.serviceWorker.getRegistrations();
-      await Promise.all(registrations.filter(registration=>registration.scope===scope).map(registration=>registration.unregister()));
+      const legacy=registrations.filter(registration=>registration.scope===scope&&/\/sw\.js(?:$|\?)/.test(registration.active?.scriptURL||registration.waiting?.scriptURL||registration.installing?.scriptURL||''));
+      const results=await Promise.all(legacy.map(registration=>registration.unregister()));
+      removedLegacyWorker=results.some(Boolean);
     }catch(error){console.warn('Unable to unregister the retired Emergency Mode service worker',error)}
   }
+
   if('caches' in window){
     try{
       const keys=await caches.keys();
-      await Promise.all(keys.filter(key=>key.startsWith('nihility-shell-')).map(key=>caches.delete(key)));
+      const legacyKeys=keys.filter(key=>key.startsWith('nihility-shell-'));
+      const results=await Promise.all(legacyKeys.map(key=>caches.delete(key)));
+      removedLegacyCache=results.some(Boolean);
     }catch(error){console.warn('Unable to clear the retired Emergency Mode app-shell cache',error)}
   }
+
+  return{controlledByLegacyWorker,removedLegacyWorker,removedLegacyCache};
 }
 
 function setView(name){$('#loadingView').hidden=name!=='loading';$('#setupView').hidden=name!=='setup';$('#loginView').hidden=name!=='login';$('#resetView').hidden=name!=='reset';$('#deniedView').hidden=name!=='denied';$('#appView').hidden=name!=='app'}
@@ -1352,7 +1365,13 @@ async function invite(e){
 }
 
 async function boot(){
-  void removeLegacyEmergencyWorker();
+  const legacyCleanup=await removeLegacyEmergencyWorker();
+  if(legacyCleanup.controlledByLegacyWorker&&!sessionStorage.getItem('nihility_legacy_sw_reloaded')){
+    sessionStorage.setItem('nihility_legacy_sw_reloaded','1');
+    location.reload();
+    return;
+  }
+  sessionStorage.removeItem('nihility_legacy_sw_reloaded');
   initTheme();
   setLoadingStatus('Checking your saved session...');
   localStorage.removeItem('nihility_pk_token');sessionStorage.removeItem('nihility_pk_token_session');
