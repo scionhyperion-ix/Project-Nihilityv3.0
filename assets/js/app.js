@@ -110,7 +110,7 @@ function setRoute(route){
   state.route=route;
   const meta={home:['Overview','Home'],members:['System directory','Members'],history:['Front tracking','Front history'],settings:['Connection and privacy','Settings'],profile:['Account','Profile']};
   const pair=meta[route]||meta.home;$('#pageEyebrow').textContent=pair[0];$('#pageTitle').textContent=pair[1];
-  $('.route-view').forEach(v=>v.hidden=v.id!==route+'Route');$('[data-route]').forEach(b=>b.classList.toggle('active',b.dataset.route===route));
+  $$('.route-view').forEach(v=>v.hidden=v.id!==route+'Route');$$('[data-route]').forEach(b=>b.classList.toggle('active',b.dataset.route===route));
   history.replaceState(null,'',route==='home'?location.pathname:(location.pathname+'#'+route));
 
   // Render only the route the user is actually opening. Building every hidden
@@ -1519,7 +1519,7 @@ async function signOut(){
   }
 }
 $('#signOutButton').onclick=signOut;$('#deniedSignOut').onclick=signOut;$('#sidebarProfileButton').onclick=()=>setRoute('profile');
-$('[data-route]').forEach(b=>b.onclick=()=>setRoute(b.dataset.route));$('[data-route-link]').forEach(b=>b.onclick=()=>setRoute(b.dataset.routeLink));
+$$('[data-route]').forEach(b=>b.onclick=()=>setRoute(b.dataset.route));$$('[data-route-link]').forEach(b=>b.onclick=()=>setRoute(b.dataset.routeLink));
 
 const mobileNavMoreButton=$('#mobileNavMoreButton');
 const mobileNavMoreMenu=$('#mobileNavMoreMenu');
