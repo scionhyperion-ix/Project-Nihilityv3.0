@@ -21,7 +21,7 @@
     state.timelineEvents=rows;
     state.timelineLoaded=rows.length;
     state.timelineHasMore=rows.length===PAGE_SIZE;
-    renderTimeline();
+    if(!window.nihilitySilentRefresh)renderTimeline();
   };
 
   function memberNameById(id){
