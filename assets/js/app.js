@@ -468,7 +468,7 @@ function renderSettings(){
   renderThemeOptions();const connected=Boolean(state.integration&&state.pkConnected);$('#pkDisconnected').hidden=connected;$('#pkConnected').hidden=!connected;
   const importButton=$('#importPkButton');if(importButton)importButton.textContent=state.pkImported?'Sync PK':'Import system';
   if(state.integration){$('#pkSystemName').textContent=state.integration.external_system_name||'PluralKit system';$('#pkSystemId').textContent=state.integration.external_system_id||'...'}
-  const backupPanel=$('#backupPanel');if(backupPanel)backupPanel.hidden=state.profile?.role!=='owner';
+  const backupPanel=$('#backupPanel');if(backupPanel)backupPanel.hidden=!state.profile;
 }
 function renderProfile(){
   if(!state.profile)return;
@@ -477,8 +477,8 @@ function renderProfile(){
   $('#profileDisplayName').value=state.profile.display_name||'';
   $('#profileAvatarUrl').value=state.profile.avatar_storage_path?'':(state.profile.avatar_url||'');
   $('#profileBannerUrl').value=state.profile.banner_storage_path?'':(state.profile.banner_url||'');
-  $('#profileRole').textContent=state.profile.role==='owner'?'Owner':'Member';
-  $('#invitePanel').hidden=state.profile.role!=='owner';
+  const currentEmail=$('#currentAccountEmail');
+  if(currentEmail)currentEmail.value=state.user.email||'';
   const banner=$('#profileBannerPreview');
   if(banner){
     const url=state.profile.banner_storage_path?state.profile.banner_url||'':'';
@@ -515,7 +515,6 @@ function setBackupExportBusy(busy){
   if(preview)preview.disabled=busy||!$('#backupFileInput')?.files?.[0];
 }
 async function exportBackup(includeMedia=false){
-  if(state.profile?.role!=='owner')return;
   const message=$('#backupMessage');
   setBackupExportBusy(true);
   message.textContent='Preparing secure backup...';
@@ -1369,18 +1368,6 @@ async function saveProfile(e){
     msg.textContent=error.message
   }
 }
-async function invite(e){
-  e.preventDefault();
-  const msg=$('#inviteMessage');
-  const email=$('#inviteEmail').value.trim().toLowerCase();
-  msg.textContent='Creating invite...';
-  try{
-    await nihilityApi.rest('account_invites',{method:'DELETE',query:'email=eq.'+encodeURIComponent(email),prefer:'return=minimal'});
-    await nihilityApi.rest('account_invites',{method:'POST',body:{email,invited_by:state.user.id},prefer:'return=minimal'});
-    msg.textContent='Invite created. They can now sign in with that email.';
-    $('#inviteForm').reset();
-  }catch(error){msg.textContent=error.message}
-}
 
 async function boot(){
   const legacyCleanup=await removeLegacyEmergencyWorker();
@@ -1492,7 +1479,48 @@ async function verifyNewPassword(password,message){
   return true;
 }
 $('#resetPasswordForm').onsubmit=async e=>{e.preventDefault();const m=$('#resetPasswordMessage'),password=$('#resetPasswordInput').value;try{if(!await verifyNewPassword(password,m))return;m.textContent='Saving...';await nihilityApi.setPassword(password);m.textContent='Password saved. Redirecting...';history.replaceState(null,'',location.pathname);setTimeout(()=>location.reload(),600)}catch(error){m.textContent=error.message}};
-$('#passwordForm').onsubmit=async e=>{e.preventDefault();const m=$('#passwordMessage'),password=$('#newPasswordInput').value;try{if(!await verifyNewPassword(password,m))return;m.textContent='Saving...';await nihilityApi.setPassword(password);$('#newPasswordInput').value='';m.textContent='Password saved. You can use it the next time you sign in.'}catch(error){m.textContent=error.message}};
+$('#emailChangeForm').onsubmit=async e=>{
+  e.preventDefault();
+  const m=$('#emailChangeMessage');
+  const input=$('#newAccountEmail');
+  const email=input.value.trim().toLowerCase();
+  const current=String(state.user?.email||'').trim().toLowerCase();
+  if(!email){m.textContent='Enter a new email address.';return}
+  if(email===current){m.textContent='That is already your current email address.';return}
+  try{
+    m.textContent='Requesting email change...';
+    await nihilityApi.setEmail(email);
+    const updated=await nihilityApi.user();
+    if(updated?.email&&String(updated.email).toLowerCase()===email){
+      state.user=updated;
+      input.value='';
+      renderProfile();
+      m.textContent='Email changed successfully.';
+    }else{
+      input.value='';
+      m.textContent='Check your inbox to confirm the new email address. Your current email stays active until the change is confirmed.';
+    }
+  }catch(error){
+    m.textContent=error.message;
+  }
+};
+$('#passwordForm').onsubmit=async e=>{
+  e.preventDefault();
+  const m=$('#passwordMessage');
+  const password=$('#newPasswordInput').value;
+  const confirmPassword=$('#confirmNewPasswordInput').value;
+  try{
+    if(password!==confirmPassword){m.textContent='The new passwords do not match.';return}
+    if(!await verifyNewPassword(password,m))return;
+    m.textContent='Changing password...';
+    await nihilityApi.setPassword(password);
+    $('#newPasswordInput').value='';
+    $('#confirmNewPasswordInput').value='';
+    m.textContent='Password changed successfully.';
+  }catch(error){
+    m.textContent=error.message;
+  }
+};
 async function signOut(){
   const button=$('#signOutButton');
   if(button)button.disabled=true;
@@ -1594,7 +1622,6 @@ document.addEventListener('nihility-media-preview',event=>{
     }
   }
 });
-$('#inviteForm').onsubmit=invite;
 const AUTO_REFRESH_MS=15000;
 const FULL_AUTO_REFRESH_MS=90000;
 let autoRefreshBusy=false;

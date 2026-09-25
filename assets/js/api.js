@@ -88,6 +88,7 @@
     const s={access_token:data.access_token,refresh_token:data.refresh_token,expires_at:Date.now()+Number(data.expires_in||3600)*1000};
     saveSession(s);clearPkceFlow();return data.user||null;
   }
+  async function setEmail(email){return raw('/auth/v1/user',{method:'PUT',body:{email}})}
   async function setPassword(password){return raw('/auth/v1/user',{method:'PUT',body:{password}})}
   async function signOut(scope='local'){
     const session=getSession();
@@ -308,5 +309,5 @@
     return data;
   }
 
-  window.nihilityApi={configured,getSession,saveSession,sendMagicLink,sendPasswordReset,signInWithPassword,setPassword,signOut,checkPwnedPassword,readSessionFromUrl,refresh,user,rest,rpc,upload,uploadPkSystemMedia,privateMediaBlob,privateMediaUrl,deleteMedia,secure,secureBackup};
+  window.nihilityApi={configured,getSession,saveSession,sendMagicLink,sendPasswordReset,signInWithPassword,setEmail,setPassword,signOut,checkPwnedPassword,readSessionFromUrl,refresh,user,rest,rpc,upload,uploadPkSystemMedia,privateMediaBlob,privateMediaUrl,deleteMedia,secure,secureBackup};
 })();
