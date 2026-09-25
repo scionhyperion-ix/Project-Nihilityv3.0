@@ -1365,6 +1365,7 @@ async function boot(){
 
   void fullLoadPromise.then(()=>{
     window.nihilityInitialHydration=false;
+    lastFullAutoRefreshAt=Date.now();
     if($('#appView')?.hidden)return;
 
     if(window.nihilityCoreDataReady)setRoute(state.route||'home');
