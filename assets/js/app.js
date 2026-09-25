@@ -236,11 +236,6 @@ async function loadData(){
   const frontVersion=frontMutationVersion;
   const initial=Boolean(window.nihilityInitialHydration);
 
-  const integrationPromise=Promise.all([
-    nihilityApi.rest('external_integrations',{query:'provider=eq.pluralkit&select=*',timeoutMs:12000}),
-    nihilityApi.rest('imports',{query:'source=eq.pluralkit&select=id&limit=1',timeoutMs:12000})
-  ]);
-
   const core=await Promise.all([
     nihilityApi.rest('members',{query:'select=*&order=name.asc',timeoutMs:12000}),
     nihilityApi.rest('fronts',{query:'select=*&order=started_at.desc&limit=100',timeoutMs:12000}),
@@ -256,6 +251,11 @@ async function loadData(){
   // Home no longer waits on integration/import metadata.
   window.nihilityCoreDataReady=true;
   document.dispatchEvent(new CustomEvent('nihility-core-data-ready'));
+
+  const integrationPromise=Promise.all([
+    nihilityApi.rest('external_integrations',{query:'provider=eq.pluralkit&select=*',timeoutMs:12000}),
+    nihilityApi.rest('imports',{query:'source=eq.pluralkit&select=id&limit=1',timeoutMs:12000})
+  ]);
 
   const applyIntegration=async()=>{
     const data=await integrationPromise;
@@ -1369,10 +1369,11 @@ async function boot(){
 
     if(window.nihilityCoreDataReady)setRoute(state.route||'home');
 
-    // Heavy hidden routes can be prepared only when the browser has spare time.
+    // Refresh only lightweight controls when the browser has spare time.
+    // Hidden member/history/group cards are rendered lazily when opened.
     const finish=()=>{
       if($('#appView')?.hidden)return;
-      renderAll();
+      window.nihilityRefreshFeatureControls?.();
       if(state.route==='timeline')window.nihilitySystemTimeline?.render?.();
       document.dispatchEvent(new CustomEvent('nihility-initial-hydration-complete'));
     };
