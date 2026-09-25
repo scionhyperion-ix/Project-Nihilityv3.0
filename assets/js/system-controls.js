@@ -357,6 +357,7 @@
   renderHome=function renderHomeWithSystemControls(){
     previousRenderHome();
     ensureSystemEditButton();
+    requestAnimationFrame(()=>window.nihilitySyncHomeHeroPanelHeights?.());
   };
 
   const previousRenderAll=renderAll;
@@ -368,4 +369,10 @@
 
   ensureSystemEditButton();
   ensureSystemEditor();
+
+  if('ResizeObserver' in window){
+    const homeSystemResizeObserver=new ResizeObserver(()=>window.nihilitySyncHomeHeroPanelHeights?.());
+    homeSystemResizeObserver.observe(systemPanel);
+  }
+  window.addEventListener('resize',()=>requestAnimationFrame(()=>window.nihilitySyncHomeHeroPanelHeights?.()));
 })();
