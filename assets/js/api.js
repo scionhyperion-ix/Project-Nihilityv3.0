@@ -8,12 +8,35 @@
   const getSession=()=>{try{return JSON.parse(sessionStorage.getItem(SESSION_KEY)||'null')}catch{return null}};
   const saveSession=s=>s?sessionStorage.setItem(SESSION_KEY,JSON.stringify(s)):sessionStorage.removeItem(SESSION_KEY);
   async function raw(path,options={}){
-    const session=getSession(),headers={apikey:cfg.SUPABASE_ANON_KEY,...(options.headers||{})};
+    const {timeoutMs=0,...requestOptions}=options;
+    const session=getSession(),headers={apikey:cfg.SUPABASE_ANON_KEY,...(requestOptions.headers||{})};
     if(session?.access_token)headers.Authorization='Bearer '+session.access_token;
-    if(options.body!==undefined&&options.body!==null&&typeof options.body!=='string'&&!(options.body instanceof Blob))headers['Content-Type']='application/json';
-    const response=await fetch(cfg.SUPABASE_URL+path,{...options,headers,body:options.body!==undefined&&options.body!==null&&typeof options.body!=='string'&&!(options.body instanceof Blob)?JSON.stringify(options.body):options.body});
-    const text=await response.text();let data=null;try{data=text?JSON.parse(text):null}catch{data=text}
-    if(!response.ok)throw new Error(data?.message||data?.msg||data?.error_description||data?.error||response.statusText);return data;
+    if(requestOptions.body!==undefined&&requestOptions.body!==null&&typeof requestOptions.body!=='string'&&!(requestOptions.body instanceof Blob))headers['Content-Type']='application/json';
+
+    let controller=null,timer=null;
+    if(timeoutMs>0&&!requestOptions.signal){
+      controller=new AbortController();
+      requestOptions.signal=controller.signal;
+      timer=setTimeout(()=>controller.abort(),timeoutMs);
+    }
+
+    try{
+      const response=await fetch(cfg.SUPABASE_URL+path,{
+        ...requestOptions,
+        headers,
+        body:requestOptions.body!==undefined&&requestOptions.body!==null&&typeof requestOptions.body!=='string'&&!(requestOptions.body instanceof Blob)
+          ?JSON.stringify(requestOptions.body)
+          :requestOptions.body
+      });
+      const text=await response.text();let data=null;try{data=text?JSON.parse(text):null}catch{data=text}
+      if(!response.ok)throw new Error(data?.message||data?.msg||data?.error_description||data?.error||response.statusText);
+      return data;
+    }catch(error){
+      if(error?.name==='AbortError')throw new Error('The data service took too long to respond.');
+      throw error;
+    }finally{
+      if(timer)clearTimeout(timer);
+    }
   }
   function base64url(bytes){return btoa(String.fromCharCode(...bytes)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
   async function beginPkceFlow(kind){
@@ -97,7 +120,7 @@
   }
   async function refresh(){let s=getSession();if(!s)return null;if(!s.expires_at||s.expires_at-Date.now()>60000)return s;if(!s.refresh_token)return s;const r=await fetch(cfg.SUPABASE_URL+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{apikey:cfg.SUPABASE_ANON_KEY,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:s.refresh_token})});if(!r.ok){saveSession(null);return null}const d=await r.json();s={access_token:d.access_token,refresh_token:d.refresh_token||s.refresh_token,expires_at:Date.now()+Number(d.expires_in||3600)*1000};saveSession(s);return s}
   async function user(){const s=await refresh();if(!s)return null;try{return await raw('/auth/v1/user')}catch{saveSession(null);return null}}
-  async function rest(table,{method='GET',query='',body=null,prefer=''}={}){const headers={};if(prefer)headers.Prefer=prefer;return raw('/rest/v1/'+table+(query?'?'+query:''),{method,headers,body})}
+  async function rest(table,{method='GET',query='',body=null,prefer='',timeoutMs=0}={}){const headers={};if(prefer)headers.Prefer=prefer;return raw('/rest/v1/'+table+(query?'?'+query:''),{method,headers,body,timeoutMs})}
   async function rpc(name,body={}){return raw('/rest/v1/rpc/'+encodeURIComponent(name),{method:'POST',body})}
   function encPath(path){return String(path).split('/').map(encodeURIComponent).join('/')}
   async function upload(kind,file){
