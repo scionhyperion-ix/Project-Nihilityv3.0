@@ -281,7 +281,8 @@
   }
 
   #homeRoute .current-front-panel .current-front-actions {
-    justify-content: center;
+    justify-content: flex-start;
+    padding-left: 18px;
     gap: 24px;
     margin-bottom: 10px;
   }
