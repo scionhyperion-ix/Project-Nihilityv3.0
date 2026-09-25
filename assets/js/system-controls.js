@@ -230,8 +230,12 @@
     document.querySelector('#systemEditPronouns').value=system.pronouns||'';
     document.querySelector('#systemEditTag').value=system.tag||'';
     document.querySelector('#systemEditColor').value=system.color?('#'+String(system.color).replace(/^#/,'')):'';
-    document.querySelector('#systemEditAvatar').value=system.avatar_url||'';
-    document.querySelector('#systemEditBanner').value=system.banner||system.banner_url||'';
+    const avatarUrlInput=document.querySelector('#systemEditAvatar');
+    const bannerUrlInput=document.querySelector('#systemEditBanner');
+    avatarUrlInput.value=system.avatar_url||'';
+    bannerUrlInput.value=system.banner||system.banner_url||'';
+    avatarUrlInput.dataset.mediaSavedValue=avatarUrlInput.value;
+    bannerUrlInput.dataset.mediaSavedValue=bannerUrlInput.value;
     document.querySelector('#systemEditAvatarFile').value='';
     document.querySelector('#systemEditBannerFile').value='';
     document.querySelector('#systemEditDescription').value=system.description||'';
@@ -278,6 +282,14 @@
     if(system.color&&!/^[0-9a-f]{6}$/i.test(system.color)){error.textContent='Color must be a 6-character hex color.';error.hidden=false;return}
     if(system.avatar_url&&!safeHttpsUrl(system.avatar_url)){error.textContent='Avatar must be a valid HTTPS URL.';error.hidden=false;return}
     if(system.banner&&!safeHttpsUrl(system.banner)){error.textContent='Banner must be a valid HTTPS URL.';error.hidden=false;return}
+    if(avatarFile&&avatarFile.dataset?.mediaAdjusted!=='true'&&document.querySelector('#systemEditAvatarFile').dataset.mediaAdjusted!=='true'){
+      error.textContent='Adjust the uploaded system avatar before saving. This also strips embedded image metadata.';
+      error.hidden=false;return;
+    }
+    if(bannerFile&&document.querySelector('#systemEditBannerFile').dataset.mediaAdjusted!=='true'){
+      error.textContent='Adjust the uploaded system banner before saving. This also strips embedded image metadata.';
+      error.hidden=false;return;
+    }
 
     let avatarUpload=null,bannerUpload=null;
     error.hidden=true;
