@@ -21,7 +21,7 @@
     state.timelineEvents=rows;
     state.timelineLoaded=rows.length;
     state.timelineHasMore=rows.length===PAGE_SIZE;
-    if(!window.nihilitySilentRefresh)renderTimeline();
+    if(!window.nihilitySilentRefresh&&!window.nihilityInitialHydration)renderTimeline();
   };
 
   function memberNameById(id){
