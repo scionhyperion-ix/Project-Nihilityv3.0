@@ -15,13 +15,15 @@
 
   const coreLoadData=loadData;
   loadData=async function(){
+    const initial=Boolean(window.nihilityInitialHydration);
+    if(initial)await coreLoadData();
     const timelinePromise=fetchTimelinePage(0);
-    await coreLoadData();
+    if(!initial)await coreLoadData();
     const rows=await timelinePromise;
     state.timelineEvents=rows;
     state.timelineLoaded=rows.length;
     state.timelineHasMore=rows.length===PAGE_SIZE;
-    if(!window.nihilitySilentRefresh)renderTimeline();
+    if(!window.nihilitySilentRefresh&&!window.nihilityInitialHydration)renderTimeline();
   };
 
   function memberNameById(id){

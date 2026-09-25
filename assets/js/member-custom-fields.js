@@ -23,19 +23,21 @@
 
   const coreLoadData=loadData;
   loadData=async function(){
+    const initial=Boolean(window.nihilityInitialHydration);
+    if(initial)await coreLoadData();
     const customPromise=Promise.all([
       restAll('member_field_definitions','select=*&order=position.asc,id.asc'),
       restAll('member_field_values','select=*&order=member_id.asc,field_id.asc'),
       restAll('member_tags','select=*&order=name.asc'),
       restAll('member_tag_links','select=*&order=member_id.asc,tag_id.asc')
     ]);
-    await coreLoadData();
+    if(!initial)await coreLoadData();
     const [defs,values,tags,links]=await customPromise;
     state.memberFieldDefinitions=defs;
     state.memberFieldValues=values;
     state.memberTags=tags;
     state.memberTagLinks=links;
-    renderAll();
+    if(!window.nihilityInitialHydration&&!window.nihilitySilentRefresh)renderAll();
   };
 
   function valuesFor(memberId){return state.memberFieldValues.filter(x=>x.member_id===memberId)}
