@@ -280,9 +280,16 @@
     min-width: 0;
   }
 
-  #homeRoute .current-front-panel .current-front-actions {
-    margin-bottom: 0;
-    transform: translateY(8px);
+  #homeRoute .current-front-panel .current-front-add-button {
+    min-width: 38px;
+    width: 38px;
+    height: 32px;
+    min-height: 32px;
+    padding: 0;
+    display: grid;
+    place-items: center;
+    font-size: 1.2rem;
+    line-height: 1;
   }
 }
 
