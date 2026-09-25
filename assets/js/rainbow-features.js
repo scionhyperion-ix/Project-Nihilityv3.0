@@ -68,18 +68,23 @@
     const silent=Boolean(window.nihilitySilentRefresh);
     const initial=Boolean(window.nihilityInitialHydration);
     const systemCache=window.nihilitySystemLiveCache;
+
+    // On first paint, let the core members/fronts requests finish before
+    // secondary directory/system requests compete for the connection pool.
+    if(initial)await coreLoadData();
+
     const groupPromise=nihilityApi.rest('groups',{query:'select=*&order=name.asc'});
     const linkPromise=nihilityApi.rest('member_groups',{query:'select=*&order=created_at.asc'});
     const settingsPromise=nihilityApi.rest('app_settings',{query:'select=settings&user_id=eq.'+encodeURIComponent(state.user.id)+'&limit=1'});
 
     const shouldRefreshSystem=!systemCache.value||(Date.now()-systemCache.at)>=30000;
-    const liveSystemPromise=shouldRefreshSystem
+    const liveSystemPromise=state.pkConnected&&shouldRefreshSystem
       ?nihilityApi.secure('pk_get_system')
         .then(result=>{systemCache.value=result;systemCache.at=Date.now();return result})
         .catch(error=>{console.warn('Unable to refresh PK system profile',error);return systemCache.value})
       :Promise.resolve(systemCache.value);
 
-    await coreLoadData();
+    if(!initial)await coreLoadData();
     const [groups,links,settingsRows]=await Promise.all([groupPromise,linkPromise,settingsPromise]);
 
     state.groups=groups||[];
