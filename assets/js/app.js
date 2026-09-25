@@ -366,6 +366,19 @@ function updateCurrentFrontViewport(){
   box.style.setProperty('--front-list-limit',Math.max(1,limit)+'px');
 }
 
+function syncHomeHeroPanelHeights(){
+  const current=$('#homeRoute .current-front-panel');
+  const system=$('#homeRoute .system-summary-panel');
+  if(!current||!system)return;
+
+  current.style.removeProperty('height');
+  if(!window.matchMedia('(min-width: 901px)').matches)return;
+
+  const systemHeight=Math.ceil(system.getBoundingClientRect().height);
+  if(systemHeight>0)current.style.height=systemHeight+'px';
+}
+window.nihilitySyncHomeHeroPanelHeights=syncHomeHeroPanelHeights;
+
 function renderHome(){
   $('#addCoFronterButton').disabled=false;
   $('#chooseAnyMemberButton').disabled=false;
