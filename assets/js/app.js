@@ -181,17 +181,10 @@ function updateFrontTimers(){
   });
   const average=$('#frontDuration');
   if(!average)return;
-  if(!starts.length){
-    average.textContent='--';
-    average.title='Average current fronting time';
-    average.setAttribute('aria-label','Average current fronting time');
-    return;
-  }
+  if(!starts.length){average.textContent='--';average.title='Average current fronting time';return}
   const avgStart=starts.reduce((sum,value)=>sum+value,0)/starts.length;
-  const averageText=frontTimerTextFromMs(now-avgStart);
-  average.textContent=averageText;
+  average.textContent='Avg '+frontTimerTextFromMs(now-avgStart);
   average.title='Average current fronting time across '+starts.length+' fronter'+(starts.length===1?'':'s');
-  average.setAttribute('aria-label','Average current fronting time: '+averageText);
 }
 
 async function bootstrapProfile(){
