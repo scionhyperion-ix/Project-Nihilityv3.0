@@ -221,7 +221,20 @@ async function loadData(){
   state.integration=data[3]?.[0]||null;
   state.pkConnected=Boolean(state.integration);
   state.pkImported=Boolean(data[4]?.length);
-  await hydrateHomeMedia();
+
+  // The homepage can render as soon as core directory/front data exists.
+  // Private media signing is useful, but it must not hold the loading screen.
+  document.dispatchEvent(new CustomEvent('nihility-core-data-ready'));
+  const mediaPromise=hydrateHomeMedia();
+  if(window.nihilityInitialHydration){
+    void mediaPromise.then(()=>{
+      if(window.nihilityInitialHydration||$('#appView')?.hidden)return;
+      renderHeader();
+      renderHome();
+    });
+  }else{
+    await mediaPromise;
+  }
 }
 function renderAll(){renderHeader();renderHome();renderMembers();renderHistory();renderSettings();renderProfile()}
 function renderHeader(){
@@ -1277,10 +1290,43 @@ async function boot(){
   state.user=await nihilityApi.user();if(!state.user){setView('login');return}
   if(new URLSearchParams(location.search).get('reset')==='1'){setView('reset');return}
   if(!await bootstrapProfile()){setView('denied');return}
+
   setView('loading');
-  await loadData();
-  setRoute('home');
-  setView('app');
+  window.nihilityInitialHydration=true;
+
+  let resolveCore;
+  const coreReady=new Promise(resolve=>{resolveCore=resolve});
+  const onCoreReady=()=>resolveCore();
+  document.addEventListener('nihility-core-data-ready',onCoreReady,{once:true});
+
+  let fullLoadPromise;
+  try{
+    fullLoadPromise=Promise.resolve().then(()=>loadData());
+    await Promise.race([coreReady,fullLoadPromise]);
+    document.removeEventListener('nihility-core-data-ready',onCoreReady);
+
+    // Do not make the user wait for Timeline, custom fields, connections,
+    // groups, media signing, or the live PluralKit profile.
+    renderAll();
+    setRoute('home');
+    setView('app');
+  }catch(error){
+    document.removeEventListener('nihility-core-data-ready',onCoreReady);
+    window.nihilityInitialHydration=false;
+    throw error;
+  }
+
+  void fullLoadPromise.then(()=>{
+    window.nihilityInitialHydration=false;
+    if($('#appView')?.hidden)return;
+    renderAll();
+    if(state.route==='timeline')window.nihilitySystemTimeline?.render?.();
+    document.dispatchEvent(new CustomEvent('nihility-initial-hydration-complete'));
+  }).catch(error=>{
+    window.nihilityInitialHydration=false;
+    console.warn('Background startup hydration did not finish',error);
+    if(!$('#appView')?.hidden)toast('Some background data is still loading','Nihility opened with the core data and will retry automatically.');
+  });
 }
 
 $('#loginForm').onsubmit=async e=>{e.preventDefault();const m=$('#loginMessage'),email=$('#emailInput').value.trim(),password=$('#passwordInput').value;if(!password){m.textContent='Enter your password, or use the magic-link button.';return}m.textContent='Signing in...';try{await nihilityApi.signInWithPassword(email,password);location.reload()}catch(error){m.textContent=error.message}};
