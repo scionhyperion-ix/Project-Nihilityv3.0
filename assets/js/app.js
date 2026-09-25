@@ -1414,7 +1414,9 @@ async function autoRefreshData({force=false}={}){
   }
   if(refreshed&&before!==autoRefreshFingerprint()){
     requestAnimationFrame(()=>{
-      if(!document.hidden&&!document.querySelector('dialog[open]'))renderAll();
+      if(document.hidden||document.querySelector('dialog[open]'))return;
+      renderAll();
+      document.dispatchEvent(new CustomEvent('nihility-silent-refresh-applied'));
     });
   }
 }
