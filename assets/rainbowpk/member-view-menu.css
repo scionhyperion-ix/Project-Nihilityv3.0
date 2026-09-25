@@ -249,9 +249,22 @@
 
 /* Wide member view: banner-led identity cards with a centered avatar. */
 .member-card-grid[data-member-view="wide"] {
-  grid-template-columns: repeat(auto-fill, minmax(min(430px, 100%), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(430px, 100%), 1fr));
   gap: 18px;
   align-items: start;
+}
+
+@media (min-width: 861px) {
+  .member-card-grid[data-member-view="wide"] > .member-card-wide:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+
+  .member-card-grid[data-member-view="wide"] > .member-card-wide:last-child:nth-child(odd) .member-wide-banner {
+    height: auto;
+    aspect-ratio: 3.25 / 1;
+    min-height: 160px;
+    max-height: 300px;
+  }
 }
 
 .member-card-grid[data-member-view="wide"] .member-card-wide {
