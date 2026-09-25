@@ -2183,12 +2183,12 @@ function sanitizedSettings(value:any,media:any[]){
   }
   return settings;
 }
-async function requireBackupOwner(userId:string){
-  const rows=await admin("/rest/v1/profiles?user_id=eq."+encodeURIComponent(userId)+"&select=role&limit=1");
-  if(rows?.[0]?.role!=="owner")throw new ClientError("Only the Nihility owner can manage full backups.",403);
+async function requireBackupAccount(userId:string){
+  const rows=await admin("/rest/v1/profiles?user_id=eq."+encodeURIComponent(userId)+"&select=user_id&limit=1");
+  if(!rows?.length)throw new ClientError("A Nihility profile is required to manage backups.",403);
 }
 async function actionBackupExport(user:any){
-  await requireBackupOwner(user.id);
+  await requireBackupAccount(user.id);
   const [
     members,groups,memberGroups,fronts,frontMembers,settingsRows,imports,profileRows,
     fieldDefinitions,fieldValues,tags,tagLinks,connections,systemEvents,journalVaultRows,journalEntries
@@ -2666,7 +2666,7 @@ async function validateBackup(backup:any){
   };
 }
 async function actionBackupPreview(user:any,body:any){
-  await requireBackupOwner(user.id);
+  await requireBackupAccount(user.id);
   const validated=await validateBackup(body?.backup);
   const current=await admin("/rest/v1/rpc/nihility_backup_counts",{
     method:"POST",
@@ -2708,7 +2708,7 @@ async function collectCurrentMedia(userId:string){
   return items.filter(item=>{const key=item.kind+":"+item.path;if(seen.has(key))return false;seen.add(key);return true});
 }
 async function actionBackupRestore(user:any,body:any){
-  await requireBackupOwner(user.id);
+  await requireBackupAccount(user.id);
   if(String(body?.confirmation||"")!=="RESTORE")throw new ClientError("Type RESTORE to confirm this replacement.",400);
   const validated=await validateBackup(body?.backup);
   const mediaPaths=(body?.mediaPaths&&typeof body.mediaPaths==="object"&&!Array.isArray(body.mediaPaths))?body.mediaPaths:{};
@@ -3117,7 +3117,6 @@ Deno.serve(async(req)=>{
 
     if(headerAction==="backup_preview"||headerAction==="backup_restore"){
       action=headerAction;
-      if(profile?.[0]?.role!=="owner")throw new ClientError("Only the Nihility owner can manage full backups.",403);
       await consumeRateLimit(user.id,action);
       const body=await readBackupRequest(req);
       const result=action==="backup_preview"
