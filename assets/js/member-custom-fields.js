@@ -35,7 +35,7 @@
     state.memberFieldValues=values;
     state.memberTags=tags;
     state.memberTagLinks=links;
-    renderAll();
+    if(!window.nihilityInitialHydration&&!window.nihilitySilentRefresh)renderAll();
   };
 
   function valuesFor(memberId){return state.memberFieldValues.filter(x=>x.member_id===memberId)}
