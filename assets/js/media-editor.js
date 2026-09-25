@@ -177,16 +177,20 @@
     const img=new Image();
     img.decoding='async';
     img.src=url;
-    await new Promise((resolve,reject)=>{
-      img.onload=resolve;
-      img.onerror=()=>reject(new Error('The image could not be decoded.'));
-    });
-    if(!img.naturalWidth||!img.naturalHeight||img.naturalWidth*img.naturalHeight>50000000){
+    try{
+      await new Promise((resolve,reject)=>{
+        img.onload=resolve;
+        img.onerror=()=>reject(new Error('The image could not be decoded.'));
+      });
+      if(!img.naturalWidth||!img.naturalHeight||img.naturalWidth*img.naturalHeight>50000000){
+        throw new Error('This image is too large to edit safely.');
+      }
+      state.objectUrl=url;
+      state.image=img;
+    }catch(error){
       URL.revokeObjectURL(url);
-      throw new Error('This image is too large to edit safely.');
+      throw error;
     }
-    state.objectUrl=url;
-    state.image=img;
   }
 
   function rotatedSize(){
