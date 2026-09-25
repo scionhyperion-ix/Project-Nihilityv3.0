@@ -29,6 +29,7 @@ const BUCKETS: Record<string,{name:string,max:number}> = {
   profile:{name:"nihility-profile-avatars",max:2*1024*1024},
 };
 const MEDIA_QUOTA_BYTES = 1024*1024*1024; // 1 GiB per account.
+const PK_SYSTEM_PUBLIC_BUCKET = "nihility-pk-system-media";
 const MAX_IMAGE_DIMENSION = 8192;
 const MAX_IMAGE_PIXELS = 40_000_000;
 
@@ -485,13 +486,14 @@ async function finalizeMediaReservation(userId:string,reservationId:string,bucke
     console.warn("Unable to finalize media quota reservation",error);
   }
 }
-async function storeImageBytes(userId:string,kind:string,bytes:Uint8Array,type:string){
+async function storeImageBytes(userId:string,kind:string,bytes:Uint8Array,type:string,scope:string|null=null){
   const cfg=BUCKETS[kind];
   if(!cfg)throw new ClientError("Invalid media kind");
   validateImageBytes(bytes,type,kind);
+  if(scope!==null&&!/^[a-z0-9-]{1,40}$/.test(scope))throw new Error("Invalid internal media scope");
 
   const reservationId=await reserveMediaQuota(userId,bytes.length);
-  const path=userId+"/"+crypto.randomUUID()+"."+MIME_EXT[type];
+  const path=userId+"/"+(scope?scope+"/":"")+crypto.randomUUID()+"."+MIME_EXT[type];
   let response:Response;
   try{
     response=await fetch(SUPABASE_URL+"/storage/v1/object/"+encodeURIComponent(cfg.name)+"/"+path.split("/").map(encodeURIComponent).join("/"),{
@@ -513,6 +515,76 @@ async function storeImageBytes(userId:string,kind:string,bytes:Uint8Array,type:s
   await finalizeMediaReservation(userId,reservationId,cfg.name,path);
   return path;
 }
+const PK_SYSTEM_PUBLIC_PATH_RE=/^(avatar|banner)\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(png|jpg|webp|gif)$/;
+function pkSystemPublicUrl(path:string){
+  if(!PK_SYSTEM_PUBLIC_PATH_RE.test(path))throw new Error("Invalid public PK media path");
+  return SUPABASE_URL+"/storage/v1/object/public/"+encodeURIComponent(PK_SYSTEM_PUBLIC_BUCKET)+"/"+path.split("/").map(encodeURIComponent).join("/");
+}
+async function deletePkSystemPublicMedia(path:string|null|undefined){
+  if(!path)return;
+  const normalized=String(path);
+  if(!PK_SYSTEM_PUBLIC_PATH_RE.test(normalized))throw new Error("Refusing to delete an invalid public PK media path");
+  const response=await fetch(SUPABASE_URL+"/storage/v1/object/"+encodeURIComponent(PK_SYSTEM_PUBLIC_BUCKET)+"/"+normalized.split("/").map(encodeURIComponent).join("/"),{
+    method:"DELETE",
+    headers:{apikey:SERVICE_KEY,Authorization:"Bearer "+SERVICE_KEY}
+  });
+  if(!response.ok&&response.status!==404)console.warn("Unable to delete public PK system media",response.status);
+}
+async function getPkSystemMediaRegistry(userId:string){
+  const rows=await admin("/rest/v1/pk_system_media_registry?user_id=eq."+encodeURIComponent(userId)+"&select=kind,object_path");
+  const out:Record<string,string>={};
+  for(const row of rows||[])if(row?.kind&&row?.object_path)out[String(row.kind)]=String(row.object_path);
+  return out;
+}
+async function setPkSystemMediaRegistry(userId:string,kind:string,path:string){
+  if(!["avatar","banner"].includes(kind)||!PK_SYSTEM_PUBLIC_PATH_RE.test(path)||!path.startsWith(kind+"/"))throw new Error("Invalid PK system media registry update");
+  await admin("/rest/v1/pk_system_media_registry?on_conflict=user_id,kind",{
+    method:"POST",
+    headers:{Prefer:"resolution=merge-duplicates,return=minimal"},
+    body:JSON.stringify({user_id:userId,kind,object_path:path,updated_at:new Date().toISOString()})
+  });
+}
+async function clearPkSystemMediaRegistry(userId:string,kind:string){
+  if(!["avatar","banner"].includes(kind))return;
+  await admin("/rest/v1/pk_system_media_registry?user_id=eq."+encodeURIComponent(userId)+"&kind=eq."+encodeURIComponent(kind),{
+    method:"DELETE",headers:{Prefer:"return=minimal"}
+  });
+}
+function validPkSystemPrivatePath(userId:string,path:string,kind:string){
+  if(!["avatar","banner"].includes(kind))return false;
+  const prefix=userId+"/pk-system/";
+  if(!path.startsWith(prefix))return false;
+  const tail=path.slice(prefix.length);
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(png|jpg|webp|gif)$/.test(tail);
+}
+async function readPrivatePkSystemMedia(userId:string,kind:string,path:string){
+  if(!validPkSystemPrivatePath(userId,path,kind))throw new ClientError("Invalid system media upload",400);
+  const cfg=BUCKETS[kind];
+  const response=await fetch(SUPABASE_URL+"/storage/v1/object/authenticated/"+encodeURIComponent(cfg.name)+"/"+path.split("/").map(encodeURIComponent).join("/"),{
+    headers:{apikey:SERVICE_KEY,Authorization:"Bearer "+SERVICE_KEY}
+  });
+  if(!response.ok)throw new ClientError("System media upload is unavailable. Please choose the image again.",400);
+  const type=(response.headers.get("content-type")||"").split(";")[0].toLowerCase();
+  if(!MIME_EXT[type])throw new ClientError("Unsupported system image type",400);
+  const bytes=await readRawBody(response,cfg.max);
+  validateImageBytes(bytes,type,kind);
+  return{bytes,type};
+}
+async function publishPkSystemMedia(userId:string,kind:string,privatePath:string){
+  const {bytes,type}=await readPrivatePkSystemMedia(userId,kind,privatePath);
+  const publicPath=kind+"/"+crypto.randomUUID()+"."+MIME_EXT[type];
+  const response=await fetch(SUPABASE_URL+"/storage/v1/object/"+encodeURIComponent(PK_SYSTEM_PUBLIC_BUCKET)+"/"+publicPath.split("/").map(encodeURIComponent).join("/"),{
+    method:"POST",
+    headers:{apikey:SERVICE_KEY,Authorization:"Bearer "+SERVICE_KEY,"Content-Type":type,"x-upsert":"false","Cache-Control":"public, max-age=31536000, immutable"},
+    body:bytes
+  });
+  if(!response.ok){
+    console.error("Public PK system media upload failed",response.status,await response.text().catch(()=>""));
+    throw new Error("Unable to publish system media");
+  }
+  return{path:publicPath,url:pkSystemPublicUrl(publicPath)};
+}
+
 async function safeImage(url:string,kind:string){
   const cfg=BUCKETS[kind]; if(!cfg)throw new ClientError("Invalid media kind");
   let current:URL;
@@ -789,6 +861,16 @@ async function actionUploadMedia(user:any,req:Request){
   const path=await storeImageBytes(user.id,kind,bytes,type);
   return {path};
 }
+async function actionUploadPkSystemMedia(user:any,req:Request){
+  const kind=String(req.headers.get("x-media-kind")||"");
+  if(!["avatar","banner"].includes(kind))throw new ClientError("Invalid system media kind");
+  const cfg=BUCKETS[kind];
+  const type=(req.headers.get("content-type")||"").split(";")[0].toLowerCase();
+  if(!MIME_EXT[type])throw new ClientError("Unsupported image type");
+  const bytes=await readRawBody(req,cfg.max);
+  const path=await storeImageBytes(user.id,kind,bytes,type,"pk-system");
+  return{path};
+}
 
 async function actionConnect(user:any,body:any){
   const token=String(body.token||"").trim();
@@ -811,8 +893,13 @@ async function actionStatus(user:any){
   return {connected:Boolean(rows?.length)};
 }
 async function actionDisconnect(user:any){
+  const publicMedia=await getPkSystemMediaRegistry(user.id).catch(()=>({}));
   await admin("/rest/v1/integration_secrets?user_id=eq."+encodeURIComponent(user.id)+"&provider=eq.pluralkit",{method:"DELETE"});
   await admin("/rest/v1/external_integrations?user_id=eq."+encodeURIComponent(user.id)+"&provider=eq.pluralkit",{method:"DELETE"});
+  await admin("/rest/v1/pk_system_media_registry?user_id=eq."+encodeURIComponent(user.id),{
+    method:"DELETE",headers:{Prefer:"return=minimal"}
+  }).catch(error=>console.warn("Unable to clear PK system media registry",error));
+  await Promise.allSettled(Object.values(publicMedia).map(path=>deletePkSystemPublicMedia(String(path))));
   return {connected:false};
 }
 async function actionMirror(user:any,body:any){
@@ -1380,7 +1467,7 @@ function sanitizePkSystem(system:any){
   };
 }
 
-async function saveLocalSystemProfile(user:any,system:any,{copyMedia=false}={}){
+async function saveLocalSystemProfile(user:any,system:any,{copyMedia=false,mediaPaths={}}:{copyMedia?:boolean,mediaPaths?:Record<string,string|null>}={}){
   const settingsRows=await admin("/rest/v1/app_settings?user_id=eq."+encodeURIComponent(user.id)+"&select=settings&limit=1");
   const existingSettings=settingsRows?.[0]?.settings||{};
   const old=existingSettings?.system_profile||{};
@@ -1389,7 +1476,14 @@ async function saveLocalSystemProfile(user:any,system:any,{copyMedia=false}={}){
   const baseline:any={...(old.pk_media_v1||{})};
   const cleanup:Array<{kind:string,path:string}>=[];
 
-  if(copyMedia&&system.avatar_url){
+  const providedAvatar=mediaPaths?.avatar||null;
+  if(providedAvatar){
+    if(!validPkSystemPrivatePath(user.id,providedAvatar,"avatar"))throw new Error("Invalid saved system avatar path");
+    if(avatarPath&&avatarPath!==providedAvatar)cleanup.push({kind:"avatar",path:avatarPath});
+    avatarPath=providedAvatar;
+    baseline.avatar_url=system.avatar_url||null;
+    baseline.avatar_storage_path=providedAvatar;
+  }else if(copyMedia&&system.avatar_url){
     const next=await copyPkImage(user.id,"avatar",system.avatar_url,"system avatar");
     if(next){
       if(avatarPath&&avatarPath!==next)cleanup.push({kind:"avatar",path:avatarPath});
@@ -1404,7 +1498,14 @@ async function saveLocalSystemProfile(user:any,system:any,{copyMedia=false}={}){
     baseline.avatar_storage_path=null;
   }
 
-  if(copyMedia&&system.banner){
+  const providedBanner=mediaPaths?.banner||null;
+  if(providedBanner){
+    if(!validPkSystemPrivatePath(user.id,providedBanner,"banner"))throw new Error("Invalid saved system banner path");
+    if(bannerPath&&bannerPath!==providedBanner)cleanup.push({kind:"banner",path:bannerPath});
+    bannerPath=providedBanner;
+    baseline.banner_url=system.banner||null;
+    baseline.banner_storage_path=providedBanner;
+  }else if(copyMedia&&system.banner){
     const next=await copyPkImage(user.id,"banner",system.banner,"system banner");
     if(next){
       if(bannerPath&&bannerPath!==next)cleanup.push({kind:"banner",path:bannerPath});
@@ -1439,6 +1540,14 @@ async function actionGetPkSystem(user:any){
 async function actionUpdatePkSystem(user:any,body:any){
   const token=await getSecret(user.id);
   const input=body?.system||{};
+  const managed=body?.managed_media||{};
+  const managedPaths:{avatar:string|null,banner:string|null}={
+    avatar:managed.avatar_path?String(managed.avatar_path):null,
+    banner:managed.banner_path?String(managed.banner_path):null
+  };
+  if(managedPaths.avatar&&!validPkSystemPrivatePath(user.id,managedPaths.avatar,"avatar"))throw new ClientError("Invalid uploaded system avatar",400);
+  if(managedPaths.banner&&!validPkSystemPrivatePath(user.id,managedPaths.banner,"banner"))throw new ClientError("Invalid uploaded system banner",400);
+
   const payload:any={};
   const textFields=["name","description","tag","pronouns","avatar_url","banner"];
   for(const key of textFields){
@@ -1454,15 +1563,91 @@ async function actionUpdatePkSystem(user:any,body:any){
   }
   if(payload.avatar_url&&!/^https:\/\//i.test(payload.avatar_url))throw new ClientError("Avatar must use HTTPS");
   if(payload.banner&&!/^https:\/\//i.test(payload.banner))throw new ClientError("Banner must use HTTPS");
-  await pk(token,"/systems/@me",{method:"PATCH",body:JSON.stringify(payload)});
-  const updated=sanitizePkSystem(await pk(token,"/systems/@me"));
-  const local=await saveLocalSystemProfile(user,updated,{copyMedia:true});
+
+  const previousRegistry=await getPkSystemMediaRegistry(user.id);
+  const published:Array<{kind:string,path:string,url:string,privatePath:string}>=[];
+  try{
+    if(managedPaths.avatar){
+      const item=await publishPkSystemMedia(user.id,"avatar",managedPaths.avatar);
+      payload.avatar_url=item.url;
+      published.push({kind:"avatar",path:item.path,url:item.url,privatePath:managedPaths.avatar});
+    }
+    if(managedPaths.banner){
+      const item=await publishPkSystemMedia(user.id,"banner",managedPaths.banner);
+      payload.banner=item.url;
+      published.push({kind:"banner",path:item.path,url:item.url,privatePath:managedPaths.banner});
+    }
+    await pk(token,"/systems/@me",{method:"PATCH",body:JSON.stringify(payload)});
+  }catch(error){
+    await Promise.allSettled([
+      ...published.map(item=>deletePkSystemPublicMedia(item.path)),
+      ...published.map(item=>deleteStoredMedia(user.id,item.kind,item.privatePath))
+    ]);
+    throw error;
+  }
+
+  let updated:any;
+  try{
+    updated=sanitizePkSystem(await pk(token,"/systems/@me"));
+  }catch(error){
+    // The PATCH may already have succeeded. Do not delete a newly published
+    // image and leave PluralKit pointing at a broken URL just because the
+    // read-back request failed.
+    const rows=await admin("/rest/v1/app_settings?user_id=eq."+encodeURIComponent(user.id)+"&select=settings&limit=1").catch(()=>[]);
+    const previous=rows?.[0]?.settings?.system_profile||{};
+    updated=sanitizePkSystem({
+      ...previous,
+      ...payload,
+      avatar_url:Object.prototype.hasOwnProperty.call(payload,"avatar_url")?payload.avatar_url:(previous.avatar_url||null),
+      banner:Object.prototype.hasOwnProperty.call(payload,"banner")?payload.banner:(previous.banner||previous.banner_url||null)
+    });
+    await recordSecurityEvent(user.id,"pk_system.readback_failure",false,{});
+  }
+
+  for(const kind of ["avatar","banner"]){
+    const newlyPublished=published.find(item=>item.kind===kind);
+    const oldPath=previousRegistry[kind]||null;
+    if(newlyPublished){
+      try{
+        await setPkSystemMediaRegistry(user.id,kind,newlyPublished.path);
+        if(oldPath&&oldPath!==newlyPublished.path)await deletePkSystemPublicMedia(oldPath);
+      }catch(error){
+        console.error("Unable to update PK public media registry",kind,error);
+        await recordSecurityEvent(user.id,"pk_system_media.registry_failure",false,{kind});
+      }
+      continue;
+    }
+
+    if(oldPath){
+      const currentUrl=kind==="avatar"?(updated.avatar_url||null):(updated.banner||null);
+      let managedUrl:string|null=null;
+      try{managedUrl=pkSystemPublicUrl(oldPath)}catch{}
+      if(!currentUrl||currentUrl!==managedUrl){
+        try{
+          await clearPkSystemMediaRegistry(user.id,kind);
+          await deletePkSystemPublicMedia(oldPath);
+        }catch(error){
+          console.error("Unable to clean replaced PK public media",kind,error);
+          await recordSecurityEvent(user.id,"pk_system_media.cleanup_failure",false,{kind});
+        }
+      }
+    }
+  }
+
+  let local:any={avatar_storage_path:null,banner_storage_path:null};
+  try{
+    local=await saveLocalSystemProfile(user,updated,{copyMedia:true,mediaPaths:managedPaths});
+  }catch(error){
+    console.error("PluralKit updated but local system copy could not be refreshed",error);
+    await recordSecurityEvent(user.id,"pk_system.local_refresh_failure",false,{});
+  }
+
   await admin("/rest/v1/external_integrations?user_id=eq."+encodeURIComponent(user.id)+"&provider=eq.pluralkit",{
     method:"PATCH",
     headers:{Prefer:"return=minimal"},
     body:JSON.stringify({external_system_id:updated.id,external_system_name:updated.name||updated.id||"PluralKit system"})
   });
-  return {system:{...updated,avatar_storage_path:local.avatar_storage_path||null,banner_storage_path:local.banner_storage_path||null}};
+  return {system:{...updated,avatar_storage_path:local.avatar_storage_path||managedPaths.avatar||null,banner_storage_path:local.banner_storage_path||managedPaths.banner||null}};
 }
 
 async function actionImportPkGroups(user:any){
@@ -2794,6 +2979,7 @@ const ACTION_LIMITS:Record<string,{limit:number,window:number}> = {
   pk_import_fronts:{limit:120,window:60},
   import_media:{limit:30,window:60},
   upload_media:{limit:60,window:60},
+  upload_pk_system_media:{limit:20,window:60},
   password_range:{limit:12,window:60},
   delete_member:{limit:10,window:60},
   backup_export:{limit:5,window:60},
@@ -2814,7 +3000,7 @@ const ACTION_LIMITS:Record<string,{limit:number,window:number}> = {
 };
 const AUDITED_ACTIONS=new Set([
   "pk_connect","pk_disconnect","pk_mirror_front","pk_import","pk_import_groups","pk_sync_apply",
-  "pk_update_system","pk_import_fronts","import_media","upload_media","delete_member",
+  "pk_update_system","pk_import_fronts","import_media","upload_media","upload_pk_system_media","delete_member",
   "backup_export","backup_restore","front_history_correct","front_history_delete",
   "journal_setup","journal_delete","journal_rewrap","journal_rotate_recovery","journal_rekey","journal_reset"
 ]);
@@ -2907,6 +3093,14 @@ Deno.serve(async(req)=>{
       action="upload_media";
       await consumeRateLimit(user.id,action);
       const result=await actionUploadMedia(user,req);
+      await recordSecurityEvent(user.id,"edge."+action,true,{origin:origin||null});
+      return json(result,200,origin);
+    }
+
+    if(headerAction==="upload_pk_system_media"){
+      action="upload_pk_system_media";
+      await consumeRateLimit(user.id,action);
+      const result=await actionUploadPkSystemMedia(user,req);
       await recordSecurityEvent(user.id,"edge."+action,true,{origin:origin||null});
       return json(result,200,origin);
     }

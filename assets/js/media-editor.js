@@ -7,7 +7,9 @@
     {key:'profile-avatar',urlId:'profileAvatarUrl',fileId:'profileAvatarFile',storageKind:'profile',shape:'avatar',label:'profile picture',previewImage:'#profileAvatarPreview img'},
     {key:'profile-banner',urlId:'profileBannerUrl',fileId:'profileBannerFile',storageKind:'banner',shape:'banner',label:'banner',previewBackground:'#profileBannerPreview'},
     {key:'group-icon',urlId:'groupsManagerIconUrl',fileId:'groupsManagerIconFile',storageKind:'avatar',shape:'avatar',label:'group icon',previewImage:'#groupPreviewIconImage'},
-    {key:'group-banner',urlId:'groupsManagerBannerUrl',fileId:'groupsManagerBannerFile',storageKind:'banner',shape:'banner',label:'group banner',previewBackground:'#groupPreviewBanner'}
+    {key:'group-banner',urlId:'groupsManagerBannerUrl',fileId:'groupsManagerBannerFile',storageKind:'banner',shape:'banner',label:'group banner',previewBackground:'#groupPreviewBanner'},
+    {key:'system-avatar',urlId:'systemEditAvatar',fileId:'systemEditAvatarFile',storageKind:'avatar',shape:'avatar',label:'system profile picture',previewImage:'#systemEditorAvatarPreview',preferSavedPreview:true},
+    {key:'system-banner',urlId:'systemEditBanner',fileId:'systemEditBannerFile',storageKind:'banner',shape:'banner',label:'system banner',previewBackground:'#systemEditorBannerPreview',preferSavedPreview:true}
   ];
 
   const state={config:null,image:null,objectUrl:null,angle:0,zoom:1,offsetX:0,offsetY:0,dragging:false,pointerId:null,lastX:0,lastY:0};
@@ -213,18 +215,22 @@
     if(file)return file;
 
     const remote=(urlInput?.value||'').trim();
-    if(remote){
-      const cached=remotePreviews.get(config.key);
-      if(cached?.sourceUrl===remote&&cached.blob)return cached.blob;
-      return await importRemoteBlob(config,remote);
-    }
-
     let current='';
     if(config.previewImage){
       const img=document.querySelector(config.previewImage);
       if(img&&!img.hidden)current=img.currentSrc||img.src||'';
     }
     if(!current&&config.previewBackground)current=backgroundUrl(document.querySelector(config.previewBackground));
+
+    if(remote){
+      const cached=remotePreviews.get(config.key);
+      if(cached?.sourceUrl===remote&&cached.blob)return cached.blob;
+      if(config.preferSavedPreview&&urlInput?.dataset.mediaSavedValue===remote&&current){
+        return await fetchImageBlob(current);
+      }
+      return await importRemoteBlob(config,remote);
+    }
+
     if(current)return fetchImageBlob(current);
 
     throw new Error('Choose an upload or enter an image link first.');
@@ -431,6 +437,10 @@
   enhanceAll();
   window.nihilityMediaEditor={
     enhanceAll,
-    getPreviewUrl(key){return remotePreviews.get(key)?.objectUrl||''}
+    getPreviewUrl(key){return remotePreviews.get(key)?.objectUrl||''},
+    clearPreview(key){
+      const config=CONFIGS.find(item=>item.key===key);
+      if(config)clearRemotePreview(config);
+    }
   };
 })();
