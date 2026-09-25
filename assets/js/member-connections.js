@@ -17,8 +17,10 @@
 
   const coreLoadData=loadData;
   loadData=async function(){
+    const initial=Boolean(window.nihilityInitialHydration);
+    if(initial)await coreLoadData();
     const connectionPromise=loadAllConnections();
-    await coreLoadData();
+    if(!initial)await coreLoadData();
     state.memberConnections=await connectionPromise;
     if(!window.nihilityInitialHydration&&!window.nihilitySilentRefresh)renderAll();
   };
