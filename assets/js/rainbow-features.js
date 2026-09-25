@@ -66,6 +66,7 @@
 
   loadData=async function loadDataWithRainbowFeatures(){
     const silent=Boolean(window.nihilitySilentRefresh);
+    const initial=Boolean(window.nihilityInitialHydration);
     const systemCache=window.nihilitySystemLiveCache;
     const groupPromise=nihilityApi.rest('groups',{query:'select=*&order=name.asc'});
     const linkPromise=nihilityApi.rest('member_groups',{query:'select=*&order=created_at.asc'});
@@ -97,17 +98,21 @@
       }
     }));
     if(silent)await groupMediaPromise;
-    else void groupMediaPromise.then(()=>{if(state.route==='groups')renderGroups()});
+    else void groupMediaPromise.then(()=>{
+      if(!window.nihilityInitialHydration&&state.route==='groups')renderGroups();
+    });
 
     const storedSystem=settingsRows?.[0]?.settings?.system_profile||null;
     state.systemProfile=storedSystem?{...storedSystem}:null;
     applySystemMedia(state.systemProfile);
     const storedSystemMediaPromise=hydrateSystemPrivateMedia(state.systemProfile);
     if(silent)await storedSystemMediaPromise;
-    else void storedSystemMediaPromise.then(()=>renderHome());
+    else void storedSystemMediaPromise.then(()=>{
+      if(!window.nihilityInitialHydration)renderHome();
+    });
 
     state.historyHasMore=state.fronts.length>=100;
-    if(!silent){
+    if(!silent&&!initial){
       refreshFeatureControls();
       renderAll();
     }
@@ -121,7 +126,7 @@
       state.systemProfile={...(state.systemProfile||{}),...liveSystem.system,...paths};
       applySystemMedia(state.systemProfile);
       await hydrateSystemPrivateMedia(state.systemProfile);
-      if(!silent){
+      if(!silent&&!window.nihilityInitialHydration){
         renderHome();
         applyImportedSystemIdentity();
       }
