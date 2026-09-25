@@ -118,7 +118,6 @@ function setLoadingStatus(message){
 function renderHomePending(){
   renderHeader();
   $('#currentFrontHeading').textContent='Loading front...';
-  $('#frontDuration').textContent='...';
   $('#currentFrontMembers').replaceChildren();
   const frontWait=document.createElement('p');frontWait.className='muted';frontWait.textContent='Loading current front data...';$('#currentFrontMembers').append(frontWait);
   $('#currentFrontNote').hidden=true;
@@ -200,19 +199,11 @@ function frontSinceText(ts){
 }
 function updateFrontTimers(){
   const now=Date.now();
-  const starts=[];
   document.querySelectorAll('[data-front-timer-start]').forEach(el=>{
     const start=Number(el.dataset.frontTimerStart);
     if(!Number.isFinite(start))return;
-    starts.push(start);
     el.textContent=frontTimerTextFromMs(now-start);
   });
-  const average=$('#frontDuration');
-  if(!average)return;
-  if(!starts.length){average.textContent='--';average.title='Average current fronting time';return}
-  const avgStart=starts.reduce((sum,value)=>sum+value,0)/starts.length;
-  average.textContent='Avg '+frontTimerTextFromMs(now-avgStart);
-  average.title='Average current fronting time across '+starts.length+' fronter'+(starts.length===1?'':'s');
 }
 
 async function bootstrapProfile(){
@@ -391,7 +382,7 @@ function renderHome(){
   $('#currentFrontMembers').replaceChildren();
   const rainbowSubtitle=$('#rainbowFrontSubtitle');if(rainbowSubtitle)rainbowSubtitle.textContent=!members.length?'No one is currently fronting':members.length===1?(label(members[0])+' is currently fronting'):(members.length+' members are currently fronting');
   if(!front||!members.length){
-    $('#currentFrontHeading').textContent='Nobody is fronting';$('#frontDuration').textContent='--';
+    $('#currentFrontHeading').textContent='Nobody is fronting';
     const p=document.createElement('p');p.className='muted';p.textContent='Start a front from Quick front or choose a member.';$('#currentFrontMembers').append(p);
   }else{
     $('#currentFrontHeading').textContent=members.length===1?label(members[0]):(members.length+' co-fronters');
