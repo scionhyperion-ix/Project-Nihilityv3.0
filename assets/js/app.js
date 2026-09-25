@@ -1334,9 +1334,35 @@ $('#backupRestoreConfirmInput').oninput=event=>{
 };
 $('#applyBackupRestoreButton').onclick=applyBackupRestore;
 $('#profileBannerUrl').addEventListener('input',()=>{
-  // External URLs are copied server-side on save. Do not fetch them directly
-  // in the browser, which would disclose the user's IP to the image host.
-});$('#inviteForm').onsubmit=invite;
+  // External URLs are previewed only through the secure media importer.
+});
+document.addEventListener('nihility-media-preview',event=>{
+  const key=event.detail?.key||'';
+  const url=event.detail?.url||'';
+  if(key==='profile-avatar'){
+    const box=$('#profileAvatarPreview');
+    if(box){
+      box.replaceChildren();
+      if(url){
+        const img=document.createElement('img');img.src=url;img.alt='';box.append(img);
+      }else{
+        const name=state.profile?.display_name||state.user?.email||'Account';
+        if(state.profile?.avatar_storage_path&&state.profile?.avatar_url){
+          const img=document.createElement('img');img.src=state.profile.avatar_url;img.alt='';box.append(img);
+        }else box.textContent=initial(name);
+      }
+    }
+  }
+  if(key==='profile-banner'){
+    const banner=$('#profileBannerPreview');
+    if(banner){
+      const shown=url||(state.profile?.banner_storage_path?state.profile?.banner_url||'':'');
+      banner.style.backgroundImage=shown?'linear-gradient(rgba(10,11,20,.08),rgba(10,11,20,.18)), url("'+shown.replaceAll('"','%22')+'")':'';
+      banner.classList.toggle('has-profile-banner',Boolean(shown));
+    }
+  }
+});
+$('#inviteForm').onsubmit=invite;
 const AUTO_REFRESH_MS=15000;
 let autoRefreshBusy=false;
 let lastAutoRefreshAt=0;
