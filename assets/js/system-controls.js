@@ -45,8 +45,10 @@
       button.className='secondary-button system-edit-button';
       button.textContent='Edit system';
       button.onclick=openSystemEditor;
-      systemPanel.append(button);
     }
+    const topFronter=document.querySelector('#topFronterSection');
+    if(topFronter)topFronter.insertAdjacentElement('afterend',button);
+    else if(button.parentElement!==systemPanel)systemPanel.append(button);
     button.hidden=!state.pkConnected;
     return button;
   }
