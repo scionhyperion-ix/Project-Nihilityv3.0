@@ -461,7 +461,7 @@
 
             <section class="groups-members-editor groups-members-under-preview">
               <div class="groups-section-heading">
-                <strong>Current members</strong>
+                <strong id="groupsMembersHeading">Current members</strong>
                 <small id="groupsSelectedCount">0 members</small>
               </div>
               <div id="groupsCurrentMembers" class="groups-current-members"></div>
@@ -644,14 +644,24 @@
   function toggleGroupAddMembers(force){
     const panel=document.querySelector('#groupsAddMembersPanel');
     const button=document.querySelector('#groupsAddMembersButton');
-    if(!panel||!button)return;
+    const section=document.querySelector('.groups-members-under-preview');
+    const heading=document.querySelector('#groupsMembersHeading');
+    const current=document.querySelector('#groupsCurrentMembers');
+    if(!panel||!button||!section)return;
     const open=typeof force==='boolean'?force:panel.hidden;
     panel.hidden=!open;
+    section.classList.toggle('is-adding',open);
+    if(current)current.hidden=open;
+    if(heading)heading.textContent=open?'Add members':'Current members';
     button.setAttribute('aria-expanded',String(open));
     button.textContent=open?'Done adding':'+ Add members';
     if(open){
       renderGroupMemberPicker();
       requestAnimationFrame(()=>document.querySelector('#groupsMemberSearch')?.focus());
+    }else{
+      const search=document.querySelector('#groupsMemberSearch');
+      if(search)search.value='';
+      renderGroupCurrentMembers();
     }
   }
   function updateGroupSelectedCount(){
