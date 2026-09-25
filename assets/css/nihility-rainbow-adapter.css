@@ -422,3 +422,112 @@ html.frame-guard body{
 .pk-sync-conflict-policy legend{margin-bottom:8px;font-size:.78rem;font-weight:700}
 .pk-sync-conflict-policy .radio-card{margin:0}
 @media(max-width:600px){.pk-sync-preview-row{align-items:flex-start}.pk-sync-preview-row .soft-pill{flex:0 0 auto}}
+
+
+/* Compact navigation: five primary destinations with a secondary Others drop-up. */
+@media(max-width:900px){
+  .mobile-nav{
+    grid-template-columns:repeat(5,minmax(0,1fr));
+    overflow:visible;
+  }
+
+  .mobile-nav-more{
+    position:relative;
+    min-width:0;
+    display:grid;
+  }
+
+  .mobile-nav-more-button{
+    width:100%;
+    min-width:0;
+    height:100%;
+  }
+
+  .mobile-nav-more-menu{
+    position:absolute;
+    right:0;
+    bottom:calc(100% + 10px);
+    z-index:50;
+    width:min(190px,calc(100vw - 20px));
+    display:grid;
+    gap:2px;
+    padding:6px;
+    border:1px solid var(--line-strong);
+    border-radius:14px;
+    background:var(--theme-surface-2);
+    box-shadow:0 14px 38px rgba(0,0,0,.28);
+  }
+
+  .mobile-nav-more-menu[hidden]{
+    display:none!important;
+  }
+
+  .mobile-nav-more-option{
+    appearance:none;
+    width:100%;
+    min-height:42px;
+    display:grid;
+    grid-template-columns:28px minmax(0,1fr);
+    align-items:center;
+    gap:8px;
+    padding:8px 10px;
+    border:0;
+    border-radius:10px;
+    background:transparent;
+    color:var(--text);
+    font:inherit;
+    font-size:.72rem;
+    font-weight:650;
+    text-align:left;
+    cursor:pointer;
+  }
+
+  .mobile-nav-more-option>span:first-child{
+    display:grid;
+    place-items:center;
+    color:var(--muted);
+    font-size:.9rem;
+  }
+
+  .mobile-nav-more-option:hover,
+  .mobile-nav-more-option:focus-visible{
+    outline:none;
+    background:var(--theme-surface-hover);
+  }
+
+  .mobile-nav-more-option.active{
+    background:var(--accent-soft);
+    color:var(--text);
+  }
+
+  .mobile-nav-more-option.active>span:first-child{
+    color:var(--accent-2);
+  }
+
+  .mobile-nav:has(.mobile-nav-more-option.active) .mobile-nav-more-button{
+    color:var(--text);
+    background:var(--accent-soft);
+  }
+
+  .mobile-nav-more-button[aria-expanded="true"]{
+    color:var(--text);
+    background:var(--accent-soft);
+  }
+}
+
+@media(max-width:420px){
+  .mobile-nav{
+    left:7px;
+    right:7px;
+    bottom:7px;
+  }
+
+  .mobile-nav-item{
+    padding-inline:2px;
+  }
+
+  .mobile-nav-more-menu{
+    right:-2px;
+    width:min(176px,calc(100vw - 14px));
+  }
+}
