@@ -192,8 +192,22 @@
   async function deleteSnapshot(userId){
     if(!userId)return;
     await transaction(SNAPSHOT_STORE,'readwrite',store=>store.delete(userId));
-    const operations=await listOperations(userId).catch(()=>[]);
-    await Promise.all(operations.map(operation=>removeOperation(operation.id)));
+    const db=await openDb();
+    await new Promise((resolve,reject)=>{
+      const tx=db.transaction(QUEUE_STORE,'readwrite');
+      const index=tx.objectStore(QUEUE_STORE).index('by_user');
+      const request=index.openCursor(IDBKeyRange.only(userId));
+      request.onsuccess=()=>{
+        const cursor=request.result;
+        if(!cursor)return;
+        cursor.delete();
+        cursor.continue();
+      };
+      request.onerror=()=>reject(request.error||new Error('Unable to clear queued Emergency Mode changes.'));
+      tx.oncomplete=resolve;
+      tx.onerror=()=>reject(tx.error||new Error('Unable to clear queued Emergency Mode changes.'));
+      tx.onabort=()=>reject(tx.error||new Error('Unable to clear queued Emergency Mode changes.'));
+    });
     await transaction(KEY_STORE,'readwrite',store=>store.delete(userId));
   }
 
