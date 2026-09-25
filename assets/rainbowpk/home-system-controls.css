@@ -279,6 +279,10 @@
     width: 100%;
     min-width: 0;
   }
+
+  #homeRoute .current-front-panel .current-front-actions {
+    margin-bottom: 10px;
+  }
 }
 
 @media (max-width: 760px) {
