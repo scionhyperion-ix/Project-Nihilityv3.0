@@ -119,6 +119,26 @@
     if(!data?.path)throw new Error('Upload did not return a storage path.');
     return{path:data.path,url:await privateMediaUrl(kind,data.path),source:'supabase'}
   }
+  async function uploadPkSystemMedia(kind,file){
+    if(!['avatar','banner'].includes(kind))throw new Error('Unknown system media type.');
+    if(!(file instanceof Blob)||!file.type.startsWith('image/'))throw new Error('Choose a valid image first.');
+    const s=await refresh();if(!s?.access_token)throw new Error('You are signed out.');
+    const r=await fetch(cfg.SUPABASE_URL+'/functions/v1/nihility-secure',{
+      method:'POST',
+      headers:{
+        apikey:cfg.SUPABASE_ANON_KEY,
+        Authorization:'Bearer '+s.access_token,
+        'Content-Type':file.type,
+        'x-nihility-action':'upload_pk_system_media',
+        'x-media-kind':kind
+      },
+      body:file
+    });
+    const data=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(data?.error||'System image upload failed.');
+    if(!data?.path)throw new Error('System image upload did not return a storage path.');
+    return{path:data.path};
+  }
   const privateMediaCache=new Map();
   async function privateMediaBlob(kind,path){
     if(!path)throw new Error('Media path is required.');
@@ -215,5 +235,5 @@
     return data;
   }
 
-  window.nihilityApi={configured,getSession,saveSession,sendMagicLink,sendPasswordReset,signInWithPassword,setPassword,signOut,checkPwnedPassword,readSessionFromUrl,refresh,user,rest,rpc,upload,privateMediaBlob,privateMediaUrl,deleteMedia,secure,secureBackup};
+  window.nihilityApi={configured,getSession,saveSession,sendMagicLink,sendPasswordReset,signInWithPassword,setPassword,signOut,checkPwnedPassword,readSessionFromUrl,refresh,user,rest,rpc,upload,uploadPkSystemMedia,privateMediaBlob,privateMediaUrl,deleteMedia,secure,secureBackup};
 })();
