@@ -690,7 +690,7 @@
   align-items:end;
   gap:10px;
   min-width:0;
-  margin-bottom:12px;
+  margin-bottom:10px;
 }
 
 #membersRoute .search-field{
@@ -713,17 +713,20 @@
 
 #membersRoute .member-toolbar-controls{
   min-width:0;
-  display:grid;
-  grid-template-columns:repeat(6,42px);
-  justify-content:end;
-  gap:7px;
+  display:flex !important;
+  flex-direction:row !important;
+  flex-wrap:nowrap;
+  align-items:center;
+  justify-content:flex-end;
+  gap:6px;
 }
 
 #membersRoute .member-toolbar-controls .feature-select{
   position:relative;
-  width:42px;
-  min-width:42px;
-  height:42px;
+  flex:0 0 40px;
+  width:40px;
+  min-width:40px;
+  height:40px;
   display:block;
   border:1px solid color-mix(in srgb,var(--accent) 16%,var(--line));
   border-radius:11px;
@@ -768,10 +771,11 @@
 
 #membersRoute .member-toolbar-controls #createGroupButton,
 #membersRoute .member-toolbar-controls #createMemberButton{
-  width:42px;
-  min-width:42px;
-  height:42px;
-  min-height:42px;
+  flex:0 0 40px;
+  width:40px;
+  min-width:40px;
+  height:40px;
+  min-height:40px;
   padding:0;
   overflow:hidden;
   font-size:0;
@@ -810,11 +814,13 @@
   pointer-events:auto;
 }
 
-@media(max-width:470px){
+/* Once the available width is compact, keep everything to two tight rows. */
+@media(max-width:620px){
   #membersRoute .toolbar-row,
   #membersRoute .toolbar-row:has(#memberSearch:focus),
   #membersRoute .toolbar-row:has(#memberSearch:not(:placeholder-shown)){
     grid-template-columns:1fr;
+    row-gap:7px;
   }
 
   #membersRoute .search-field,
@@ -834,14 +840,27 @@
   }
 
   #membersRoute .member-toolbar-controls{
-    grid-template-columns:repeat(6,minmax(36px,1fr));
-    justify-content:stretch;
+    width:100%;
+    justify-content:flex-start;
+  }
+
+  #membersRoute .member-toolbar-controls #createMemberButton{
+    margin-left:auto;
+  }
+}
+
+@media(max-width:360px){
+  #membersRoute .member-toolbar-controls{
+    gap:5px;
   }
 
   #membersRoute .member-toolbar-controls .feature-select,
   #membersRoute .member-toolbar-controls #createGroupButton,
   #membersRoute .member-toolbar-controls #createMemberButton{
-    width:100%;
-    min-width:0;
+    flex-basis:36px;
+    width:36px;
+    min-width:36px;
+    height:36px;
+    min-height:36px;
   }
 }

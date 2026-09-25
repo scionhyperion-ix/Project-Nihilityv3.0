@@ -278,3 +278,79 @@
     min-width: 0;
   }
 }
+
+
+/* Compact Members toolbar: use two tight rows instead of a tall control stack. */
+@container members-directory (max-width: 620px) {
+  #membersRoute .toolbar-row,
+  #membersRoute .toolbar-row:has(#memberSearch:focus),
+  #membersRoute .toolbar-row:has(#memberSearch:not(:placeholder-shown)) {
+    display: grid;
+    grid-template-columns: 1fr;
+    align-items: start;
+    row-gap: 7px;
+    column-gap: 0;
+    margin-bottom: 10px;
+  }
+
+  #membersRoute .search-field,
+  #membersRoute .toolbar-row:has(#memberSearch:focus) .search-field,
+  #membersRoute .toolbar-row:has(#memberSearch:not(:placeholder-shown)) .search-field {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    min-height: 42px;
+    padding-inline: 11px;
+    justify-content: flex-start;
+  }
+
+  #membersRoute .search-field input,
+  #membersRoute .toolbar-row:has(#memberSearch:focus) .search-field input,
+  #membersRoute .toolbar-row:has(#memberSearch:not(:placeholder-shown)) .search-field input {
+    width: 100%;
+    min-width: 0;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  #membersRoute .member-toolbar-controls {
+    width: 100%;
+    min-width: 0;
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 6px;
+  }
+
+  #membersRoute .member-toolbar-controls .feature-select,
+  #membersRoute .member-toolbar-controls #createGroupButton,
+  #membersRoute .member-toolbar-controls #createMemberButton {
+    flex: 0 0 40px;
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+    min-height: 40px;
+  }
+
+  #membersRoute .member-toolbar-controls #createMemberButton {
+    margin-left: auto;
+  }
+}
+
+@container members-directory (max-width: 360px) {
+  #membersRoute .member-toolbar-controls {
+    gap: 5px;
+  }
+
+  #membersRoute .member-toolbar-controls .feature-select,
+  #membersRoute .member-toolbar-controls #createGroupButton,
+  #membersRoute .member-toolbar-controls #createMemberButton {
+    flex-basis: 36px;
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
+    min-height: 36px;
+  }
+}
