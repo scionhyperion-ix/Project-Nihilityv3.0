@@ -1462,7 +1462,7 @@ function sanitizePkSystem(system:any){
   };
 }
 
-async function saveLocalSystemProfile(user:any,system:any,{copyMedia=false}={}){
+async function saveLocalSystemProfile(user:any,system:any,{copyMedia=false,mediaPaths={}}:{copyMedia?:boolean,mediaPaths?:Record<string,string|null>}={}){
   const settingsRows=await admin("/rest/v1/app_settings?user_id=eq."+encodeURIComponent(user.id)+"&select=settings&limit=1");
   const existingSettings=settingsRows?.[0]?.settings||{};
   const old=existingSettings?.system_profile||{};
@@ -1471,7 +1471,14 @@ async function saveLocalSystemProfile(user:any,system:any,{copyMedia=false}={}){
   const baseline:any={...(old.pk_media_v1||{})};
   const cleanup:Array<{kind:string,path:string}>=[];
 
-  if(copyMedia&&system.avatar_url){
+  const providedAvatar=mediaPaths?.avatar||null;
+  if(providedAvatar){
+    if(!validPkSystemPrivatePath(user.id,providedAvatar,"avatar"))throw new Error("Invalid saved system avatar path");
+    if(avatarPath&&avatarPath!==providedAvatar)cleanup.push({kind:"avatar",path:avatarPath});
+    avatarPath=providedAvatar;
+    baseline.avatar_url=system.avatar_url||null;
+    baseline.avatar_storage_path=providedAvatar;
+  }else if(copyMedia&&system.avatar_url){
     const next=await copyPkImage(user.id,"avatar",system.avatar_url,"system avatar");
     if(next){
       if(avatarPath&&avatarPath!==next)cleanup.push({kind:"avatar",path:avatarPath});
@@ -1486,7 +1493,14 @@ async function saveLocalSystemProfile(user:any,system:any,{copyMedia=false}={}){
     baseline.avatar_storage_path=null;
   }
 
-  if(copyMedia&&system.banner){
+  const providedBanner=mediaPaths?.banner||null;
+  if(providedBanner){
+    if(!validPkSystemPrivatePath(user.id,providedBanner,"banner"))throw new Error("Invalid saved system banner path");
+    if(bannerPath&&bannerPath!==providedBanner)cleanup.push({kind:"banner",path:bannerPath});
+    bannerPath=providedBanner;
+    baseline.banner_url=system.banner||null;
+    baseline.banner_storage_path=providedBanner;
+  }else if(copyMedia&&system.banner){
     const next=await copyPkImage(user.id,"banner",system.banner,"system banner");
     if(next){
       if(bannerPath&&bannerPath!==next)cleanup.push({kind:"banner",path:bannerPath});
@@ -1521,6 +1535,14 @@ async function actionGetPkSystem(user:any){
 async function actionUpdatePkSystem(user:any,body:any){
   const token=await getSecret(user.id);
   const input=body?.system||{};
+  const managed=body?.managed_media||{};
+  const managedPaths:{avatar:string|null,banner:string|null}={
+    avatar:managed.avatar_path?String(managed.avatar_path):null,
+    banner:managed.banner_path?String(managed.banner_path):null
+  };
+  if(managedPaths.avatar&&!validPkSystemPrivatePath(user.id,managedPaths.avatar,"avatar"))throw new ClientError("Invalid uploaded system avatar",400);
+  if(managedPaths.banner&&!validPkSystemPrivatePath(user.id,managedPaths.banner,"banner"))throw new ClientError("Invalid uploaded system banner",400);
+
   const payload:any={};
   const textFields=["name","description","tag","pronouns","avatar_url","banner"];
   for(const key of textFields){
@@ -1536,15 +1558,75 @@ async function actionUpdatePkSystem(user:any,body:any){
   }
   if(payload.avatar_url&&!/^https:\/\//i.test(payload.avatar_url))throw new ClientError("Avatar must use HTTPS");
   if(payload.banner&&!/^https:\/\//i.test(payload.banner))throw new ClientError("Banner must use HTTPS");
-  await pk(token,"/systems/@me",{method:"PATCH",body:JSON.stringify(payload)});
+
+  const previousRegistry=await getPkSystemMediaRegistry(user.id);
+  const published:Array<{kind:string,path:string,url:string,privatePath:string}>=[];
+  try{
+    if(managedPaths.avatar){
+      const item=await publishPkSystemMedia(user.id,"avatar",managedPaths.avatar);
+      payload.avatar_url=item.url;
+      published.push({kind:"avatar",path:item.path,url:item.url,privatePath:managedPaths.avatar});
+    }
+    if(managedPaths.banner){
+      const item=await publishPkSystemMedia(user.id,"banner",managedPaths.banner);
+      payload.banner=item.url;
+      published.push({kind:"banner",path:item.path,url:item.url,privatePath:managedPaths.banner});
+    }
+    await pk(token,"/systems/@me",{method:"PATCH",body:JSON.stringify(payload)});
+  }catch(error){
+    await Promise.allSettled([
+      ...published.map(item=>deletePkSystemPublicMedia(item.path)),
+      ...published.map(item=>deleteStoredMedia(user.id,item.kind,item.privatePath))
+    ]);
+    throw error;
+  }
+
   const updated=sanitizePkSystem(await pk(token,"/systems/@me"));
-  const local=await saveLocalSystemProfile(user,updated,{copyMedia:true});
+
+  for(const kind of ["avatar","banner"]){
+    const newlyPublished=published.find(item=>item.kind===kind);
+    const oldPath=previousRegistry[kind]||null;
+    if(newlyPublished){
+      try{
+        await setPkSystemMediaRegistry(user.id,kind,newlyPublished.path);
+        if(oldPath&&oldPath!==newlyPublished.path)await deletePkSystemPublicMedia(oldPath);
+      }catch(error){
+        console.error("Unable to update PK public media registry",kind,error);
+        await recordSecurityEvent(user.id,"pk_system_media.registry_failure",false,{kind});
+      }
+      continue;
+    }
+
+    if(oldPath){
+      const currentUrl=kind==="avatar"?(updated.avatar_url||null):(updated.banner||null);
+      let managedUrl:string|null=null;
+      try{managedUrl=pkSystemPublicUrl(oldPath)}catch{}
+      if(!currentUrl||currentUrl!==managedUrl){
+        try{
+          await clearPkSystemMediaRegistry(user.id,kind);
+          await deletePkSystemPublicMedia(oldPath);
+        }catch(error){
+          console.error("Unable to clean replaced PK public media",kind,error);
+          await recordSecurityEvent(user.id,"pk_system_media.cleanup_failure",false,{kind});
+        }
+      }
+    }
+  }
+
+  let local:any={avatar_storage_path:null,banner_storage_path:null};
+  try{
+    local=await saveLocalSystemProfile(user,updated,{copyMedia:true,mediaPaths:managedPaths});
+  }catch(error){
+    console.error("PluralKit updated but local system copy could not be refreshed",error);
+    await recordSecurityEvent(user.id,"pk_system.local_refresh_failure",false,{});
+  }
+
   await admin("/rest/v1/external_integrations?user_id=eq."+encodeURIComponent(user.id)+"&provider=eq.pluralkit",{
     method:"PATCH",
     headers:{Prefer:"return=minimal"},
     body:JSON.stringify({external_system_id:updated.id,external_system_name:updated.name||updated.id||"PluralKit system"})
   });
-  return {system:{...updated,avatar_storage_path:local.avatar_storage_path||null,banner_storage_path:local.banner_storage_path||null}};
+  return {system:{...updated,avatar_storage_path:local.avatar_storage_path||managedPaths.avatar||null,banner_storage_path:local.banner_storage_path||managedPaths.banner||null}};
 }
 
 async function actionImportPkGroups(user:any){
