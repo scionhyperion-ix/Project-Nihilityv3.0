@@ -605,7 +605,7 @@
       remove.onclick=()=>{
         workingGroupMembers.delete(member.id);
         renderGroupCurrentMembers();
-        renderGroupMemberPicker();
+        if(!document.querySelector('#groupsAddMembersPanel')?.hidden)renderGroupMemberPicker();
         updateGroupPreview();
       };
       row.append(copy,remove);box.append(row);
@@ -615,6 +615,7 @@
   function renderGroupMemberPicker(){
     const box=document.querySelector('#groupsMemberPicker');if(!box)return;
     box.replaceChildren();
+    if(document.querySelector('#groupsAddMembersPanel')?.hidden)return;
     const q=(document.querySelector('#groupsMemberSearch')?.value||'').trim().toLowerCase();
     const candidates=sortedMembers(activeMembers().filter(m=>!workingGroupMembers.has(m.id)&&(!q||[m.name,m.display_name,m.pronouns].filter(Boolean).some(v=>String(v).toLowerCase().includes(q)))));
     if(!candidates.length){
@@ -624,7 +625,7 @@
     }
     candidates.forEach(member=>{
       const row=document.createElement('button');row.type='button';row.className='picker-row group-member-add-row';
-      row.append(groupDialogAvatarEl(member,'picker-avatar'));
+      row.append(avatarEl(member,'picker-avatar'));
       const copy=document.createElement('span');copy.className='picker-copy';
       const strong=document.createElement('strong');strong.textContent=memberName(member);
       const small=document.createElement('small');small.textContent=member.pronouns||member.name;
@@ -675,7 +676,6 @@
     clearGroupPreviewObjectUrls();
     toggleGroupAddMembers(false);
     renderGroupCurrentMembers();
-    renderGroupMemberPicker();
     updateGroupPreview();
     dialog.showModal();
   }
