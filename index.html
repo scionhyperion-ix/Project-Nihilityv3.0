@@ -66,7 +66,7 @@
         <button id="forgotPasswordButton" class="text-button" type="button">Forgot password?</button>
         <p id="loginMessage" class="form-message"></p>
       </form>
-      <div class="security-note"><strong>Invite-only</strong><p>The first account becomes the owner. Additional accounts need an invite from the owner profile page.</p></div>
+      <div class="security-note"><strong>New to Nihility?</strong><p>Enter your email and use the magic-link button. If the address is new, Nihility will create your account after you confirm the email.</p></div>
     </section>
   </main>
 
@@ -84,8 +84,8 @@
 
   <main id="deniedView" class="login-shell" hidden>
     <section class="login-card">
-      <div class="brand-lockup"><div class="brand-mark">N</div><div><p class="eyebrow">Project Nihility</p><h1>Invite required</h1></div></div>
-      <p class="login-intro">This account is authenticated, but it has not been invited to this Nihility instance.</p>
+      <div class="brand-lockup"><div class="brand-mark">N</div><div><p class="eyebrow">Project Nihility</p><h1>Account unavailable</h1></div></div>
+      <p class="login-intro">This account is authenticated, but its Nihility profile could not be loaded. Sign out and try again, or retry when the data service is available.</p>
       <button id="deniedSignOut" class="secondary-button">Sign out</button>
     </section>
   </main>
@@ -255,8 +255,27 @@
               </div>
             </form>
           </article>
-          <article id="invitePanel" class="panel section-panel" hidden><p class="eyebrow">Owner controls</p><h3>Invite another account</h3><p class="muted">Invite another trusted account to this Nihility instance.</p><form id="inviteForm" class="stack"><label>Email<input id="inviteEmail" type="email" required placeholder="partner@example.com"></label><button class="secondary-button" type="submit">Create invite</button><p id="inviteMessage" class="form-message"></p></form></article>
-          <article class="panel section-panel"><p class="eyebrow">Session</p><h3 id="profileRole">Member</h3><form id="passwordForm" class="stack"><label>Set or change password<input id="newPasswordInput" type="password" autocomplete="new-password" minlength="12" required placeholder="At least 12 characters"></label><button class="secondary-button" type="submit">Save password</button><p id="passwordMessage" class="form-message"></p></form><button id="signOutButton" class="secondary-button danger-button" type="button">Sign out</button></article>
+          <article class="panel section-panel account-security-panel">
+            <p class="eyebrow">Account security</p>
+            <h3>Sign-in details</h3>
+            <p class="muted">Manage the email address and password used to sign in to this Nihility account.</p>
+
+            <form id="emailChangeForm" class="stack account-security-form">
+              <label>Current email<input id="currentAccountEmail" type="email" readonly></label>
+              <label>New email<input id="newAccountEmail" type="email" autocomplete="email" required placeholder="new@example.com"></label>
+              <button class="secondary-button" type="submit">Change email</button>
+              <p id="emailChangeMessage" class="form-message"></p>
+            </form>
+
+            <form id="passwordForm" class="stack account-security-form">
+              <label>New password<input id="newPasswordInput" type="password" autocomplete="new-password" minlength="12" required placeholder="At least 12 characters"></label>
+              <label>Confirm new password<input id="confirmNewPasswordInput" type="password" autocomplete="new-password" minlength="12" required placeholder="Repeat new password"></label>
+              <button class="secondary-button" type="submit">Change password</button>
+              <p id="passwordMessage" class="form-message"></p>
+            </form>
+
+            <button id="signOutButton" class="secondary-button danger-button" type="button">Sign out</button>
+          </article>
         </div>
       </section>
     </div>
@@ -438,10 +457,10 @@
   </dialog>
 
   <script src="assets/js/config.js?v=2" defer></script>
-  <script src="assets/js/api.js?v=21" defer></script>
+  <script src="assets/js/api.js?v=22" defer></script>
   <script src="assets/js/media-editor.js?v=3" defer></script>
   <script src="assets/js/backup.js?v=1" defer></script>
-  <script src="assets/js/app.js?v=63" defer></script>
+  <script src="assets/js/app.js?v=64" defer></script>
   <script src="assets/js/rainbow-features.js?v=32" defer></script>
   <script src="assets/js/member-custom-fields.js?v=10" defer></script>
   <script src="assets/js/member-connections.js?v=4" defer></script>
