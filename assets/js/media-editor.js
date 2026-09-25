@@ -12,6 +12,8 @@
 
   const state={config:null,image:null,objectUrl:null,angle:0,zoom:1,offsetX:0,offsetY:0,dragging:false,pointerId:null,lastX:0,lastY:0};
   const enhanced=new WeakSet();
+  const remotePreviews=new Map();
+  const previewTimers=new Map();
   let dialog=null,canvas=null,ctx=null,zoomInput=null,message=null;
 
   function outputSize(shape){
@@ -137,6 +139,73 @@
     return blob;
   }
 
+  function clearRemotePreview(config){
+    const previous=remotePreviews.get(config.key);
+    if(previous?.objectUrl)URL.revokeObjectURL(previous.objectUrl);
+    remotePreviews.delete(config.key);
+    document.dispatchEvent(new CustomEvent('nihility-media-preview',{detail:{key:config.key,url:null}}));
+  }
+
+  async function importRemoteBlob(config,remote){
+    let tempPath=null;
+    try{
+      const result=await window.nihilityApi.secure('import_media',{kind:config.storageKind,url:remote});
+      tempPath=result?.path||null;
+      if(!tempPath)throw new Error('The image link could not be imported.');
+      return await window.nihilityApi.privateMediaBlob(config.storageKind,tempPath);
+    }finally{
+      if(tempPath){
+        try{await window.nihilityApi.deleteMedia(config.storageKind,tempPath)}
+        catch(error){console.warn('Unable to clean up temporary editor media',error)}
+      }
+    }
+  }
+
+  function setRemotePreview(config,sourceUrl,blob){
+    clearRemotePreview(config);
+    const objectUrl=URL.createObjectURL(blob);
+    remotePreviews.set(config.key,{sourceUrl,blob,objectUrl});
+    document.dispatchEvent(new CustomEvent('nihility-media-preview',{detail:{key:config.key,url:objectUrl}}));
+    return objectUrl;
+  }
+
+  function scheduleRemotePreview(config,status){
+    clearTimeout(previewTimers.get(config.key));
+    const input=document.getElementById(config.urlId);
+    const remote=(input?.value||'').trim();
+    if(!remote){
+      clearRemotePreview(config);
+      status.textContent=document.getElementById(config.fileId)?.files?.[0]?'Image selected, adjust if needed':'Crop, reposition or rotate';
+      return;
+    }
+    let parsed;
+    try{parsed=new URL(remote)}catch{
+      clearRemotePreview(config);
+      status.textContent='Enter a valid HTTPS image link';
+      return;
+    }
+    if(parsed.protocol!=='https:'){
+      clearRemotePreview(config);
+      status.textContent='Image links must use HTTPS';
+      return;
+    }
+    status.textContent='Loading link preview...';
+    const timer=setTimeout(async()=>{
+      const latest=(input?.value||'').trim();
+      if(latest!==remote)return;
+      try{
+        const blob=await importRemoteBlob(config,remote);
+        if((input?.value||'').trim()!==remote)return;
+        setRemotePreview(config,remote,blob);
+        status.textContent='Link preview ready, adjust if needed';
+      }catch(error){
+        clearRemotePreview(config);
+        status.textContent=error.message||'Could not preview this image link';
+      }
+    },550);
+    previewTimers.set(config.key,timer);
+  }
+
   async function getSourceBlob(config){
     const fileInput=document.getElementById(config.fileId);
     const urlInput=document.getElementById(config.urlId);
@@ -145,19 +214,9 @@
 
     const remote=(urlInput?.value||'').trim();
     if(remote){
-      let tempPath=null;
-      try{
-        const result=await window.nihilityApi.secure('import_media',{kind:config.storageKind,url:remote});
-        tempPath=result?.path||null;
-        if(!tempPath)throw new Error('The image link could not be imported.');
-        const signed=await window.nihilityApi.privateMediaUrl(config.storageKind,tempPath);
-        return await fetchImageBlob(signed);
-      }finally{
-        if(tempPath){
-          try{await window.nihilityApi.deleteMedia(config.storageKind,tempPath)}
-          catch(error){console.warn('Unable to clean up temporary editor media',error)}
-        }
-      }
+      const cached=remotePreviews.get(config.key);
+      if(cached?.sourceUrl===remote&&cached.blob)return cached.blob;
+      return await importRemoteBlob(config,remote);
     }
 
     let current='';
@@ -353,13 +412,14 @@
       const adjusted=Boolean(selected&&/^nihility-(avatar|banner)\.webp$/i.test(selected.name));
       if(adjusted)file.dataset.mediaAdjusted='true';
       else delete file.dataset.mediaAdjusted;
-      status.textContent=selected?(adjusted?'Adjusted image ready':'Image selected, adjust if needed'):'Crop, reposition or rotate';
+      if(selected)clearRemotePreview(config);
+      status.textContent=selected?(adjusted?'Adjusted image ready':'Image selected, adjust if needed'):(url.value.trim()?'Link ready, adjust if needed':'Crop, reposition or rotate');
     });
-    url.addEventListener('input',()=>{
-      status.textContent=url.value.trim()?'Link ready, adjust if needed':file.files?.[0]?'Image selected, adjust if needed':'Crop, reposition or rotate';
-    });
+    url.addEventListener('input',()=>scheduleRemotePreview(config,status));
     file.closest('form')?.addEventListener('reset',()=>{
       setTimeout(()=>{
+        clearTimeout(previewTimers.get(config.key));
+        clearRemotePreview(config);
         delete file.dataset.mediaAdjusted;
         status.textContent='Crop, reposition or rotate';
       },0);
@@ -369,5 +429,8 @@
   function enhanceAll(){CONFIGS.forEach(enhance)}
   new MutationObserver(enhanceAll).observe(document.documentElement,{childList:true,subtree:true});
   enhanceAll();
-  window.nihilityMediaEditor={enhanceAll};
+  window.nihilityMediaEditor={
+    enhanceAll,
+    getPreviewUrl(key){return remotePreviews.get(key)?.objectUrl||''}
+  };
 })();
