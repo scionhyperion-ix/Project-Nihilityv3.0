@@ -20,7 +20,7 @@
     const connectionPromise=loadAllConnections();
     await coreLoadData();
     state.memberConnections=await connectionPromise;
-    renderAll();
+    if(!window.nihilityInitialHydration&&!window.nihilitySilentRefresh)renderAll();
   };
 
   function memberById(id){return state.members.find(m=>m.id===id)||null}
