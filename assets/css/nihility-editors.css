@@ -719,6 +719,18 @@ body:has(dialog[open]){
   border-top:1px solid var(--line);
   overflow:hidden;
 }
+.groups-members-under-preview.is-adding{
+  overflow:hidden;
+}
+.groups-members-under-preview.is-adding .groups-add-members-panel{
+  flex:1 1 0;
+  min-height:0;
+}
+.groups-members-under-preview.is-adding .groups-member-picker{
+  min-height:0;
+  height:100%;
+  overflow-y:auto;
+}
 .groups-add-members-panel[hidden]{
   display:none!important;
 }
@@ -774,6 +786,13 @@ body:has(dialog[open]){
   .groups-add-members-panel{
     flex:none;
     min-height:220px;
+  }
+  .groups-members-under-preview.is-adding .groups-add-members-panel{
+    min-height:280px;
+  }
+  .groups-members-under-preview.is-adding .groups-member-picker{
+    min-height:210px;
+    max-height:260px;
   }
 }
 
