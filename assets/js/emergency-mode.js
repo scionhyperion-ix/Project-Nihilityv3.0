@@ -2,9 +2,10 @@
   'use strict';
 
   const DB_NAME='nihility-emergency-v1';
-  const DB_VERSION=1;
+  const DB_VERSION=2;
   const SNAPSHOT_STORE='snapshots';
   const QUEUE_STORE='operations';
+  const KEY_STORE='keys';
   const SNAPSHOT_FIELDS=[
     'profile','members','fronts','frontMembers','integration','pkConnected','pkImported',
     'groups','memberGroups','memberFieldDefinitions','memberFieldValues','memberTags',
@@ -36,6 +37,9 @@
           store.createIndex('by_user','user_id',{unique:false});
           store.createIndex('by_user_created',['user_id','created_at'],{unique:false});
         }
+        if(!db.objectStoreNames.contains(KEY_STORE)){
+          db.createObjectStore(KEY_STORE,{keyPath:'id'});
+        }
       };
       request.onsuccess=()=>resolve(request.result);
       request.onerror=()=>reject(request.error||new Error('Emergency cache unavailable.'));
@@ -61,6 +65,49 @@
       request.onsuccess=()=>resolve(request.result);
       request.onerror=()=>reject(request.error||new Error('Emergency cache request failed.'));
     });
+  }
+
+
+  function bytesToB64(bytes){
+    let binary='';
+    const array=bytes instanceof Uint8Array?bytes:new Uint8Array(bytes);
+    for(let i=0;i<array.length;i++)binary+=String.fromCharCode(array[i]);
+    return btoa(binary);
+  }
+  function b64ToBytes(value){
+    const binary=atob(String(value||''));
+    const out=new Uint8Array(binary.length);
+    for(let i=0;i<binary.length;i++)out[i]=binary.charCodeAt(i);
+    return out;
+  }
+  async function getCacheKey(userId){
+    if(!userId)throw new Error('Emergency cache key requires a user.');
+    const db=await openDb();
+    const readTx=db.transaction(KEY_STORE,'readonly');
+    const existing=await requestResult(readTx.objectStore(KEY_STORE).get(userId));
+    if(existing?.key)return existing.key;
+
+    const key=await crypto.subtle.generateKey({name:'AES-GCM',length:256},false,['encrypt','decrypt']);
+    await transaction(KEY_STORE,'readwrite',store=>store.put({id:userId,key,created_at:new Date().toISOString()}));
+    return key;
+  }
+  async function encryptValue(userId,value){
+    const key=await getCacheKey(userId);
+    const iv=crypto.getRandomValues(new Uint8Array(12));
+    const plaintext=new TextEncoder().encode(JSON.stringify(value));
+    const ciphertext=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,plaintext);
+    return{iv:bytesToB64(iv),ciphertext:bytesToB64(new Uint8Array(ciphertext))};
+  }
+  async function decryptValue(userId,record){
+    if(record?.data!==undefined)return cloneSafe(record.data);
+    if(!record?.iv||!record?.ciphertext)return null;
+    const key=await getCacheKey(userId);
+    const plaintext=await crypto.subtle.decrypt(
+      {name:'AES-GCM',iv:b64ToBytes(record.iv)},
+      key,
+      b64ToBytes(record.ciphertext)
+    );
+    return JSON.parse(new TextDecoder().decode(plaintext));
   }
 
   function cloneSafe(value){
@@ -104,7 +151,15 @@
     if(!userId||!state)return null;
     currentUserId=userId;
     const snapshot=makeSnapshot(userId,state);
-    await transaction(SNAPSHOT_STORE,'readwrite',store=>store.put(snapshot));
+    const encrypted=await encryptValue(userId,snapshot.data);
+    const stored={
+      user_id:userId,
+      saved_at:snapshot.saved_at,
+      version:2,
+      iv:encrypted.iv,
+      ciphertext:encrypted.ciphertext
+    };
+    await transaction(SNAPSHOT_STORE,'readwrite',store=>store.put(stored));
     lastSnapshotAt=snapshot.saved_at;
     updateBanner();
     return snapshot;
@@ -114,8 +169,11 @@
     if(!userId)return null;
     const db=await openDb();
     const tx=db.transaction(SNAPSHOT_STORE,'readonly');
-    const result=await requestResult(tx.objectStore(SNAPSHOT_STORE).get(userId));
-    return result||null;
+    const stored=await requestResult(tx.objectStore(SNAPSHOT_STORE).get(userId));
+    if(!stored)return null;
+    const data=await decryptValue(userId,stored);
+    if(!data)return null;
+    return{user_id:userId,saved_at:stored.saved_at||null,version:stored.version||1,data};
   }
 
   async function restoreState(userId,state){
@@ -134,24 +192,29 @@
   async function deleteSnapshot(userId){
     if(!userId)return;
     await transaction(SNAPSHOT_STORE,'readwrite',store=>store.delete(userId));
+    const operations=await listOperations(userId).catch(()=>[]);
+    await Promise.all(operations.map(operation=>removeOperation(operation.id)));
+    await transaction(KEY_STORE,'readwrite',store=>store.delete(userId));
   }
 
   async function queueOperation(userId,type,payload){
     if(!userId)throw new Error('Emergency changes require a signed-in account.');
-    const operation={
+    const encrypted=await encryptValue(userId,cloneSafe(payload));
+    const stored={
       id:crypto.randomUUID(),
       user_id:userId,
       type:String(type),
-      payload:cloneSafe(payload),
+      payload_iv:encrypted.iv,
+      payload_ciphertext:encrypted.ciphertext,
       created_at:new Date().toISOString(),
       attempts:0,
       last_error:null
     };
-    await transaction(QUEUE_STORE,'readwrite',store=>store.put(operation));
+    await transaction(QUEUE_STORE,'readwrite',store=>store.put(stored));
     currentUserId=userId;
     await updateBanner();
     document.dispatchEvent(new CustomEvent('nihility-emergency-queue-change',{detail:{userId}}));
-    return operation;
+    return{...stored,payload:cloneSafe(payload)};
   }
 
   async function listOperations(userId=currentUserId){
@@ -160,7 +223,14 @@
     const tx=db.transaction(QUEUE_STORE,'readonly');
     const index=tx.objectStore(QUEUE_STORE).index('by_user');
     const rows=await requestResult(index.getAll(userId));
-    return (rows||[]).sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at)));
+    const result=[];
+    for(const row of rows||[]){
+      const payload=row.payload!==undefined
+        ?cloneSafe(row.payload)
+        :await decryptValue(userId,{iv:row.payload_iv,ciphertext:row.payload_ciphertext});
+      result.push({...row,payload});
+    }
+    return result.sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at)));
   }
 
   async function queueCount(userId=currentUserId){
@@ -173,7 +243,10 @@
   }
 
   async function updateOperation(operation){
-    await transaction(QUEUE_STORE,'readwrite',store=>store.put(operation));
+    const encrypted=await encryptValue(operation.user_id,operation.payload);
+    const stored={...operation,payload_iv:encrypted.iv,payload_ciphertext:encrypted.ciphertext};
+    delete stored.payload;
+    await transaction(QUEUE_STORE,'readwrite',store=>store.put(stored));
   }
 
   async function flushQueue(userId,replayer){
