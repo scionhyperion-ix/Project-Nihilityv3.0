@@ -84,9 +84,16 @@ function setRoute(route){
   state.route=route;
   const meta={home:['Overview','Home'],members:['System directory','Members'],history:['Front tracking','Front history'],settings:['Connection and privacy','Settings'],profile:['Account','Profile']};
   const pair=meta[route]||meta.home;$('#pageEyebrow').textContent=pair[0];$('#pageTitle').textContent=pair[1];
-  $$('.route-view').forEach(v=>v.hidden=v.id!==route+'Route');$$('[data-route]').forEach(b=>b.classList.toggle('active',b.dataset.route===route));
+  $('.route-view').forEach(v=>v.hidden=v.id!==route+'Route');$('[data-route]').forEach(b=>b.classList.toggle('active',b.dataset.route===route));
   history.replaceState(null,'',route==='home'?location.pathname:(location.pathname+'#'+route));
-  if(route==='profile')renderProfile();
+
+  // Render only the route the user is actually opening. Building every hidden
+  // route at startup is expensive for large systems and should not block Home.
+  if(route==='home'){renderHeader();renderHome()}
+  else if(route==='members')renderMembers();
+  else if(route==='history')renderHistory();
+  else if(route==='settings')renderSettings();
+  else if(route==='profile')renderProfile();
 }
 function activeFront(){return state.fronts.find(f=>!f.ended_at)||null}
 function activeMembers(){return state.members.filter(m=>!m.archived_at)}
@@ -1305,11 +1312,11 @@ async function boot(){
     await Promise.race([coreReady,fullLoadPromise]);
     document.removeEventListener('nihility-core-data-ready',onCoreReady);
 
-    // Do not make the user wait for Timeline, custom fields, connections,
-    // groups, media signing, or the live PluralKit profile.
-    renderAll();
-    setRoute('home');
+    // Do not make the user wait for hidden-route DOM construction either.
+    // Home is cheap enough to render immediately; Members/History/etc. are
+    // rendered lazily when their route is opened.
     setView('app');
+    setRoute('home');
   }catch(error){
     document.removeEventListener('nihility-core-data-ready',onCoreReady);
     window.nihilityInitialHydration=false;
@@ -1319,9 +1326,18 @@ async function boot(){
   void fullLoadPromise.then(()=>{
     window.nihilityInitialHydration=false;
     if($('#appView')?.hidden)return;
-    renderAll();
-    if(state.route==='timeline')window.nihilitySystemTimeline?.render?.();
-    document.dispatchEvent(new CustomEvent('nihility-initial-hydration-complete'));
+
+    // Update the visible route immediately, then let the expensive hidden
+    // route DOM build happen when the browser is idle.
+    setRoute(state.route||'home');
+    const finish=()=>{
+      if($('#appView')?.hidden)return;
+      renderAll();
+      if(state.route==='timeline')window.nihilitySystemTimeline?.render?.();
+      document.dispatchEvent(new CustomEvent('nihility-initial-hydration-complete'));
+    };
+    if('requestIdleCallback' in window)requestIdleCallback(finish,{timeout:1800});
+    else setTimeout(finish,120);
   }).catch(error=>{
     window.nihilityInitialHydration=false;
     console.warn('Background startup hydration did not finish',error);
