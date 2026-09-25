@@ -21,15 +21,14 @@
 
 .system-summary-panel {
   position: relative;
-  padding-bottom: 48px;
+  padding-bottom: 0;
 }
 
 .system-edit-button {
-  position: absolute;
+  position: static;
   z-index: 5;
-  right: 20px;
-  bottom: 8px;
-  top: auto;
+  align-self: flex-end;
+  margin: 0 20px 16px auto;
   min-height: 34px;
   padding: 7px 11px;
   border-color: var(--line-strong);
@@ -242,20 +241,17 @@
     height: 100%;
   }
 
-  #homeRoute .system-summary-panel .top-fronter-section {
-    position: relative;
-    margin: 14px 20px 8px;
+  #homeRoute .system-summary-panel {
+    display: flex;
+    flex-direction: column;
   }
 
-  #homeRoute .system-summary-panel .top-fronter-section::before {
-    content: "";
-    position: absolute;
-    left: 50%;
-    bottom: 100%;
-    width: 0;
-    height: 14px;
-    border-left: 1px solid var(--line);
-    pointer-events: none;
+  #homeRoute .system-summary-panel .top-fronter-section {
+    margin: 14px 20px 10px;
+  }
+
+  #homeRoute .system-summary-panel .system-edit-button {
+    margin-top: 0;
   }
 }
 
@@ -269,6 +265,7 @@
   }
 
   .system-edit-button {
+    position: absolute;
     right: 12px;
     bottom: 12px;
     top: auto;
