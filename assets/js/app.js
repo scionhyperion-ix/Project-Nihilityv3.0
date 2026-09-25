@@ -1387,6 +1387,7 @@ async function boot(){
     return;
   }
   state.user=await nihilityApi.user();if(!state.user){setView('login');return}
+  window.nihilityEmergency?.setCurrentUser?.(state.user.id);
   if(new URLSearchParams(location.search).get('reset')==='1'){setView('reset');return}
   if(!await bootstrapProfile()){setView('denied');return}
 
@@ -1415,9 +1416,13 @@ async function boot(){
   setView('app');
   setRoute('home');
 
-  void fullLoadPromise.then(()=>{
+  void fullLoadPromise.then(async()=>{
     window.nihilityInitialHydration=false;
     lastFullAutoRefreshAt=Date.now();
+    if(!window.nihilityEmergency?.isActive?.()){
+      try{await window.nihilityEmergency?.captureState?.(state.user.id,state)}
+      catch(error){console.warn('Unable to update Emergency Mode snapshot',error)}
+    }
     if($('#appView')?.hidden)return;
 
     if(window.nihilityCoreDataReady)setRoute(state.route||'home');
@@ -1565,6 +1570,53 @@ document.addEventListener('nihility-media-preview',event=>{
   }
 });
 $('#inviteForm').onsubmit=invite;
+async function replayEmergencyOperation(operation){
+  if(operation.type==='front-log'){
+    const payload=operation.payload||{};
+    return nihilityApi.rpc('log_front_detailed',{
+      p_member_details:Array.isArray(payload.memberDetails)?payload.memberDetails:[],
+      p_started_at:payload.startedAt||operation.created_at,
+      p_note:payload.note||null
+    });
+  }
+  throw new Error('Unsupported queued Emergency Mode operation: '+operation.type);
+}
+
+let emergencyRecoveryBusy=false;
+async function attemptEmergencyRecovery({automatic=false}={}){
+  const emergency=window.nihilityEmergency;
+  if(!emergency?.isActive?.()||!state.user||emergencyRecoveryBusy||!navigator.onLine)return false;
+  emergencyRecoveryBusy=true;
+  try{
+    await emergency.withNetworkAccess(async()=>{
+      await nihilityApi.rest('profiles',{
+        query:'select=user_id&user_id=eq.'+encodeURIComponent(state.user.id)+'&limit=1',
+        timeoutMs:5000
+      });
+      await emergency.flushQueue(state.user.id,replayEmergencyOperation);
+      window.nihilitySilentRefresh=true;
+      try{await loadData()}
+      finally{window.nihilitySilentRefresh=false}
+    });
+
+    await emergency.captureState(state.user.id,state);
+    emergency.exit('Supabase is responding again. Cached changes were synchronized.');
+    lastAutoRefreshAt=Date.now();
+    lastFullAutoRefreshAt=Date.now();
+    setRoute(state.route||'home');
+    if(!automatic)toast('Back online','Cached Nihility data and queued front changes are synchronized.');
+    return true;
+  }catch(error){
+    console.warn('Emergency Mode recovery check failed',error);
+    emergency.enter('Supabase is still unavailable. Nihility is continuing from the local cache.');
+    if(!automatic)toast('Still in Emergency Mode',error.message||'Supabase is not ready yet.','error');
+    return false;
+  }finally{
+    emergencyRecoveryBusy=false;
+  }
+}
+window.nihilityEmergency?.setRetryHandler?.(attemptEmergencyRecovery);
+
 const AUTO_REFRESH_MS=15000;
 const FULL_AUTO_REFRESH_MS=90000;
 let autoRefreshBusy=false;
@@ -1614,6 +1666,10 @@ async function refreshLiveFrontData(){
 }
 
 async function autoRefreshData({force=false,full=false}={}){
+  if(window.nihilityEmergency?.isActive?.()){
+    if(force&&navigator.onLine)void attemptEmergencyRecovery({automatic:true});
+    return;
+  }
   if(autoRefreshBusy||!state.user||document.hidden||!navigator.onLine)return;
   if($('#appView')?.hidden)return;
   if(document.querySelector('dialog[open]'))return;
@@ -1633,6 +1689,7 @@ async function autoRefreshData({force=false,full=false}={}){
     if(doFull){
       await loadData();
       lastFullAutoRefreshAt=Date.now();
+      await window.nihilityEmergency?.captureState?.(state.user.id,state);
     }else{
       await refreshLiveFrontData();
     }
@@ -1664,5 +1721,14 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)void autoR
 window.addEventListener('focus',()=>{if(Date.now()-lastAutoRefreshAt>5000)void autoRefreshData({force:true})});
 window.addEventListener('online',()=>void autoRefreshData({force:true,full:true}));
 
+document.addEventListener('nihility-emergency-queue-change',()=>{
+  if(state.user)void window.nihilityEmergency?.captureState?.(state.user.id,state);
+});
+
 setInterval(updateFrontTimers,15000);
-boot().then(()=>{lastAutoRefreshAt=Date.now()}).catch(error=>{console.error(error);setView('app');setRoute('home');toast('Unable to start Nihility',error.message,'error')});
+boot().then(()=>{lastAutoRefreshAt=Date.now()}).catch(error=>{
+  console.error(error);
+  setView('login');
+  const message=$('#loginMessage');
+  if(message)message.textContent='Nihility could not verify this account and no Emergency Mode snapshot was available. '+(error.message||'Try again shortly.');
+});
