@@ -207,6 +207,7 @@
 
   const previousRenderAll=renderAll;
   renderAll=function renderAllWithSystemControls(){
+    if(window.nihilitySilentRefresh)return;
     previousRenderAll();
     ensureSystemEditButton();
   };
