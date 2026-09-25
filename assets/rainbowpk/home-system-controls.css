@@ -255,7 +255,8 @@
   }
 
   #homeRoute .system-summary-panel .system-edit-button {
-    margin-top: 0;
+    margin-top: auto;
+    margin-bottom: 8px;
   }
 }
 
