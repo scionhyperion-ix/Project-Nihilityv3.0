@@ -531,3 +531,43 @@ html.frame-guard body{
     width:min(176px,calc(100vw - 14px));
   }
 }
+
+
+/* Current Front hierarchy: title first, centered overall/average timer, then fronter rows. */
+.current-front-panel .current-front-heading{
+  justify-content:flex-start;
+  gap:0;
+}
+
+.current-front-average{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  width:100%;
+  padding-top:12px;
+}
+
+.current-front-average #frontDuration{
+  min-width:88px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:6px 10px;
+  text-align:center;
+  font-variant-numeric:tabular-nums;
+  white-space:nowrap;
+}
+
+.current-front-panel .current-front-members{
+  padding-top:16px;
+}
+
+@media(max-width:760px){
+  .current-front-average{
+    padding-top:10px;
+  }
+
+  .current-front-panel .current-front-members{
+    padding-top:14px;
+  }
+}
