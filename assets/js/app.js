@@ -1474,9 +1474,17 @@ $('#passwordForm').onsubmit=async e=>{e.preventDefault();const m=$('#passwordMes
 async function signOut(){
   const button=$('#signOutButton');
   if(button)button.disabled=true;
+  const userId=state.user?.id||null;
   try{await nihilityApi.signOut('local')}
   catch(error){console.warn('Server sign-out failed; local session will still be cleared.',error)}
-  finally{nihilityApi.saveSession(null);location.reload()}
+  finally{
+    if(userId){
+      try{await window.nihilityEmergency?.deleteSnapshot?.(userId)}
+      catch(error){console.warn('Unable to clear local Emergency Mode cache during sign-out',error)}
+    }
+    nihilityApi.saveSession(null);
+    location.reload();
+  }
 }
 $('#signOutButton').onclick=signOut;$('#deniedSignOut').onclick=signOut;$('#sidebarProfileButton').onclick=()=>setRoute('profile');
 $('[data-route]').forEach(b=>b.onclick=()=>setRoute(b.dataset.route));$('[data-route-link]').forEach(b=>b.onclick=()=>setRoute(b.dataset.routeLink));
