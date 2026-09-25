@@ -1586,7 +1586,23 @@ async function actionUpdatePkSystem(user:any,body:any){
     throw error;
   }
 
-  const updated=sanitizePkSystem(await pk(token,"/systems/@me"));
+  let updated:any;
+  try{
+    updated=sanitizePkSystem(await pk(token,"/systems/@me"));
+  }catch(error){
+    // The PATCH may already have succeeded. Do not delete a newly published
+    // image and leave PluralKit pointing at a broken URL just because the
+    // read-back request failed.
+    const rows=await admin("/rest/v1/app_settings?user_id=eq."+encodeURIComponent(user.id)+"&select=settings&limit=1").catch(()=>[]);
+    const previous=rows?.[0]?.settings?.system_profile||{};
+    updated=sanitizePkSystem({
+      ...previous,
+      ...payload,
+      avatar_url:Object.prototype.hasOwnProperty.call(payload,"avatar_url")?payload.avatar_url:(previous.avatar_url||null),
+      banner:Object.prototype.hasOwnProperty.call(payload,"banner")?payload.banner:(previous.banner||previous.banner_url||null)
+    });
+    await recordSecurityEvent(user.id,"pk_system.readback_failure",false,{});
+  }
 
   for(const kind of ["avatar","banner"]){
     const newlyPublished=published.find(item=>item.kind===kind);
