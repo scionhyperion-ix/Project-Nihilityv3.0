@@ -86,36 +86,54 @@
   container-type: inline-size;
 }
 
+#membersRoute .toolbar-row {
+  align-items: flex-end;
+  justify-content: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+#membersRoute .member-toolbar-controls {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+#membersRoute .member-toolbar-controls .feature-select {
+  min-width: 112px;
+}
+
+#membersRoute .member-toolbar-controls .feature-select select {
+  width: 100%;
+  min-width: 0;
+}
+
+#membersRoute .member-toolbar-controls #createGroupButton,
+#membersRoute .member-toolbar-controls #createMemberButton {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 @container members-directory (max-width: 860px) {
   #membersRoute .toolbar-row {
-    flex-wrap: nowrap;
-    align-items: flex-end;
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr);
+    align-items: end;
     gap: 10px;
-    min-width: 0;
   }
 
   #membersRoute .search-field {
-    flex: 0 0 48px;
-    width: 48px;
-    max-width: 48px;
-    min-width: 48px;
-    min-height: 44px;
+    width: 44px;
+    min-width: 44px;
+    max-width: 44px;
+    min-height: 42px;
     padding-inline: 0;
     justify-content: center;
     overflow: hidden;
-    cursor: text;
-    transition:
-      flex-basis .2s ease,
-      width .2s ease,
-      max-width .2s ease,
-      padding .2s ease,
-      border-color .18s ease,
-      background .18s ease,
-      box-shadow .18s ease;
-  }
-
-  #membersRoute .search-field > span {
-    flex: 0 0 auto;
+    transition: width .18s ease, max-width .18s ease, padding .18s ease, box-shadow .18s ease;
   }
 
   #membersRoute .search-field input {
@@ -124,65 +142,39 @@
     padding-inline: 0;
     opacity: 0;
     pointer-events: none;
-    transition: width .2s ease, opacity .14s ease, padding .2s ease;
   }
 
-  #membersRoute .feature-select {
-    flex: 1 1 0;
-    min-width: 0;
+  #membersRoute .member-toolbar-controls {
+    display: grid;
+    grid-template-columns: repeat(6, 42px);
+    justify-content: end;
+    gap: 7px;
   }
 
-  #membersRoute .feature-select select {
-    width: 100%;
-    min-width: 0;
-  }
-
-  #membersRoute .toolbar-row:has(#memberSearch:focus) .search-field,
-  #membersRoute .toolbar-row:has(#memberSearch:not(:placeholder-shown)) .search-field {
-    flex: 1 1 300px;
-    width: auto;
-    max-width: none;
-    min-width: 180px;
-    padding-inline: 12px;
-    justify-content: flex-start;
-  }
-
-  #membersRoute .toolbar-row:has(#memberSearch:focus) .search-field input,
-  #membersRoute .toolbar-row:has(#memberSearch:not(:placeholder-shown)) .search-field input {
-    width: 100%;
-    padding-left: 0;
-    opacity: 1;
-    pointer-events: auto;
-  }
-
-  #membersRoute .toolbar-row:has(#memberSearch:focus) .feature-select,
-  #membersRoute .toolbar-row:has(#memberSearch:not(:placeholder-shown)) .feature-select {
+  #membersRoute .member-toolbar-controls .feature-select {
     position: relative;
-    flex: 0 0 46px;
-    width: 46px;
-    min-width: 46px;
-    height: 44px;
-    align-self: flex-end;
+    width: 42px;
+    min-width: 42px;
+    height: 42px;
+    display: block;
     border: 1px solid color-mix(in srgb, var(--accent) 16%, var(--line));
-    border-radius: 12px;
+    border-radius: 11px;
     background: color-mix(in srgb, var(--theme-surface-1) 72%, transparent);
   }
 
-  #membersRoute .toolbar-row:has(#memberSearch:focus) .feature-select::before,
-  #membersRoute .toolbar-row:has(#memberSearch:not(:placeholder-shown)) .feature-select::before {
+  #membersRoute .member-toolbar-controls .feature-select::before {
     content: attr(data-compact-icon);
     position: absolute;
     inset: 0;
     display: grid;
     place-items: center;
     color: var(--muted);
-    font-size: .82rem;
+    font-size: .78rem;
     font-weight: 800;
     pointer-events: none;
   }
 
-  #membersRoute .toolbar-row:has(#memberSearch:focus) .feature-select > span,
-  #membersRoute .toolbar-row:has(#memberSearch:not(:placeholder-shown)) .feature-select > span {
+  #membersRoute .member-toolbar-controls .feature-select > span {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -194,8 +186,7 @@
     border: 0;
   }
 
-  #membersRoute .toolbar-row:has(#memberSearch:focus) .feature-select select,
-  #membersRoute .toolbar-row:has(#memberSearch:not(:placeholder-shown)) .feature-select select {
+  #membersRoute .member-toolbar-controls .feature-select select {
     position: absolute;
     inset: 0;
     width: 100%;
@@ -207,50 +198,65 @@
     cursor: pointer;
   }
 
-  #membersRoute .toolbar-row:has(#memberSearch:focus) .feature-select:hover,
-  #membersRoute .toolbar-row:has(#memberSearch:not(:placeholder-shown)) .feature-select:hover {
-    border-color: color-mix(in srgb, var(--accent) 34%, var(--line-strong));
-    background: color-mix(in srgb, var(--theme-surface-hover) 72%, transparent);
-  }
-
-  #membersRoute .toolbar-row:has(#memberSearch:focus) .feature-select:focus-within,
-  #membersRoute .toolbar-row:has(#memberSearch:not(:placeholder-shown)) .feature-select:focus-within {
-    border-color: color-mix(in srgb, var(--accent) 58%, white 4%);
-    box-shadow: 0 0 0 3px var(--accent-soft);
-  }
-}
-
-@container members-directory (max-width: 520px) {
-  #membersRoute .toolbar-row:has(#memberSearch:focus) #createMemberButton,
-  #membersRoute .toolbar-row:has(#memberSearch:not(:placeholder-shown)) #createMemberButton {
-    flex: 0 0 46px;
-    width: 46px;
-    min-width: 46px;
-    padding-inline: 0;
+  #membersRoute .member-toolbar-controls #createGroupButton,
+  #membersRoute .member-toolbar-controls #createMemberButton {
+    width: 42px;
+    min-width: 42px;
+    height: 42px;
+    min-height: 42px;
+    padding: 0;
     overflow: hidden;
     font-size: 0;
   }
 
-  #membersRoute .toolbar-row:has(#memberSearch:focus) #createMemberButton::before,
-  #membersRoute .toolbar-row:has(#memberSearch:not(:placeholder-shown)) #createMemberButton::before {
+  #membersRoute .member-toolbar-controls #createGroupButton::before {
+    content: 'G+';
+    font-size: .67rem;
+    font-weight: 800;
+  }
+
+  #membersRoute .member-toolbar-controls #createMemberButton::before {
     content: '+';
-    font-size: 1.1rem;
+    font-size: 1.05rem;
     line-height: 1;
+  }
+
+  #membersRoute .toolbar-row:has(#memberSearch:focus),
+  #membersRoute .toolbar-row:has(#memberSearch:not(:placeholder-shown)) {
+    grid-template-columns: minmax(150px, 1fr) auto;
+  }
+
+  #membersRoute .toolbar-row:has(#memberSearch:focus) .search-field,
+  #membersRoute .toolbar-row:has(#memberSearch:not(:placeholder-shown)) .search-field {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    padding-inline: 11px;
+    justify-content: flex-start;
+  }
+
+  #membersRoute .toolbar-row:has(#memberSearch:focus) .search-field input,
+  #membersRoute .toolbar-row:has(#memberSearch:not(:placeholder-shown)) .search-field input {
+    width: 100%;
+    opacity: 1;
+    pointer-events: auto;
   }
 }
 
-@container members-directory (max-width: 390px) {
-  #membersRoute .toolbar-row {
-    flex-wrap: wrap;
+@container members-directory (max-width: 470px) {
+  #membersRoute .toolbar-row,
+  #membersRoute .toolbar-row:has(#memberSearch:focus),
+  #membersRoute .toolbar-row:has(#memberSearch:not(:placeholder-shown)) {
+    grid-template-columns: 1fr;
   }
 
   #membersRoute .search-field,
   #membersRoute .toolbar-row:has(#memberSearch:focus) .search-field,
   #membersRoute .toolbar-row:has(#memberSearch:not(:placeholder-shown)) .search-field {
-    flex: 1 1 100%;
     width: 100%;
+    min-width: 0;
     max-width: none;
-    padding-inline: 12px;
+    padding-inline: 11px;
     justify-content: flex-start;
   }
 
@@ -258,5 +264,17 @@
     width: 100%;
     opacity: 1;
     pointer-events: auto;
+  }
+
+  #membersRoute .member-toolbar-controls {
+    grid-template-columns: repeat(6, minmax(36px, 1fr));
+    justify-content: stretch;
+  }
+
+  #membersRoute .member-toolbar-controls .feature-select,
+  #membersRoute .member-toolbar-controls #createGroupButton,
+  #membersRoute .member-toolbar-controls #createMemberButton {
+    width: 100%;
+    min-width: 0;
   }
 }
