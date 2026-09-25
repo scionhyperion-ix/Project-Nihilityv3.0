@@ -24,6 +24,10 @@
   padding-bottom: 0;
 }
 
+#homeRoute .system-summary-panel .stats-row {
+  border-bottom: 1px solid var(--line);
+}
+
 .system-edit-button {
   position: static;
   z-index: 5;
