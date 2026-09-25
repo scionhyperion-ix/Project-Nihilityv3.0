@@ -124,7 +124,6 @@ function renderHomePending(){
   $('#currentFrontNote').hidden=true;
   $('#addCoFronterButton').disabled=true;
   $('#chooseAnyMemberButton').disabled=true;
-  $('#transferFrontToPkButton').hidden=true;
   $('#homeProfileName').textContent=state.profile?.display_name||'Nihility';
   $('#homeIntegrationState').textContent='Loading system data...';
   $('#homeMemberCount').textContent='...';
@@ -388,12 +387,6 @@ function renderHome(){
     currentNote.replaceChildren();
     currentNote.hidden=!front?.note;
     if(front?.note)currentNote.append(noteHelpEl(front.note,'Show front note'));
-  }
-  const transferButton=$('#transferFrontToPkButton');
-  if(transferButton){
-    transferButton.hidden=!state.pkConnected;
-    transferButton.disabled=Boolean(front&&members.some(m=>!m.pk_id));
-    transferButton.title=transferButton.disabled?'Every current fronter must be linked to PluralKit before transfer.':'Send the current Nihility front state to PluralKit now.';
   }
   $('#currentFrontMembers').replaceChildren();
   const rainbowSubtitle=$('#rainbowFrontSubtitle');if(rainbowSubtitle)rainbowSubtitle.textContent=!members.length?'No one is currently fronting':members.length===1?(label(members[0])+' is currently fronting'):(members.length+' members are currently fronting');
@@ -1559,7 +1552,7 @@ if(mobileNavMoreButton&&mobileNavMoreMenu){
     if(!mobileNavMoreMenu.hidden&&!event.target.closest('.mobile-nav-more'))closeMobileNavMore();
   });
 }
-$('#chooseAnyMemberButton').onclick=()=>openFront('replace');$('#newFrontButton').onclick=()=>openFront('replace');$('#addCoFronterButton').onclick=()=>openFront('add');$('#transferFrontToPkButton').onclick=transferCurrentFrontToPk;
+$('#chooseAnyMemberButton').onclick=()=>openFront('replace');$('#newFrontButton').onclick=()=>openFront('replace');$('#addCoFronterButton').onclick=()=>openFront('add');
 $('#createMemberButton').onclick=()=>openMember();$('#memberSearch').oninput=()=>renderMembers();$('#memberForm').onsubmit=saveMember;$('#deleteMemberButton').onclick=deleteMember;$('#restoreMemberButton').onclick=restoreMember;$('#permanentDeleteMemberButton').onclick=permanentlyDeleteMember;$('#closeMemberDialog').onclick=$('#cancelMemberButton').onclick=()=>$('#memberDialog').close();$('#memberColorPicker').oninput=e=>$('#memberColor').value=e.target.value.toUpperCase();$('#memberColor').oninput=e=>{const c=hex(e.target.value);if(c)$('#memberColorPicker').value=c};
 $('#frontForm').onsubmit=saveFront;$('#closeFrontDialog').onclick=$('#cancelFrontButton').onclick=()=>$('#frontDialog').close();$('#frontMemberSearch').oninput=()=>buildFrontPicker();document.querySelectorAll('input[name="frontMode"]').forEach(i=>i.addEventListener('change',syncFrontModeDetails));$('#customFrontTimeEnabled').onchange=e=>$('#customFrontTimeRow').hidden=!e.target.checked;
 $('#connectPkButton').onclick=connectPk;$('#disconnectPkButton').onclick=disconnectPk;$('#importPkButton').onclick=importPk;
