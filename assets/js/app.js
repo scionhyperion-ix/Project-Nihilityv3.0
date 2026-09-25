@@ -80,13 +80,41 @@ function avatarEl(item,cls='member-card-avatar'){
 }
 
 function setView(name){$('#loadingView').hidden=name!=='loading';$('#setupView').hidden=name!=='setup';$('#loginView').hidden=name!=='login';$('#resetView').hidden=name!=='reset';$('#deniedView').hidden=name!=='denied';$('#appView').hidden=name!=='app'}
+window.nihilityCoreDataReady=false;
+function renderHomePending(){
+  renderHeader();
+  $('#currentFrontHeading').textContent='Loading front...';
+  $('#frontDuration').textContent='...';
+  $('#currentFrontMembers').replaceChildren();
+  const frontWait=document.createElement('p');frontWait.className='muted';frontWait.textContent='Loading current front data...';$('#currentFrontMembers').append(frontWait);
+  $('#currentFrontNote').hidden=true;
+  $('#addCoFronterButton').disabled=true;
+  $('#chooseAnyMemberButton').disabled=true;
+  $('#transferFrontToPkButton').hidden=true;
+  $('#homeProfileName').textContent=state.profile?.display_name||'Nihility';
+  $('#homeIntegrationState').textContent='Loading system data...';
+  $('#homeMemberCount').textContent='...';
+  $('#homeFrontCount').textContent='...';
+  $('#homeShareState').textContent='...';
+  $('#frequentMembers').replaceChildren();
+  const memberWait=document.createElement('p');memberWait.className='muted';memberWait.textContent='Loading members...';$('#frequentMembers').append(memberWait);
+  $('#recentFronts').replaceChildren();
+  const historyWait=document.createElement('p');historyWait.className='muted';historyWait.textContent='Loading recent activity...';$('#recentFronts').append(historyWait);
+}
 function setRoute(route){
   state.route=route;
   const meta={home:['Overview','Home'],members:['System directory','Members'],history:['Front tracking','Front history'],settings:['Connection and privacy','Settings'],profile:['Account','Profile']};
   const pair=meta[route]||meta.home;$('#pageEyebrow').textContent=pair[0];$('#pageTitle').textContent=pair[1];
-  $$('.route-view').forEach(v=>v.hidden=v.id!==route+'Route');$$('[data-route]').forEach(b=>b.classList.toggle('active',b.dataset.route===route));
+  $('.route-view').forEach(v=>v.hidden=v.id!==route+'Route');$('[data-route]').forEach(b=>b.classList.toggle('active',b.dataset.route===route));
   history.replaceState(null,'',route==='home'?location.pathname:(location.pathname+'#'+route));
-  if(route==='profile')renderProfile();
+
+  // Render only the route the user is actually opening. Building every hidden
+  // route at startup is expensive for large systems and should not block Home.
+  if(route==='home'){window.nihilityCoreDataReady?(renderHeader(),renderHome()):renderHomePending()}
+  else if(route==='members')renderMembers();
+  else if(route==='history')renderHistory();
+  else if(route==='settings')renderSettings();
+  else if(route==='profile')renderProfile();
 }
 function activeFront(){return state.fronts.find(f=>!f.ended_at)||null}
 function activeMembers(){return state.members.filter(m=>!m.archived_at)}
@@ -206,34 +234,51 @@ async function hydrateHomeMedia(){
 
 async function loadData(){
   const frontVersion=frontMutationVersion;
-  const data=await Promise.all([
-    nihilityApi.rest('members',{query:'select=*&order=name.asc'}),
-    nihilityApi.rest('fronts',{query:'select=*&order=started_at.desc&limit=100'}),
-    nihilityApi.rest('front_members',{query:'select=*&order=joined_at.desc'}),
-    nihilityApi.rest('external_integrations',{query:'provider=eq.pluralkit&select=*'}),
-    nihilityApi.rest('imports',{query:'source=eq.pluralkit&select=id&limit=1'})
-  ]);
-  state.members=data[0]||[];
-  if(frontVersion===frontMutationVersion){
-    state.fronts=data[1]||[];
-    state.frontMembers=data[2]||[];
-  }
-  state.integration=data[3]?.[0]||null;
-  state.pkConnected=Boolean(state.integration);
-  state.pkImported=Boolean(data[4]?.length);
+  const initial=Boolean(window.nihilityInitialHydration);
 
-  // The homepage can render as soon as core directory/front data exists.
-  // Private media signing is useful, but it must not hold the loading screen.
+  const core=await Promise.all([
+    nihilityApi.rest('members',{query:'select=*&order=name.asc',timeoutMs:12000}),
+    nihilityApi.rest('fronts',{query:'select=*&order=started_at.desc&limit=100',timeoutMs:12000}),
+    nihilityApi.rest('front_members',{query:'select=*&order=joined_at.desc',timeoutMs:12000})
+  ]);
+
+  state.members=core[0]||[];
+  if(frontVersion===frontMutationVersion){
+    state.fronts=core[1]||[];
+    state.frontMembers=core[2]||[];
+  }
+
+  // Home no longer waits on integration/import metadata.
+  window.nihilityCoreDataReady=true;
   document.dispatchEvent(new CustomEvent('nihility-core-data-ready'));
+
+  const integrationPromise=Promise.all([
+    nihilityApi.rest('external_integrations',{query:'provider=eq.pluralkit&select=*',timeoutMs:12000}),
+    nihilityApi.rest('imports',{query:'source=eq.pluralkit&select=id&limit=1',timeoutMs:12000})
+  ]);
+
+  const applyIntegration=async()=>{
+    const data=await integrationPromise;
+    state.integration=data[0]?.[0]||null;
+    state.pkConnected=Boolean(state.integration);
+    state.pkImported=Boolean(data[1]?.length);
+    if(initial&&!$('#appView')?.hidden){
+      renderHome();
+      renderSettings();
+    }
+  };
+
   const mediaPromise=hydrateHomeMedia();
-  if(window.nihilityInitialHydration){
+
+  if(initial){
+    void applyIntegration().catch(error=>console.warn('Integration metadata is still loading',error));
     void mediaPromise.then(()=>{
       if(window.nihilityInitialHydration||$('#appView')?.hidden)return;
       renderHeader();
       renderHome();
     });
   }else{
-    await mediaPromise;
+    await Promise.all([applyIntegration(),mediaPromise]);
   }
 }
 function renderAll(){renderHeader();renderHome();renderMembers();renderHistory();renderSettings();renderProfile()}
@@ -266,6 +311,8 @@ function noteHelpEl(note,ariaLabel='Show note'){
   return wrap;
 }
 function renderHome(){
+  $('#addCoFronterButton').disabled=false;
+  $('#chooseAnyMemberButton').disabled=false;
   const front=activeFront(),members=front?frontMembers(front.id):[];
   const currentNote=$('#currentFrontNote');
   if(currentNote){
@@ -1293,39 +1340,58 @@ async function boot(){
 
   setView('loading');
   window.nihilityInitialHydration=true;
+  window.nihilityCoreDataReady=false;
 
+  let coreResolved=false;
   let resolveCore;
-  const coreReady=new Promise(resolve=>{resolveCore=resolve});
-  const onCoreReady=()=>resolveCore();
+  const coreReady=new Promise(resolve=>{resolveCore=()=>{coreResolved=true;resolve()}});
+  const onCoreReady=()=>{
+    resolveCore();
+    if(!$('#appView')?.hidden&&state.route==='home')setRoute('home');
+  };
   document.addEventListener('nihility-core-data-ready',onCoreReady,{once:true});
 
-  let fullLoadPromise;
-  try{
-    fullLoadPromise=Promise.resolve().then(()=>loadData());
-    await Promise.race([coreReady,fullLoadPromise]);
-    document.removeEventListener('nihility-core-data-ready',onCoreReady);
+  const fullLoadPromise=Promise.resolve().then(()=>loadData());
 
-    // Do not make the user wait for Timeline, custom fields, connections,
-    // groups, media signing, or the live PluralKit profile.
-    renderAll();
-    setRoute('home');
-    setView('app');
-  }catch(error){
-    document.removeEventListener('nihility-core-data-ready',onCoreReady);
-    window.nihilityInitialHydration=false;
-    throw error;
-  }
+  // Never let the full-screen loader monopolize the UI. If Supabase is slow,
+  // reveal the app shell and show a local loading state while data continues.
+  await Promise.race([
+    coreReady,
+    new Promise(resolve=>setTimeout(resolve,1800))
+  ]);
+
+  setView('app');
+  setRoute('home');
 
   void fullLoadPromise.then(()=>{
     window.nihilityInitialHydration=false;
+    lastFullAutoRefreshAt=Date.now();
     if($('#appView')?.hidden)return;
-    renderAll();
-    if(state.route==='timeline')window.nihilitySystemTimeline?.render?.();
-    document.dispatchEvent(new CustomEvent('nihility-initial-hydration-complete'));
+
+    if(window.nihilityCoreDataReady)setRoute(state.route||'home');
+
+    // Refresh only lightweight controls when the browser has spare time.
+    // Hidden member/history/group cards are rendered lazily when opened.
+    const finish=()=>{
+      if($('#appView')?.hidden)return;
+      window.nihilityRefreshFeatureControls?.();
+      if(state.route==='timeline')window.nihilitySystemTimeline?.render?.();
+      document.dispatchEvent(new CustomEvent('nihility-initial-hydration-complete'));
+    };
+    if('requestIdleCallback' in window)requestIdleCallback(finish,{timeout:1800});
+    else setTimeout(finish,120);
   }).catch(error=>{
     window.nihilityInitialHydration=false;
     console.warn('Background startup hydration did not finish',error);
-    if(!$('#appView')?.hidden)toast('Some background data is still loading','Nihility opened with the core data and will retry automatically.');
+    if(!$('#appView')?.hidden){
+      toast(
+        window.nihilityCoreDataReady?'Some background data is still loading':'Nihility data is taking longer than expected',
+        window.nihilityCoreDataReady?'The core app is ready. Secondary data will retry automatically.':'The app shell is available while the data service recovers.',
+        'error'
+      );
+    }
+  }).finally(()=>{
+    if(!coreResolved)document.removeEventListener('nihility-core-data-ready',onCoreReady);
   });
 }
 
@@ -1448,8 +1514,10 @@ document.addEventListener('nihility-media-preview',event=>{
 });
 $('#inviteForm').onsubmit=invite;
 const AUTO_REFRESH_MS=15000;
+const FULL_AUTO_REFRESH_MS=90000;
 let autoRefreshBusy=false;
 let lastAutoRefreshAt=0;
+let lastFullAutoRefreshAt=0;
 
 function autoRefreshFingerprint(){
   const rows=(list,keys)=>(list||[]).map(row=>keys.map(key=>row?.[key]??null));
@@ -1474,33 +1542,67 @@ function autoRefreshFingerprint(){
     system
   });
 }
+function liveFrontFingerprint(){
+  const rows=(list,keys)=>(list||[]).map(row=>keys.map(key=>row?.[key]??null));
+  return JSON.stringify({
+    fronts:rows(state.fronts,['id','updated_at','started_at','ended_at','note','source']),
+    frontMembers:rows(state.frontMembers,['id','updated_at','front_id','member_id','joined_at','left_at','note','private_note','mood','context','activity','location'])
+  });
+}
+async function refreshLiveFrontData(){
+  const frontVersion=frontMutationVersion;
+  const [fronts,links]=await Promise.all([
+    nihilityApi.rest('fronts',{query:'select=*&order=started_at.desc&limit=100',timeoutMs:12000}),
+    nihilityApi.rest('front_members',{query:'select=*&order=joined_at.desc',timeoutMs:12000})
+  ]);
+  if(frontVersion===frontMutationVersion){
+    state.fronts=fronts||[];
+    state.frontMembers=links||[];
+  }
+}
 
-async function autoRefreshData({force=false}={}){
+async function autoRefreshData({force=false,full=false}={}){
   if(autoRefreshBusy||!state.user||document.hidden||!navigator.onLine)return;
   if($('#appView')?.hidden)return;
   if(document.querySelector('dialog[open]'))return;
   if(state.route==='settings'||state.route==='profile'||state.route==='journal')return;
   const now=Date.now();
   if(!force&&now-lastAutoRefreshAt<AUTO_REFRESH_MS-500)return;
+
+  const routeNeedsDirectory=['members','groups','timeline'].includes(state.route);
+  const fullDue=now-lastFullAutoRefreshAt>=(routeNeedsDirectory?45000:FULL_AUTO_REFRESH_MS);
+  const doFull=Boolean(full||fullDue);
+  const before=doFull?autoRefreshFingerprint():liveFrontFingerprint();
+
   autoRefreshBusy=true;
-  const before=autoRefreshFingerprint();
   let refreshed=false;
-  window.nihilitySilentRefresh=true;
+  if(doFull)window.nihilitySilentRefresh=true;
   try{
-    await loadData();
+    if(doFull){
+      await loadData();
+      lastFullAutoRefreshAt=Date.now();
+    }else{
+      await refreshLiveFrontData();
+    }
     refreshed=true;
     lastAutoRefreshAt=Date.now();
   }catch(error){
     console.warn('Automatic refresh failed',error);
   }finally{
-    window.nihilitySilentRefresh=false;
+    if(doFull)window.nihilitySilentRefresh=false;
     autoRefreshBusy=false;
   }
-  if(refreshed&&before!==autoRefreshFingerprint()){
+
+  const after=doFull?autoRefreshFingerprint():liveFrontFingerprint();
+  if(refreshed&&before!==after){
     requestAnimationFrame(()=>{
       if(document.hidden||document.querySelector('dialog[open]'))return;
-      renderAll();
-      document.dispatchEvent(new CustomEvent('nihility-silent-refresh-applied'));
+      if(doFull){
+        setRoute(state.route||'home');
+        document.dispatchEvent(new CustomEvent('nihility-silent-refresh-applied'));
+      }else if(state.route==='home'||state.route==='history'){
+        setRoute(state.route);
+      }
     });
   }
 }
@@ -1508,7 +1610,7 @@ async function autoRefreshData({force=false}={}){
 setInterval(()=>{void autoRefreshData()},AUTO_REFRESH_MS);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)void autoRefreshData({force:true})});
 window.addEventListener('focus',()=>{if(Date.now()-lastAutoRefreshAt>5000)void autoRefreshData({force:true})});
-window.addEventListener('online',()=>void autoRefreshData({force:true}));
+window.addEventListener('online',()=>void autoRefreshData({force:true,full:true}));
 
 setInterval(updateFrontTimers,15000);
-boot().then(()=>{lastAutoRefreshAt=Date.now()}).catch(error=>{console.error(error);toast('Unable to start Nihility',error.message,'error')});
+boot().then(()=>{lastAutoRefreshAt=Date.now()}).catch(error=>{console.error(error);setView('app');setRoute('home');toast('Unable to start Nihility',error.message,'error')});
