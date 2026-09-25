@@ -893,8 +893,13 @@ async function actionStatus(user:any){
   return {connected:Boolean(rows?.length)};
 }
 async function actionDisconnect(user:any){
+  const publicMedia=await getPkSystemMediaRegistry(user.id).catch(()=>({}));
   await admin("/rest/v1/integration_secrets?user_id=eq."+encodeURIComponent(user.id)+"&provider=eq.pluralkit",{method:"DELETE"});
   await admin("/rest/v1/external_integrations?user_id=eq."+encodeURIComponent(user.id)+"&provider=eq.pluralkit",{method:"DELETE"});
+  await admin("/rest/v1/pk_system_media_registry?user_id=eq."+encodeURIComponent(user.id),{
+    method:"DELETE",headers:{Prefer:"return=minimal"}
+  }).catch(error=>console.warn("Unable to clear PK system media registry",error));
+  await Promise.allSettled(Object.values(publicMedia).map(path=>deletePkSystemPublicMedia(String(path))));
   return {connected:false};
 }
 async function actionMirror(user:any,body:any){
@@ -2958,6 +2963,7 @@ const ACTION_LIMITS:Record<string,{limit:number,window:number}> = {
   pk_import_fronts:{limit:120,window:60},
   import_media:{limit:30,window:60},
   upload_media:{limit:60,window:60},
+  upload_pk_system_media:{limit:20,window:60},
   password_range:{limit:12,window:60},
   delete_member:{limit:10,window:60},
   backup_export:{limit:5,window:60},
@@ -2978,7 +2984,7 @@ const ACTION_LIMITS:Record<string,{limit:number,window:number}> = {
 };
 const AUDITED_ACTIONS=new Set([
   "pk_connect","pk_disconnect","pk_mirror_front","pk_import","pk_import_groups","pk_sync_apply",
-  "pk_update_system","pk_import_fronts","import_media","upload_media","delete_member",
+  "pk_update_system","pk_import_fronts","import_media","upload_media","upload_pk_system_media","delete_member",
   "backup_export","backup_restore","front_history_correct","front_history_delete",
   "journal_setup","journal_delete","journal_rewrap","journal_rotate_recovery","journal_rekey","journal_reset"
 ]);
@@ -3071,6 +3077,14 @@ Deno.serve(async(req)=>{
       action="upload_media";
       await consumeRateLimit(user.id,action);
       const result=await actionUploadMedia(user,req);
+      await recordSecurityEvent(user.id,"edge."+action,true,{origin:origin||null});
+      return json(result,200,origin);
+    }
+
+    if(headerAction==="upload_pk_system_media"){
+      action="upload_pk_system_media";
+      await consumeRateLimit(user.id,action);
+      const result=await actionUploadPkSystemMedia(user,req);
       await recordSecurityEvent(user.id,"edge."+action,true,{origin:origin||null});
       return json(result,200,origin);
     }
