@@ -236,18 +236,14 @@
 
 @media (min-width: 901px) {
   #homeRoute .hero-grid {
-    align-items: stretch;
-  }
-
-  #homeRoute .hero-grid > .current-front-panel,
-  #homeRoute .hero-grid > .system-summary-panel {
-    align-self: stretch;
-    height: 100%;
+    align-items: start;
   }
 
   #homeRoute .system-summary-panel {
     display: flex;
     flex-direction: column;
+    align-self: start;
+    height: auto;
   }
 
   #homeRoute .system-summary-panel .top-fronter-section {
@@ -255,8 +251,33 @@
   }
 
   #homeRoute .system-summary-panel .system-edit-button {
-    margin-top: auto;
-    margin-bottom: 8px;
+    margin: 0 20px 12px auto;
+  }
+
+  #homeRoute .current-front-panel {
+    align-self: start;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  #homeRoute .current-front-panel .current-front-members {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-content: stretch;
+    padding-right: 8px;
+  }
+
+  #homeRoute .current-front-panel .current-front-members > .front-person {
+    flex: 0 0 auto;
+    width: 100%;
+    min-width: 0;
   }
 }
 
