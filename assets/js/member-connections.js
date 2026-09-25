@@ -19,7 +19,6 @@
   loadData=async function(){
     const initial=Boolean(window.nihilityInitialHydration);
     if(initial)await coreLoadData();
-    if(window.nihilityEmergency?.isActive?.()&&!window.nihilityEmergency?.canUseNetwork?.())return;
     const connectionPromise=loadAllConnections();
     if(!initial)await coreLoadData();
     state.memberConnections=await connectionPromise;
