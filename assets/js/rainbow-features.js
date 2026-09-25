@@ -1063,6 +1063,7 @@
   function refreshFeatureControls(){
     installMemberToolbar();installMemberFields();installGroupsRoute();installHistoryTools();installMultiCofronter();refreshGroupOptions();refreshHistoryMembers();
   }
+  window.nihilityRefreshFeatureControls=refreshFeatureControls;
 
   const coreImportPk=importPk;
   async function importPkWithGroups(){
