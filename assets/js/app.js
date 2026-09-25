@@ -234,35 +234,51 @@ async function hydrateHomeMedia(){
 
 async function loadData(){
   const frontVersion=frontMutationVersion;
-  const data=await Promise.all([
-    nihilityApi.rest('members',{query:'select=*&order=name.asc'}),
-    nihilityApi.rest('fronts',{query:'select=*&order=started_at.desc&limit=100'}),
-    nihilityApi.rest('front_members',{query:'select=*&order=joined_at.desc'}),
-    nihilityApi.rest('external_integrations',{query:'provider=eq.pluralkit&select=*'}),
-    nihilityApi.rest('imports',{query:'source=eq.pluralkit&select=id&limit=1'})
-  ]);
-  state.members=data[0]||[];
-  if(frontVersion===frontMutationVersion){
-    state.fronts=data[1]||[];
-    state.frontMembers=data[2]||[];
-  }
-  state.integration=data[3]?.[0]||null;
-  state.pkConnected=Boolean(state.integration);
-  state.pkImported=Boolean(data[4]?.length);
+  const initial=Boolean(window.nihilityInitialHydration);
 
-  // The homepage can render as soon as core directory/front data exists.
-  // Private media signing is useful, but it must not hold the loading screen.
+  const integrationPromise=Promise.all([
+    nihilityApi.rest('external_integrations',{query:'provider=eq.pluralkit&select=*',timeoutMs:12000}),
+    nihilityApi.rest('imports',{query:'source=eq.pluralkit&select=id&limit=1',timeoutMs:12000})
+  ]);
+
+  const core=await Promise.all([
+    nihilityApi.rest('members',{query:'select=*&order=name.asc',timeoutMs:12000}),
+    nihilityApi.rest('fronts',{query:'select=*&order=started_at.desc&limit=100',timeoutMs:12000}),
+    nihilityApi.rest('front_members',{query:'select=*&order=joined_at.desc',timeoutMs:12000})
+  ]);
+
+  state.members=core[0]||[];
+  if(frontVersion===frontMutationVersion){
+    state.fronts=core[1]||[];
+    state.frontMembers=core[2]||[];
+  }
+
+  // Home no longer waits on integration/import metadata.
   window.nihilityCoreDataReady=true;
   document.dispatchEvent(new CustomEvent('nihility-core-data-ready'));
+
+  const applyIntegration=async()=>{
+    const data=await integrationPromise;
+    state.integration=data[0]?.[0]||null;
+    state.pkConnected=Boolean(state.integration);
+    state.pkImported=Boolean(data[1]?.length);
+    if(initial&&!$('#appView')?.hidden){
+      renderHome();
+      renderSettings();
+    }
+  };
+
   const mediaPromise=hydrateHomeMedia();
-  if(window.nihilityInitialHydration){
+
+  if(initial){
+    void applyIntegration().catch(error=>console.warn('Integration metadata is still loading',error));
     void mediaPromise.then(()=>{
       if(window.nihilityInitialHydration||$('#appView')?.hidden)return;
       renderHeader();
       renderHome();
     });
   }else{
-    await mediaPromise;
+    await Promise.all([applyIntegration(),mediaPromise]);
   }
 }
 function renderAll(){renderHeader();renderHome();renderMembers();renderHistory();renderSettings();renderProfile()}
