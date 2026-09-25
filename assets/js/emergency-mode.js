@@ -314,9 +314,9 @@
     const meta=banner.querySelector('#emergencyModeMeta');
     const badge=banner.querySelector('#emergencyQueueBadge');
     text.textContent=reason||'Supabase is temporarily unavailable. Showing your last cached data.';
-    meta.textContent=formatAge(lastSnapshotAt)+(count?' · Changes will sync after recovery.':' · Browsing cached data.');
+    meta.textContent=formatAge(lastSnapshotAt)+(count?' · Queued front changes will sync after recovery.':' · Browsing cached data.');
     badge.hidden=count===0;
-    badge.textContent=count===1?'1 queued':count+' queued';
+    badge.textContent=count===1?'1 front queued':count+' fronts queued';
   }
 
   function startAutoRetry(){
