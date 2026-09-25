@@ -683,23 +683,21 @@
 }
 
 
-/* Members toolbar: compact-browser responsive behavior.
-   This intentionally overrides the generic mobile toolbar wrapping above. */
+/* Members toolbar: compact responsive structure. */
 #membersRoute .toolbar-row{
-  display:flex;
-  flex-wrap:nowrap;
-  align-items:flex-end;
-  justify-content:flex-start;
-  gap:8px;
+  display:grid;
+  grid-template-columns:44px minmax(0,1fr);
+  align-items:end;
+  gap:10px;
   min-width:0;
+  margin-bottom:12px;
 }
 
 #membersRoute .search-field{
-  flex:0 0 44px;
   width:44px;
   min-width:44px;
   max-width:44px;
-  min-height:40px;
+  min-height:42px;
   padding-inline:0;
   justify-content:center;
   overflow:hidden;
@@ -713,48 +711,93 @@
   pointer-events:none;
 }
 
-#membersRoute .feature-select{
-  flex:1 1 72px;
+#membersRoute .member-toolbar-controls{
   min-width:0;
-  max-width:none;
   display:grid;
-  gap:4px;
+  grid-template-columns:repeat(6,42px);
+  justify-content:end;
+  gap:7px;
 }
 
-#membersRoute .feature-select>span{
-  min-width:0;
-  overflow:hidden;
+#membersRoute .member-toolbar-controls .feature-select{
+  position:relative;
+  width:42px;
+  min-width:42px;
+  height:42px;
+  display:block;
+  border:1px solid color-mix(in srgb,var(--accent) 16%,var(--line));
+  border-radius:11px;
+  background:color-mix(in srgb,var(--theme-surface-1) 72%,transparent);
+}
+
+#membersRoute .member-toolbar-controls .feature-select::before{
+  content:attr(data-compact-icon);
+  position:absolute;
+  inset:0;
+  display:grid;
+  place-items:center;
   color:var(--muted);
-  font-size:.61rem;
-  line-height:1.2;
-  text-overflow:ellipsis;
-  white-space:nowrap;
+  font-size:.78rem;
+  font-weight:800;
+  pointer-events:none;
 }
 
-#membersRoute .feature-select select{
+#membersRoute .member-toolbar-controls .feature-select>span{
+  position:absolute;
+  width:1px;
+  height:1px;
+  margin:-1px;
+  padding:0;
+  overflow:hidden;
+  clip:rect(0 0 0 0);
+  white-space:nowrap;
+  border:0;
+}
+
+#membersRoute .member-toolbar-controls .feature-select select{
+  position:absolute;
+  inset:0;
   width:100%;
+  height:100%;
   min-width:0;
-  height:40px;
-  padding:0 26px 0 9px;
-  font-size:.68rem;
+  padding:0;
+  border:0;
+  opacity:0;
+  cursor:pointer;
 }
 
-#membersRoute #createGroupButton,
-#membersRoute #createMemberButton{
-  flex:0 0 auto;
-  min-height:40px;
-  padding:7px 10px;
-  white-space:nowrap;
-  font-size:.68rem;
+#membersRoute .member-toolbar-controls #createGroupButton,
+#membersRoute .member-toolbar-controls #createMemberButton{
+  width:42px;
+  min-width:42px;
+  height:42px;
+  min-height:42px;
+  padding:0;
+  overflow:hidden;
+  font-size:0;
 }
 
-/* Search takes priority when active. Other controls collapse to compact icons
-   instead of being pushed into a vertical stack. */
+#membersRoute .member-toolbar-controls #createGroupButton::before{
+  content:'G+';
+  font-size:.67rem;
+  font-weight:800;
+}
+
+#membersRoute .member-toolbar-controls #createMemberButton::before{
+  content:'+';
+  font-size:1.05rem;
+  line-height:1;
+}
+
+#membersRoute .toolbar-row:has(#memberSearch:focus),
+#membersRoute .toolbar-row:has(#memberSearch:not(:placeholder-shown)){
+  grid-template-columns:minmax(150px,1fr) auto;
+}
+
 #membersRoute .toolbar-row:has(#memberSearch:focus) .search-field,
 #membersRoute .toolbar-row:has(#memberSearch:not(:placeholder-shown)) .search-field{
-  flex:1 1 260px;
-  width:auto;
-  min-width:160px;
+  width:100%;
+  min-width:0;
   max-width:none;
   padding-inline:11px;
   justify-content:flex-start;
@@ -767,166 +810,16 @@
   pointer-events:auto;
 }
 
-#membersRoute .toolbar-row:has(#memberSearch:focus) .feature-select,
-#membersRoute .toolbar-row:has(#memberSearch:not(:placeholder-shown)) .feature-select{
-  position:relative;
-  flex:0 0 40px;
-  width:40px;
-  min-width:40px;
-  height:40px;
-  display:block;
-  border:1px solid color-mix(in srgb,var(--accent) 16%,var(--line));
-  border-radius:11px;
-  background:color-mix(in srgb,var(--theme-surface-1) 72%,transparent);
-}
-
-#membersRoute .toolbar-row:has(#memberSearch:focus) .feature-select::before,
-#membersRoute .toolbar-row:has(#memberSearch:not(:placeholder-shown)) .feature-select::before{
-  content:attr(data-compact-icon);
-  position:absolute;
-  inset:0;
-  display:grid;
-  place-items:center;
-  color:var(--muted);
-  font-size:.76rem;
-  font-weight:800;
-  pointer-events:none;
-}
-
-#membersRoute .toolbar-row:has(#memberSearch:focus) .feature-select>span,
-#membersRoute .toolbar-row:has(#memberSearch:not(:placeholder-shown)) .feature-select>span{
-  position:absolute;
-  width:1px;
-  height:1px;
-  margin:-1px;
-  padding:0;
-  overflow:hidden;
-  clip:rect(0 0 0 0);
-  white-space:nowrap;
-  border:0;
-}
-
-#membersRoute .toolbar-row:has(#memberSearch:focus) .feature-select select,
-#membersRoute .toolbar-row:has(#memberSearch:not(:placeholder-shown)) .feature-select select{
-  position:absolute;
-  inset:0;
-  width:100%;
-  height:100%;
-  padding:0;
-  border:0;
-  opacity:0;
-  cursor:pointer;
-}
-
-#membersRoute .toolbar-row:has(#memberSearch:focus) #createGroupButton,
-#membersRoute .toolbar-row:has(#memberSearch:not(:placeholder-shown)) #createGroupButton,
-#membersRoute .toolbar-row:has(#memberSearch:focus) #createMemberButton,
-#membersRoute .toolbar-row:has(#memberSearch:not(:placeholder-shown)) #createMemberButton{
-  flex:0 0 40px;
-  width:40px;
-  min-width:40px;
-  padding-inline:0;
-  overflow:hidden;
-  font-size:0;
-}
-
-#membersRoute .toolbar-row:has(#memberSearch:focus) #createGroupButton::before,
-#membersRoute .toolbar-row:has(#memberSearch:not(:placeholder-shown)) #createGroupButton::before{
-  content:'G+';
-  font-size:.67rem;
-  font-weight:800;
-}
-
-#membersRoute .toolbar-row:has(#memberSearch:focus) #createMemberButton::before,
-#membersRoute .toolbar-row:has(#memberSearch:not(:placeholder-shown)) #createMemberButton::before{
-  content:'+';
-  font-size:1rem;
-  line-height:1;
-}
-
-/* At phone-like widths the controls themselves stay compact even before search
-   opens, leaving enough room for every action on one line. */
-@media(max-width:520px){
-  #membersRoute .feature-select{
-    position:relative;
-    flex:0 0 40px;
-    width:40px;
-    min-width:40px;
-    height:40px;
-    display:block;
-    border:1px solid color-mix(in srgb,var(--accent) 16%,var(--line));
-    border-radius:11px;
-    background:color-mix(in srgb,var(--theme-surface-1) 72%,transparent);
-  }
-
-  #membersRoute .feature-select::before{
-    content:attr(data-compact-icon);
-    position:absolute;
-    inset:0;
-    display:grid;
-    place-items:center;
-    color:var(--muted);
-    font-size:.76rem;
-    font-weight:800;
-    pointer-events:none;
-  }
-
-  #membersRoute .feature-select>span{
-    position:absolute;
-    width:1px;
-    height:1px;
-    margin:-1px;
-    padding:0;
-    overflow:hidden;
-    clip:rect(0 0 0 0);
-    white-space:nowrap;
-    border:0;
-  }
-
-  #membersRoute .feature-select select{
-    position:absolute;
-    inset:0;
-    width:100%;
-    height:100%;
-    padding:0;
-    border:0;
-    opacity:0;
-    cursor:pointer;
-  }
-
-  #membersRoute #createGroupButton,
-  #membersRoute #createMemberButton{
-    flex:0 0 40px;
-    width:40px;
-    min-width:40px;
-    padding-inline:0;
-    overflow:hidden;
-    font-size:0;
-  }
-
-  #membersRoute #createGroupButton::before{
-    content:'G+';
-    font-size:.67rem;
-    font-weight:800;
-  }
-
-  #membersRoute #createMemberButton::before{
-    content:'+';
-    font-size:1rem;
-    line-height:1;
-  }
-}
-
-@media(max-width:390px){
-  #membersRoute .toolbar-row{
-    flex-wrap:wrap;
+@media(max-width:470px){
+  #membersRoute .toolbar-row,
+  #membersRoute .toolbar-row:has(#memberSearch:focus),
+  #membersRoute .toolbar-row:has(#memberSearch:not(:placeholder-shown)){
+    grid-template-columns:1fr;
   }
 
   #membersRoute .search-field,
   #membersRoute .toolbar-row:has(#memberSearch:focus) .search-field,
   #membersRoute .toolbar-row:has(#memberSearch:not(:placeholder-shown)) .search-field{
-    order:-1;
-    flex:1 1 100%;
     width:100%;
     min-width:0;
     max-width:none;
@@ -938,5 +831,17 @@
     width:100%;
     opacity:1;
     pointer-events:auto;
+  }
+
+  #membersRoute .member-toolbar-controls{
+    grid-template-columns:repeat(6,minmax(36px,1fr));
+    justify-content:stretch;
+  }
+
+  #membersRoute .member-toolbar-controls .feature-select,
+  #membersRoute .member-toolbar-controls #createGroupButton,
+  #membersRoute .member-toolbar-controls #createMemberButton{
+    width:100%;
+    min-width:0;
   }
 }

@@ -169,6 +169,27 @@
       const b=document.createElement('button');b.id='createGroupButton';b.className='secondary-button';b.type='button';b.textContent='New group';
       b.onclick=()=>openGroupManager();toolbar.insertBefore(b,create);
     }
+
+    let controls=toolbar.querySelector('.member-toolbar-controls');
+    if(!controls){
+      controls=document.createElement('div');
+      controls.className='member-toolbar-controls';
+      toolbar.append(controls);
+    }
+    [
+      '#memberStatusFilter',
+      '#memberSort',
+      '#memberGroupFilter',
+      '#memberViewSelect'
+    ].forEach(selector=>{
+      const select=toolbar.querySelector(selector);
+      const label=select?.closest('.feature-select');
+      if(label)controls.append(label);
+    });
+    const groupButton=toolbar.querySelector('#createGroupButton');
+    if(groupButton)controls.append(groupButton);
+    controls.append(create);
+
     refreshGroupOptions();
   }
   function refreshGroupOptions(){
