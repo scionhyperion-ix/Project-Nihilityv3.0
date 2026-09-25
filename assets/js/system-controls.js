@@ -282,7 +282,7 @@
     if(system.color&&!/^[0-9a-f]{6}$/i.test(system.color)){error.textContent='Color must be a 6-character hex color.';error.hidden=false;return}
     if(system.avatar_url&&!safeHttpsUrl(system.avatar_url)){error.textContent='Avatar must be a valid HTTPS URL.';error.hidden=false;return}
     if(system.banner&&!safeHttpsUrl(system.banner)){error.textContent='Banner must be a valid HTTPS URL.';error.hidden=false;return}
-    if(avatarFile&&avatarFile.dataset?.mediaAdjusted!=='true'&&document.querySelector('#systemEditAvatarFile').dataset.mediaAdjusted!=='true'){
+    if(avatarFile&&document.querySelector('#systemEditAvatarFile').dataset.mediaAdjusted!=='true'){
       error.textContent='Adjust the uploaded system avatar before saving. This also strips embedded image metadata.';
       error.hidden=false;return;
     }
