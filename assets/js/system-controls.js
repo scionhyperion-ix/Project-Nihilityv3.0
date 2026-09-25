@@ -14,6 +14,100 @@
     return system.name||system.display_name||(system.id?('System '+system.id):'System');
   }
 
+  const systemPreviewMedia={
+    avatar:{source:'',objectUrl:'',timer:null,request:0},
+    banner:{source:'',objectUrl:'',timer:null,request:0}
+  };
+
+  function clearSystemPreviewMedia(slot){
+    const item=systemPreviewMedia[slot];if(!item)return;
+    clearTimeout(item.timer);
+    item.timer=null;
+    item.request++;
+    if(item.objectUrl)URL.revokeObjectURL(item.objectUrl);
+    item.objectUrl='';
+    item.source='';
+  }
+
+  function clearAllSystemPreviewMedia(){
+    clearSystemPreviewMedia('avatar');
+    clearSystemPreviewMedia('banner');
+    const status=document.querySelector('#systemEditorMediaPreviewStatus');
+    if(status){status.textContent='';status.hidden=true}
+  }
+
+  function setSystemPreviewStatus(text,error=false){
+    const status=document.querySelector('#systemEditorMediaPreviewStatus');if(!status)return;
+    status.textContent=text||'';
+    status.hidden=!text;
+    status.classList.toggle('form-error',Boolean(error));
+    status.classList.toggle('muted',!error);
+  }
+
+  async function importSystemPreviewBlob(kind,url){
+    let path=null;
+    try{
+      const imported=await nihilityApi.secure('import_media',{kind,url});
+      path=imported?.path||null;
+      if(!path)throw new Error('Could not prepare the image preview.');
+      return await nihilityApi.privateMediaBlob(kind,path);
+    }finally{
+      if(path){
+        try{await nihilityApi.deleteMedia(kind,path)}
+        catch(error){console.warn('Unable to clean up temporary system preview media',error)}
+      }
+    }
+  }
+
+  function scheduleSystemMediaPreview(slot){
+    const input=document.querySelector(slot==='avatar'?'#systemEditAvatar':'#systemEditBanner');
+    const item=systemPreviewMedia[slot];
+    if(!input||!item)return;
+    clearTimeout(item.timer);
+    const raw=input.value.trim();
+    const safe=safeHttpsUrl(raw);
+    clearSystemPreviewMedia(slot);
+    updateSystemPreview();
+    if(!raw){
+      setSystemPreviewStatus('');
+      return;
+    }
+    if(!safe){
+      setSystemPreviewStatus((slot==='avatar'?'Avatar':'Banner')+' must be a valid HTTPS URL.',true);
+      return;
+    }
+
+    const current=state.systemProfile||{};
+    const currentUrl=slot==='avatar'
+      ?safeHttpsUrl(current.avatar_url||'')
+      :safeHttpsUrl(current.banner||current.banner_url||'');
+    const currentDisplay=slot==='avatar'?current.avatar_display_url:current.banner_display_url;
+    if(safe===currentUrl&&currentDisplay){
+      setSystemPreviewStatus('');
+      updateSystemPreview();
+      return;
+    }
+
+    setSystemPreviewStatus('Loading '+slot+' preview...');
+    const request=++item.request;
+    item.timer=setTimeout(async()=>{
+      try{
+        const blob=await importSystemPreviewBlob(slot==='avatar'?'avatar':'banner',safe);
+        if(request!==item.request||safeHttpsUrl(input.value)!==safe)return;
+        const objectUrl=URL.createObjectURL(blob);
+        if(item.objectUrl)URL.revokeObjectURL(item.objectUrl);
+        item.objectUrl=objectUrl;
+        item.source=safe;
+        setSystemPreviewStatus('');
+        updateSystemPreview();
+      }catch(error){
+        if(request!==item.request)return;
+        setSystemPreviewStatus(error.message||('Could not preview the '+slot+'.'),true);
+        updateSystemPreview();
+      }
+    },500);
+  }
+
   function ensureSystemEditButton(){
     let button=document.querySelector('#editSystemButton');
     if(!button){
@@ -59,6 +153,7 @@
               <strong id="systemEditorNamePreview">System</strong>
               <span id="systemEditorPronounsPreview" class="muted"></span>
               <p id="systemEditorDescriptionPreview" class="muted">No description yet.</p>
+              <p id="systemEditorMediaPreviewStatus" class="muted system-editor-preview-status" hidden></p>
             </div>
           </aside>
 
@@ -86,14 +181,17 @@
     const close=()=>dialog.close();
     dialog.querySelector('#closeSystemEditor').onclick=close;
     dialog.querySelector('#cancelSystemEditor').onclick=close;
+    dialog.addEventListener('close',clearAllSystemPreviewMedia);
 
     let backdropDown=false;
     dialog.addEventListener('pointerdown',event=>{backdropDown=event.target===dialog});
     dialog.addEventListener('pointerup',event=>{if(backdropDown&&event.target===dialog)close();backdropDown=false});
     dialog.addEventListener('pointercancel',()=>{backdropDown=false});
 
-    ['systemEditName','systemEditPronouns','systemEditColor','systemEditAvatar','systemEditBanner','systemEditDescription']
+    ['systemEditName','systemEditPronouns','systemEditColor','systemEditDescription']
       .forEach(id=>dialog.querySelector('#'+id).addEventListener('input',updateSystemPreview));
+    dialog.querySelector('#systemEditAvatar').addEventListener('input',()=>scheduleSystemMediaPreview('avatar'));
+    dialog.querySelector('#systemEditBanner').addEventListener('input',()=>scheduleSystemMediaPreview('banner'));
 
     dialog.querySelector('#systemEditorForm').onsubmit=saveSystemProfile;
     return dialog;
@@ -103,11 +201,10 @@
     const img=document.querySelector('#systemEditorAvatarPreview');
     const fallback=document.querySelector('#systemEditorAvatarFallback');
     if(!img||!fallback)return;
-    const url=safeHttpsUrl(value);
-    if(!url){
+    if(!value){
       img.hidden=true;img.removeAttribute('src');fallback.hidden=false;return;
     }
-    img.hidden=false;fallback.hidden=true;img.referrerPolicy='no-referrer';img.src=url;
+    img.hidden=false;fallback.hidden=true;img.referrerPolicy='no-referrer';img.src=value;
     img.onerror=()=>{img.hidden=true;fallback.hidden=false};
   }
 
@@ -117,8 +214,17 @@
     const pronouns=document.querySelector('#systemEditPronouns')?.value.trim()||'';
     const description=document.querySelector('#systemEditDescription')?.value.trim()||'';
     const color=String(document.querySelector('#systemEditColor')?.value||'').trim().replace(/^#/,'');
-    const avatar=current.avatar_display_url||'';
-    const banner=current.banner_display_url||'';
+    const avatarInput=safeHttpsUrl(document.querySelector('#systemEditAvatar')?.value||'');
+    const bannerInput=safeHttpsUrl(document.querySelector('#systemEditBanner')?.value||'');
+    const savedAvatarUrl=safeHttpsUrl(current.avatar_url||'');
+    const savedBannerUrl=safeHttpsUrl(current.banner||current.banner_url||'');
+
+    const avatar=systemPreviewMedia.avatar.source===avatarInput&&systemPreviewMedia.avatar.objectUrl
+      ?systemPreviewMedia.avatar.objectUrl
+      :(avatarInput&&avatarInput===savedAvatarUrl?current.avatar_display_url||'':'');
+    const banner=systemPreviewMedia.banner.source===bannerInput&&systemPreviewMedia.banner.objectUrl
+      ?systemPreviewMedia.banner.objectUrl
+      :(bannerInput&&bannerInput===savedBannerUrl?current.banner_display_url||'':'');
 
     document.querySelector('#systemEditorNamePreview').textContent=name;
     document.querySelector('#systemEditorPronounsPreview').textContent=pronouns;
@@ -127,11 +233,10 @@
     document.querySelector('#systemEditorColorPreview').style.background=/^[0-9a-f]{6}$/i.test(color)?('#'+color):'var(--accent)';
 
     const bannerPreview=document.querySelector('#systemEditorBannerPreview');
-    const bannerUrl=safeHttpsUrl(banner);
-    bannerPreview.style.backgroundImage=bannerUrl
-      ? 'linear-gradient(rgba(10,11,20,.12),rgba(10,11,20,.28)), url("'+bannerUrl.replaceAll('"','%22')+'")'
+    bannerPreview.style.backgroundImage=banner
+      ? 'linear-gradient(rgba(10,11,20,.12),rgba(10,11,20,.28)), url("'+banner.replaceAll('"','%22')+'")'
       : '';
-    bannerPreview.classList.toggle('has-image',Boolean(bannerUrl));
+    bannerPreview.classList.toggle('has-image',Boolean(banner));
     setPreviewAvatar(avatar);
   }
 
@@ -147,8 +252,11 @@
     document.querySelector('#systemEditBanner').value=system.banner||system.banner_url||'';
     document.querySelector('#systemEditDescription').value=system.description||'';
     document.querySelector('#systemEditorError').hidden=true;
+    clearAllSystemPreviewMedia();
     updateSystemPreview();
     dialog.showModal();
+    if(document.querySelector('#systemEditAvatar').value.trim()&&!system.avatar_display_url)scheduleSystemMediaPreview('avatar');
+    if(document.querySelector('#systemEditBanner').value.trim()&&!system.banner_display_url)scheduleSystemMediaPreview('banner');
   }
 
   function collectDraft(){
