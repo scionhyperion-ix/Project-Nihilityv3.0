@@ -21,14 +21,14 @@
 
 .system-summary-panel {
   position: relative;
-  padding-bottom: 62px;
+  padding-bottom: 48px;
 }
 
 .system-edit-button {
   position: absolute;
   z-index: 5;
   right: 20px;
-  bottom: 18px;
+  bottom: 8px;
   top: auto;
   min-height: 34px;
   padding: 7px 11px;
@@ -228,6 +228,35 @@
   margin: 0;
   padding: 14px 22px 18px;
   border-top: 1px solid var(--line);
+}
+
+
+@media (min-width: 901px) {
+  #homeRoute .hero-grid {
+    align-items: stretch;
+  }
+
+  #homeRoute .hero-grid > .current-front-panel,
+  #homeRoute .hero-grid > .system-summary-panel {
+    align-self: stretch;
+    height: 100%;
+  }
+
+  #homeRoute .system-summary-panel .top-fronter-section {
+    position: relative;
+    margin: 14px 20px 8px;
+  }
+
+  #homeRoute .system-summary-panel .top-fronter-section::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: 100%;
+    width: 0;
+    height: 14px;
+    border-left: 1px solid var(--line);
+    pointer-events: none;
+  }
 }
 
 @media (max-width: 760px) {
