@@ -18,7 +18,7 @@
   <link rel="stylesheet" href="assets/rainbowpk/site-features.css?v=1">
   <link rel="stylesheet" href="assets/rainbowpk/member-color-picker.css?v=1">
   <link rel="stylesheet" href="assets/rainbowpk/app-theme-shell.css?v=1">
-  <link rel="stylesheet" href="assets/css/nihility-rainbow-adapter.css?v=10">
+  <link rel="stylesheet" href="assets/css/nihility-rainbow-adapter.css?v=11">
   <link rel="stylesheet" href="assets/css/nihility-editors.css?v=31">
   <link rel="stylesheet" href="assets/css/media-editor.css?v=1">
   <link rel="stylesheet" href="assets/rainbowpk/member-sort.css?v=2">
@@ -227,9 +227,19 @@
         <div class="profile-layout">
           <article class="panel profile-card">
             <div id="profileBannerPreview" class="profile-banner"></div>
-            <div class="profile-main"><div id="profileAvatarPreview" class="system-avatar profile-avatar fallback-avatar">N</div><div><p class="eyebrow">Account profile</p><h3 id="profileHeading">Account</h3><p id="profileEmail" class="muted"></p></div></div>
+            <div class="profile-main">
+              <div id="profileAvatarPreview" class="system-avatar profile-avatar fallback-avatar">N</div>
+              <div class="profile-identity-copy">
+                <h3 id="profileHeading">Account</h3>
+                <p id="profileEmail" class="muted"></p>
+              </div>
+            </div>
             <form id="profileForm" class="profile-form">
-              <label>Display name<input id="profileDisplayName" maxlength="100"></label>
+              <label class="profile-display-name-field">Display name<input id="profileDisplayName" maxlength="100"></label>
+              <div class="profile-media-heading">
+                <strong>Profile images</strong>
+                <span>Use a link or upload an image, then adjust it if needed.</span>
+              </div>
               <div class="profile-media-grid">
                 <section>
                   <strong>Profile picture</strong>
@@ -242,8 +252,10 @@
                   <label>Upload banner<input id="profileBannerFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label>
                 </section>
               </div>
-              <button class="primary-button" type="submit">Save profile</button>
-              <p id="profileMessage" class="form-message"></p>
+              <div class="profile-form-actions">
+                <button class="primary-button" type="submit">Save profile</button>
+                <p id="profileMessage" class="form-message"></p>
+              </div>
             </form>
           </article>
           <article id="invitePanel" class="panel section-panel" hidden><p class="eyebrow">Owner controls</p><h3>Invite another account</h3><p class="muted">Invite another trusted account to this Nihility instance.</p><form id="inviteForm" class="stack"><label>Email<input id="inviteEmail" type="email" required placeholder="partner@example.com"></label><button class="secondary-button" type="submit">Create invite</button><p id="inviteMessage" class="form-message"></p></form></article>
