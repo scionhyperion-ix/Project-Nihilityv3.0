@@ -65,6 +65,7 @@
   }
 
   loadData=async function loadDataWithRainbowFeatures(){
+    const silent=Boolean(window.nihilitySilentRefresh);
     const systemCache=window.nihilitySystemLiveCache;
     const groupPromise=nihilityApi.rest('groups',{query:'select=*&order=name.asc'});
     const linkPromise=nihilityApi.rest('member_groups',{query:'select=*&order=created_at.asc'});
@@ -83,7 +84,7 @@
     state.groups=groups||[];
     state.memberGroups=links||[];
     state.groups.forEach(g=>{g.icon_display_url=null;g.banner_display_url=null});
-    void Promise.all(state.groups.map(async g=>{
+    const groupMediaPromise=Promise.all(state.groups.map(async g=>{
       const iconPath=g.metadata?.icon_storage_path||g.icon_storage_path||null;
       const bannerPath=g.metadata?.banner_storage_path||null;
       if(iconPath){
@@ -94,18 +95,24 @@
         try{g.banner_display_url=await nihilityApi.privateMediaUrl('banner',bannerPath)}
         catch(error){console.warn('Unable to load group banner',g.id,error)}
       }
-    })).then(()=>{if(state.route==='groups')renderGroups()});
+    }));
+    if(silent)await groupMediaPromise;
+    else void groupMediaPromise.then(()=>{if(state.route==='groups')renderGroups()});
 
     const storedSystem=settingsRows?.[0]?.settings?.system_profile||null;
     state.systemProfile=storedSystem?{...storedSystem}:null;
     applySystemMedia(state.systemProfile);
-    void hydrateSystemPrivateMedia(state.systemProfile).then(()=>renderHome());
+    const storedSystemMediaPromise=hydrateSystemPrivateMedia(state.systemProfile);
+    if(silent)await storedSystemMediaPromise;
+    else void storedSystemMediaPromise.then(()=>renderHome());
 
     state.historyHasMore=state.fronts.length>=100;
-    refreshFeatureControls();
-    renderAll();
+    if(!silent){
+      refreshFeatureControls();
+      renderAll();
+    }
 
-    void liveSystemPromise.then(async liveSystem=>{
+    const applyLiveSystem=async liveSystem=>{
       if(!liveSystem?.system||!state.pkConnected)return;
       const paths={
         avatar_storage_path:state.systemProfile?.avatar_storage_path||null,
@@ -114,9 +121,13 @@
       state.systemProfile={...(state.systemProfile||{}),...liveSystem.system,...paths};
       applySystemMedia(state.systemProfile);
       await hydrateSystemPrivateMedia(state.systemProfile);
-      renderHome();
-      applyImportedSystemIdentity();
-    });
+      if(!silent){
+        renderHome();
+        applyImportedSystemIdentity();
+      }
+    };
+    if(silent)await liveSystemPromise.then(applyLiveSystem);
+    else void liveSystemPromise.then(applyLiveSystem);
   };
 
   function installMemberToolbar(){
