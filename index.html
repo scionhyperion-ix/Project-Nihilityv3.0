@@ -276,6 +276,17 @@
 
             <button id="signOutButton" class="secondary-button danger-button" type="button">Sign out</button>
           </article>
+
+          <article id="inviteAccountPanel" class="panel section-panel account-security-panel" hidden>
+            <p class="eyebrow">Account management</p>
+            <h3>Invite a user</h3>
+            <p class="muted">Create an invitation for another person to join this Nihility workspace.</p>
+            <form id="inviteAccountForm" class="stack account-security-form">
+              <label>Email address<input id="inviteAccountEmail" type="email" autocomplete="email" required placeholder="user@example.com"></label>
+              <button class="primary-button" type="submit">Invite user</button>
+              <p id="inviteAccountMessage" class="form-message"></p>
+            </form>
+          </article>
         </div>
       </section>
     </div>

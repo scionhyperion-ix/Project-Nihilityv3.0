@@ -1716,8 +1716,35 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)void autoR
 window.addEventListener('focus',()=>{if(Date.now()-lastAutoRefreshAt>5000)void autoRefreshData({force:true})});
 window.addEventListener('online',()=>void autoRefreshData({force:true,full:true}));
 
+const inviteAccountForm=$('#inviteAccountForm');
+if(inviteAccountForm){
+  inviteAccountForm.addEventListener('submit',async event=>{
+    event.preventDefault();
+    const email=$('#inviteAccountEmail')?.value.trim().toLowerCase();
+    const message=$('#inviteAccountMessage');
+    if(!email)return;
+    if(message)message.textContent='Creating invite…';
+    try{
+      await nihilityApi.rpc('invite_account',{p_email:email});
+      inviteAccountForm.reset();
+      if(message)message.textContent='Invite created. They can now sign in with this email using a magic link.';
+    }catch(error){
+      if(message)message.textContent=error.message||'Unable to create invite.';
+    }
+  });
+}
+
+function syncInviteAccountPanel(){
+  const panel=$('#inviteAccountPanel');
+  if(panel)panel.hidden=String(state.profile?.role||'').toLowerCase()!=='owner';
+}
+document.addEventListener('click',event=>{
+  if(event.target.closest('[data-route="profile"],#sidebarProfileButton'))requestAnimationFrame(syncInviteAccountPanel);
+});
+document.addEventListener('nihility-silent-refresh-applied',syncInviteAccountPanel);
+
 setInterval(updateFrontTimers,15000);
-boot().then(()=>{lastAutoRefreshAt=Date.now()}).catch(error=>{
+boot().then(()=>{lastAutoRefreshAt=Date.now();syncInviteAccountPanel()}).catch(error=>{
   console.error(error);
   setView('login');
   const message=$('#loginMessage');
