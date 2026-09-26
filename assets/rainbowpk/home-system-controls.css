@@ -255,7 +255,7 @@
   }
 
   #homeRoute .current-front-panel {
-    align-self: start;
+    align-self: stretch;
     min-height: 0;
     overflow: hidden;
   }
