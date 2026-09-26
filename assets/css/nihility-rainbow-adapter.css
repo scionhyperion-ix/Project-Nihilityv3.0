@@ -557,4 +557,14 @@ html.frame-guard body{
     width:min(176px,calc(100vw - 14px));
   }
 }
+#homeRoute .current-front-panel {
+    min-height: 0;
+    height: auto;
+    padding: 22px;
+}
 
+#homeRoute .current-front-panel .current-front-members {
+    flex: 0 0 auto;
+    overflow: visible;
+    padding: 18px 0 0;
+}
