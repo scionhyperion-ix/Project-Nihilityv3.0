@@ -358,14 +358,9 @@ function updateCurrentFrontViewport(){
 
 function syncHomeHeroPanelHeights(){
   const current=$('#homeRoute .current-front-panel');
-  const system=$('#homeRoute .system-summary-panel');
-  if(!current||!system)return;
+  if(!current)return;
 
   current.style.removeProperty('height');
-  if(!window.matchMedia('(min-width: 901px)').matches)return;
-
-  const systemHeight=Math.ceil(system.getBoundingClientRect().height);
-  if(systemHeight>0)current.style.height=systemHeight+'px';
 }
 window.nihilitySyncHomeHeroPanelHeights=syncHomeHeroPanelHeights;
 
